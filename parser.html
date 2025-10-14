@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Парсер текста → таблица (JSON внутри)</title>
+  <style>
+    body{font-family:Inter,Segoe UI,Arial;margin:18px;background:#f7fafc;color:#0f172a}
+    h1{font-size:18px;margin:6px 0 12px}
+    textarea{width:100%;height:220px;padding:8px;font-family:monospace;font-size:13px;box-sizing:border-box}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    button{padding:8px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer}
+    .info{margin:8px 0;color:#334155}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+    th,td{border:1px solid #e2e8f0;padding:6px;text-align:left;vertical-align:top}
+    th{background:#eef2ff;position:sticky;top:0}
+    .pager{display:flex;gap:6px;align-items:center;margin-top:8px}
+    .small{font-size:13px;color:#475569}
+    .error{color:#b91c1c}
+    .success{color:#064e3b}
+    input[type=number]{width:80px}
+    .search{margin-left:auto}
+  </style>
+</head>
+<body>
+  <h1>Парсер текста → таблица (вставьте текст с JSON внутри)</h1>
+  <div class="info small">Поддерживается большой текст (~1MB). Страница пытается автоматически извлечь JSON и показать таблицу. Работает с форматом, где в объекте есть <code>res</code> → элементы с <code>f</code> массивом (как в примере), а также с обычными массивами объектов.</div>
+
+  <textarea id="input" placeholder="Вставьте сюда текст, например: Raw data received from server: { ... }"></textarea>
+
+  <div class="controls">
+    <button id="parseBtn">Parse → Build table</button>
+    <button id="clearBtn">Clear</button>
+    <button id="downloadCsvBtn">Export CSV (visible page)</button>
+    <label class="small">Rows / page: <select id="perPage"><option>50</option><option>100</option><option>200</option><option>500</option><option>7000</option></select></label>
+    <label class="small search">Search: <input id="searchInput" placeholder="по ключу/значению (фрагмент)" /></label>
+  </div>
+
+  <div id="status" class="small"></div>
+  <div id="tableWrap"></div>
+  <div id="pagerWrap"></div>
+
+  <script>
+    // Helpers
+    function setStatus(html, cls=''){
+      const s = document.getElementById('status'); s.innerHTML = html; s.className = cls ? 'small '+cls : 'small';
+    }
+
+    function extractJSONFromText(text){
+      // Find first '{' or '[' and attempt to parse progressively by trimming the end until parse succeeds.
+      const firstBrace = text.search(/[\{\[]/);
+      if (firstBrace === -1) return {error: 'Не найден JSON (нет \"{\" или \"[\").'};
+      // Start from end: find last '}' or ']' position
+      const lastPossible = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+      if (lastPossible <= firstBrace) return {error: 'Неверная структура JSON.'};
+
+      // Candidate substring trimmed to lastPossible and then try decreasing if parse fails.
+      // We'll attempt up to N times, moving last index left to previous closing brace to recover from trailing text.
+      const closingChars = ['}', ']'];
+      let end = lastPossible;
+      const maxAttempts = 5000; // safety
+      let attempts = 0;
+      while (end > firstBrace && attempts < maxAttempts){
+        const candidate = text.slice(firstBrace, end+1);
+        try{
+          const parsed = JSON.parse(candidate);
+          return {json: parsed, raw: candidate};
+        }catch(e){
+          // move end left to previous '}' or ']' before current end
+          const prevEndBraceIndex = Math.max(text.lastIndexOf('}', end-1), text.lastIndexOf(']', end-1));
+          if (prevEndBraceIndex === -1 || prevEndBraceIndex === end) break;
+          end = prevEndBraceIndex;
+        }
+        attempts++;
+      }
+      // If still not parsed, try a looser approach: remove known prefix like "Raw data received from server:" then attempt parse
+      const afterPrefix = text.replace(/^.*?\{/, '{');
+      try{ return {json: JSON.parse(afterPrefix), raw: afterPrefix}; }catch(e){}
+      return {error: 'Не удалось распознать корректный JSON. Попробуйте вставить только JSON или обеспечить корректно закрытые скобки.'};
+    }
+
+    function flattenObject(obj, prefix = ''){
+      // Flatten nested objects (one level) to single-level keys with dot notation
+      const out = {};
+      for (const k in obj){
+        const val = obj[k];
+        const key = prefix ? prefix + '.' + k : k;
+        if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)){
+          const nested = flattenObject(val, key);
+          Object.assign(out, nested);
+        } else {
+          out[key] = val;
+        }
+      }
+      return out;
+    }
+
+    function toCsv(rows, columns){
+      const esc = v => {
+        if (v === null || v === undefined) return '';
+        let s = String(v);
+        // escape double quotes
+        if (s.indexOf('"') !== -1) s = s.replace(/"/g,'""');
+        // wrap in quotes if needed
+        if (s.search(/[",\n\r]/) !== -1) s = '"'+s+'"';
+        return s;
+      };
+      const header = columns.map(c => esc(c)).join(',');
+      const lines = [header];
+      for (const r of rows){
+        const row = columns.map(c => esc(r[c]));
+        lines.push(row.join(','));
+      }
+      return lines.join('\n');
+    }
+
+    // Core: build table
+    (function(){
+      const input = document.getElementById('input');
+      const parseBtn = document.getElementById('parseBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const tableWrap = document.getElementById('tableWrap');
+      const pagerWrap = document.getElementById('pagerWrap');
+      const perPageSel = document.getElementById('perPage');
+      const downloadBtn = document.getElementById('downloadCsvBtn');
+      const searchInput = document.getElementById('searchInput');
+
+      let fullRows = []; // array of flattened objects
+      let columns = [];
+      let currentPage = 1;
+
+      function detectData(parsed){
+        // If object contains res[].f arrays, gather them
+        if (parsed && typeof parsed === 'object'){
+          if (Array.isArray(parsed)) return parsed; // top-level array
+          if (parsed.res && Array.isArray(parsed.res)){
+            // collect all f arrays
+            const found = [];
+            for (const entry of parsed.res){
+              if (entry && Array.isArray(entry.f)){
+                for (const it of entry.f) found.push(it);
+              }
+            }
+            if (found.length) return found;
+            // maybe res itself is array of objects
+            if (parsed.res.every(r=> typeof r === 'object')) return parsed.res;
+          }
+          // try find first array of objects deeper in object (heuristic)
+          for (const k in parsed){
+            if (Array.isArray(parsed[k]) && parsed[k].length && typeof parsed[k][0] === 'object') return parsed[k];
+          }
+        }
+        return null;
+      }
+
+      function prepareRows(arr){
+        const limitScan = Math.min(arr.length, 1000);
+        const colSet = new Set();
+        const rows = [];
+        for (let i=0;i<arr.length;i++){
+          const item = arr[i];
+          const flat = (item && typeof item === 'object') ? flattenObject(item) : {value: item};
+          Object.keys(flat).forEach(k=>colSet.add(k));
+          rows.push(flat);
+        }
+        return {rows, columns: Array.from(colSet)};
+      }
+
+      function renderPage(){
+        const perPage = parseInt(perPageSel.value,10) || 100;
+        const q = (searchInput.value||'').trim().toLowerCase();
+        let filtered = fullRows;
+        if (q){
+          filtered = fullRows.filter(r => columns.some(c => ((r[c]!==undefined&&r[c]!==null)?String(r[c]).toLowerCase().includes(q):false)));
+        }
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / perPage));
+        if (currentPage > totalPages) currentPage = totalPages;
+        const start = (currentPage-1)*perPage;
+        const pageRows = filtered.slice(start, start+perPage);
+
+        // build table
+        if (!columns.length){ tableWrap.innerHTML = '<div class="small">Нет данных для отображения.</div>'; pagerWrap.innerHTML=''; return; }
+
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const trh = document.createElement('tr');
+        for (const c of columns){ const th = document.createElement('th'); th.textContent = c; trh.appendChild(th); }
+        thead.appendChild(trh); table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        for (const r of pageRows){
+          const tr = document.createElement('tr');
+          for (const c of columns){
+            const td = document.createElement('td');
+            let v = r[c];
+            if (v === undefined) v = '';
+            // nicer formatting for booleans and numbers
+            if (typeof v === 'boolean') td.textContent = v ? 'true' : 'false';
+            else if (typeof v === 'number') td.textContent = v;
+            else td.textContent = String(v);
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        tableWrap.innerHTML = '';
+        tableWrap.appendChild(table);
+
+        // pager
+        pagerWrap.innerHTML = '';
+        const pager = document.createElement('div'); pager.className='pager small';
+        const info = document.createElement('div'); info.textContent = `Показано ${start+1}-${start+pageRows.length} из ${total} (страница ${currentPage}/${totalPages})`;
+        pager.appendChild(info);
+        const prev = document.createElement('button'); prev.textContent='‹ Prev'; prev.disabled = currentPage<=1; prev.onclick = ()=>{currentPage--; renderPage();};
+        const next = document.createElement('button'); next.textContent='Next ›'; next.disabled = currentPage>=totalPages; next.onclick = ()=>{currentPage++; renderPage();};
+        pager.appendChild(prev); pager.appendChild(next);
+        const gotoLabel = document.createElement('label'); gotoLabel.style.marginLeft='8px'; gotoLabel.innerHTML = 'Перейти на страницу: ';
+        const gotoInp = document.createElement('input'); gotoInp.type='number'; gotoInp.min=1; gotoInp.max=totalPages; gotoInp.value=currentPage; gotoInp.onchange = ()=>{ currentPage = Math.max(1, Math.min(totalPages, parseInt(gotoInp.value||1))); renderPage(); };
+        gotoLabel.appendChild(gotoInp); pager.appendChild(gotoLabel);
+
+        pagerWrap.appendChild(pager);
+
+        setStatus(`<span class="success">Таблица готова. Всего строк: ${fullRows.length}. Отфильтровано: ${total}.</span>`);
+      }
+
+      parseBtn.addEventListener('click', ()=>{
+        setStatus('Анализируем текст...');
+        currentPage = 1;
+        columns = []; fullRows = [];
+        try{
+          const txt = input.value;
+          if (!txt) { setStatus('Пустой ввод.', 'error'); return; }
+          const extracted = extractJSONFromText(txt);
+          if (extracted.error){ setStatus(extracted.error, 'error'); return; }
+          const parsed = extracted.json;
+          // detect data
+          const arr = detectData(parsed);
+          if (!arr) { setStatus('Не найден массив объектов в JSON. Попробуйте вставить другой JSON или вручную выделить массив.', 'error'); return; }
+          const prepared = prepareRows(arr);
+          fullRows = prepared.rows;
+          columns = prepared.columns.sort();
+          // safety: if too many columns, limit to first 200 to avoid layout explosion
+          if (columns.length > 1000){ columns = columns.slice(0,1000); }
+          renderPage();
+        }catch(e){
+          console.error(e);
+          setStatus('Ошибка при разборе: '+(e && e.message?e.message:e), 'error');
+        }
+      });
+
+      clearBtn.addEventListener('click', ()=>{ input.value=''; tableWrap.innerHTML=''; pagerWrap.innerHTML=''; setStatus('Очищено.'); fullRows=[]; columns=[]; });
+
+      perPageSel.addEventListener('change', ()=>{ currentPage = 1; renderPage(); });
+      searchInput.addEventListener('input', ()=>{ currentPage = 1; renderPage(); });
+
+      downloadBtn.addEventListener('click', ()=>{
+        const perPage = parseInt(perPageSel.value,10) || 100;
+        const q = (searchInput.value||'').trim().toLowerCase();
+        let filtered = fullRows;
+        if (q) filtered = fullRows.filter(r => columns.some(c => ((r[c]!==undefined&&r[c]!==null)?String(r[c]).toLowerCase().includes(q):false)));
+        const total = filtered.length;
+        const start = (currentPage-1)*perPage;
+        const pageRows = filtered.slice(start, start+perPage);
+        if (!pageRows.length){ setStatus('Нет строк для экспорта.', 'error'); return; }
+        const csv = toCsv(pageRows, columns);
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'export.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        setStatus(`Экспортировано ${pageRows.length} строк (страница ${currentPage}).`);
+      });
+
+      // Example paste helper: when user drops a file
+      window.addEventListener('paste', (e)=>{
+        // if clipboard contains a large text, prefer it
+        const text = (e.clipboardData && e.clipboardData.getData) ? e.clipboardData.getData('text/plain') : null;
+        if (text && text.length>1000){ input.value = text; setStatus('Вставлен текст из буфера обмена. Нажмите Parse.'); }
+      });
+
+      // Allow loading from file
+      const fileInput = document.createElement('input'); fileInput.type='file'; fileInput.accept='text/*'; fileInput.style.display='none';
+      const loadFileBtn = document.createElement('button'); loadFileBtn.textContent='Load from file';
+      loadFileBtn.onclick = ()=> fileInput.click();
+      fileInput.onchange = async (ev)=>{
+        const f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        if (f.size > 2*1024*1024) { if(!confirm('Файл >2MB. Продолжить?')) return; }
+        const text = await f.text(); input.value = text; setStatus('Файл загружен. Нажмите Parse.');
+      };
+      document.querySelector('.controls').appendChild(loadFileBtn);
+
+      setStatus('Готово. Вставьте текст и нажмите Parse.');
+    })();
+  </script>
+</body>
+</html>
