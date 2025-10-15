@@ -638,6 +638,11 @@ function formatAnomalyTime(dt) {
       var el = document.getElementById('fullDeviceTrackCount');
       if(!el) return;
       var base = (typeof n === 'number' ? (n + ' записей') : '0 записей');
+      // highlight extremely large counts
+      try{
+        var isHuge = (typeof n === 'number' && n === 14000);
+        if(isHuge) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
+      }catch(_){}
       // If we have per-segment metadata from the last merged split, show breakdown
       try{
         if(window._fullTrackSegmentsFinalized && window._lastFullTrackSegments && Array.isArray(window._lastFullTrackSegments)){
