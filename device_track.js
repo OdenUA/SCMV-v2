@@ -61,6 +61,33 @@ function processDeviceTrack(points) {
   if (Array.isArray(window._trackData) && window._trackData.length > 0) {
     points = window._trackData;
   }
+
+  // Ensure any external assignments to #fullDeviceTrackCount update the inline style correctly.
+  function ensureFullCountObserver(){
+    try{
+      var el = document.getElementById('fullDeviceTrackCount');
+      if(!el) return;
+      if(el.__ftObserver) return; // already observing
+      var applyStyleBasedOnText = function(){
+        try{
+          var txt = (el.textContent||'').trim();
+          // extract number from text like '14000 записей' or '14000 (..)'
+          var m = txt.match(/(\d+[\d\s]*)/);
+          var num = null;
+          if(m && m[1]){
+            num = parseInt(m[1].replace(/\s+/g,''), 10);
+          }
+          if(num === 14000) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
+        }catch(_){ try{ el.style.backgroundColor = ''; }catch(_2){} }
+      };
+      // run once to sync state
+      applyStyleBasedOnText();
+      var obs = new MutationObserver(function(muts){ applyStyleBasedOnText(); });
+      obs.observe(el, { childList: true, characterData: true, subtree: true });
+      el.__ftObserver = obs;
+    }catch(e){ /* ignore */ }
+  }
+  try{ if(document && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureFullCountObserver); else ensureFullCountObserver(); }catch(_){ }
   var anomalies = [];
   outOfBoundsGroups = [];
   if(boundsDebugContainer) boundsDebugContainer.style.display = 'none';
