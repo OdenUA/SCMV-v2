@@ -346,6 +346,7 @@
           <button id="closeVehicleOverlayBtn" class="btn btn-danger">
             Закрыть
           </button>
+          <button id="vehicleAddBtn" class="btn btn-primary" title="Добавить устройство" style="margin-left:8px;">Add Vehicle</button>
           <!-- Device List global search (visible only in Device List mode) -->
           <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
             <input id="vehicleShowSearchInput" type="text" placeholder="Поиск по Device List..." style="display:none; padding:4px 6px;" />
@@ -368,8 +369,6 @@
           <button id="vehicleResetFilters" class="btn btn-secondary">
             Сброс
           </button>
-          <!-- Add Vehicle button -> opens inline add form -->
-          <button id="vehicleAddBtn" class="btn btn-primary" title="Добавить устройство" style="margin-left:8px;">Add Vehicle</button>
           <div id="vehicleColorFilters" class="color-filter-group">
             <span class="color-filter-label"></span>
             <button
@@ -412,14 +411,6 @@
             >
               0
             </button>
-          </div>
-          <div id="vehicleAddForm" style="display:none; margin-top:8px;">
-            <label style="font-size:12px; display:block; margin-bottom:6px;">New device payload (JSON, fields for server):</label>
-            <textarea id="vehicleAddPayload" style="width:100%; height:60px; padding:6px; font-family:monospace; font-size:12px;">{"name":"New Device"}</textarea>
-            <div style="margin-top:6px; display:flex; gap:8px;">
-              <button id="vehicleAddSubmit" class="btn btn-primary">Create</button>
-              <button id="vehicleAddCancel" class="btn btn-secondary">Cancel</button>
-            </div>
           </div>
         </div>
         <div class="vehicle-overlay-body">

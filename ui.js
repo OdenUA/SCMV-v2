@@ -1209,56 +1209,22 @@ function ensureVehicleOverlay() {
     editVehicleBtn.dataset.bound = '1';
   }
 
-    // Add Vehicle button and inline form handlers
+    // Add Vehicle button — simplified: send a Device Edit rowadd with fixed auth and refresh overlay
     try{
       var vehicleAddBtn = document.getElementById('vehicleAddBtn');
-      var vehicleAddForm = document.getElementById('vehicleAddForm');
-      var vehicleAddPayload = document.getElementById('vehicleAddPayload');
-      var vehicleAddSubmit = document.getElementById('vehicleAddSubmit');
-      var vehicleAddCancel = document.getElementById('vehicleAddCancel');
       if(vehicleAddBtn && !vehicleAddBtn.dataset.bound){
         vehicleAddBtn.addEventListener('click', function(){
-          try{ if(vehicleAddForm) vehicleAddForm.style.display = (vehicleAddForm.style.display==='none' ? 'block' : 'none'); }catch(_){ }
+          try{
+            // Send the exact request structure as requested (only auth fields differ)
+            var req = { name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd', usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'ru' };
+            try{ sendRequest(req); showRouteToast('Добавление устройства отправлено', 1200); } catch(e){ console.warn('sendRequest rowadd failed', e); showRouteToast('Ошибка отправки',2000); }
+            // Refresh Vehicle Edit Distribution after a short delay so overlay updates
+            setTimeout(function(){ try{ var refreshReq = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' }; sendRequest(refreshReq); }catch(_){ } }, 700);
+          }catch(e){ console.warn('vehicleAddBtn click failed', e); }
         });
         vehicleAddBtn.dataset.bound = '1';
       }
-      if(vehicleAddCancel && !vehicleAddCancel.dataset.bound){
-        vehicleAddCancel.addEventListener('click', function(){ try{ if(vehicleAddForm) vehicleAddForm.style.display='none'; }catch(_){ } });
-        vehicleAddCancel.dataset.bound = '1';
-      }
-      if(vehicleAddSubmit && !vehicleAddSubmit.dataset.bound){
-        vehicleAddSubmit.addEventListener('click', function(){
-          if(!authLoggedIn){ showRouteToast('⚠ Сначала выполните вход'); return; }
-          var raw = vehicleAddPayload ? vehicleAddPayload.value : '';
-          var payloadObj = null;
-          try{ payloadObj = raw ? JSON.parse(raw) : {}; }catch(e){ showRouteToast('JSON parse error: '+String(e), 3000); return; }
-          // Build Device Edit rowadd request
-          var req = {
-            name: 'Device Edit',
-            type: 'etbl',
-            mid: 2,
-            act: 'rowadd',
-            usr: authUser,
-            pwd: authPwd,
-            uid: authUid,
-            lang: 'ru'
-          };
-          // Attach provided fields under 'row' or similar depending on server expectations
-          // Many server endpoints expect 'row' or 'f' - try both fallbacks
-          try{ req.row = payloadObj; }catch(_){ }
-          try{ req.f = payloadObj; }catch(_){ }
-          try{
-            sendRequest(req);
-            showRouteToast('Добавление устройства отправлено', 1500);
-            // hide form
-            if(vehicleAddForm) vehicleAddForm.style.display='none';
-            // refresh edit distribution after short delay to allow server apply
-            setTimeout(function(){ try{ var refreshReq = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' }; sendRequest(refreshReq); }catch(_){ } }, 800);
-          }catch(e){ console.warn('Failed to send Device Edit rowadd', e); showRouteToast('Отправка не удалась', 2000); }
-        });
-        vehicleAddSubmit.dataset.bound = '1';
-      }
-    }catch(e){ console.warn('Binding Add Vehicle handlers failed', e); }
+    }catch(e){ console.warn('Binding Add Vehicle button failed', e); }
 
 function toggleVehicleOverlay() {
   ensureVehicleOverlay();
