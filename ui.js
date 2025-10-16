@@ -1161,30 +1161,6 @@ function ensureVehicleOverlay() {
     });
     closeVehicleOverlayBtn.dataset.bound = "1";
   }
-  // Add device button (allow creating a new device row)
-  try{
-    var addVehicleBtn = document.getElementById('addVehicleBtn');
-    if(addVehicleBtn && !addVehicleBtn.dataset.bound){
-      addVehicleBtn.addEventListener('click', function(){
-        try{ addNewVehicle(); }catch(e){ console.warn('addNewVehicle failed', e); }
-      });
-      addVehicleBtn.dataset.bound = '1';
-    }
-  }catch(e){}
-}
-
-// Add a new vehicle by sending a Device Edit rowadd request over WebSocket
-function addNewVehicle(){
-  try{
-    if(!authLoggedIn){ updateStatus('Login required to add device','orange',3000); return; }
-    var req = { name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd', usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
-    // Optionally show a prompt to enter minimal identifying fields for UX
-    try{
-      var alias = prompt('Введите обозначение/alias для нового устройства (опционально):','');
-      if(alias !== null && alias !== '') req.alias = alias;
-    }catch(_){ }
-    try{ sendRequest(req); updateStatus('Отправлен запрос на добавление устройства','green',2000); } catch(e){ console.warn('sendRequest failed', e); updateStatus('Failed to send add device request','red',3000); }
-  }catch(e){ console.warn('addNewVehicle error', e); }
 }
 
   // Edit Vehicle button: send Vehicle Edit Distribution setup request
@@ -1232,6 +1208,57 @@ function addNewVehicle(){
     });
     editVehicleBtn.dataset.bound = '1';
   }
+
+    // Add Vehicle button and inline form handlers
+    try{
+      var vehicleAddBtn = document.getElementById('vehicleAddBtn');
+      var vehicleAddForm = document.getElementById('vehicleAddForm');
+      var vehicleAddPayload = document.getElementById('vehicleAddPayload');
+      var vehicleAddSubmit = document.getElementById('vehicleAddSubmit');
+      var vehicleAddCancel = document.getElementById('vehicleAddCancel');
+      if(vehicleAddBtn && !vehicleAddBtn.dataset.bound){
+        vehicleAddBtn.addEventListener('click', function(){
+          try{ if(vehicleAddForm) vehicleAddForm.style.display = (vehicleAddForm.style.display==='none' ? 'block' : 'none'); }catch(_){ }
+        });
+        vehicleAddBtn.dataset.bound = '1';
+      }
+      if(vehicleAddCancel && !vehicleAddCancel.dataset.bound){
+        vehicleAddCancel.addEventListener('click', function(){ try{ if(vehicleAddForm) vehicleAddForm.style.display='none'; }catch(_){ } });
+        vehicleAddCancel.dataset.bound = '1';
+      }
+      if(vehicleAddSubmit && !vehicleAddSubmit.dataset.bound){
+        vehicleAddSubmit.addEventListener('click', function(){
+          if(!authLoggedIn){ showRouteToast('⚠ Сначала выполните вход'); return; }
+          var raw = vehicleAddPayload ? vehicleAddPayload.value : '';
+          var payloadObj = null;
+          try{ payloadObj = raw ? JSON.parse(raw) : {}; }catch(e){ showRouteToast('JSON parse error: '+String(e), 3000); return; }
+          // Build Device Edit rowadd request
+          var req = {
+            name: 'Device Edit',
+            type: 'etbl',
+            mid: 2,
+            act: 'rowadd',
+            usr: authUser,
+            pwd: authPwd,
+            uid: authUid,
+            lang: 'ru'
+          };
+          // Attach provided fields under 'row' or similar depending on server expectations
+          // Many server endpoints expect 'row' or 'f' - try both fallbacks
+          try{ req.row = payloadObj; }catch(_){ }
+          try{ req.f = payloadObj; }catch(_){ }
+          try{
+            sendRequest(req);
+            showRouteToast('Добавление устройства отправлено', 1500);
+            // hide form
+            if(vehicleAddForm) vehicleAddForm.style.display='none';
+            // refresh edit distribution after short delay to allow server apply
+            setTimeout(function(){ try{ var refreshReq = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' }; sendRequest(refreshReq); }catch(_){ } }, 800);
+          }catch(e){ console.warn('Failed to send Device Edit rowadd', e); showRouteToast('Отправка не удалась', 2000); }
+        });
+        vehicleAddSubmit.dataset.bound = '1';
+      }
+    }catch(e){ console.warn('Binding Add Vehicle handlers failed', e); }
 
 function toggleVehicleOverlay() {
   ensureVehicleOverlay();
