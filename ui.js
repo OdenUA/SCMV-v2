@@ -1216,7 +1216,7 @@ function ensureVehicleOverlay() {
         vehicleAddBtn.addEventListener('click', function(){
           try{
             // Send the exact request structure as requested (only auth fields differ)
-            var req = { name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd', usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'ru' };
+            var req = { name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd', usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
             try{ sendRequest(req); showRouteToast('Добавление устройства отправлено', 1200); } catch(e){ console.warn('sendRequest rowadd failed', e); showRouteToast('Ошибка отправки',2000); }
             // Refresh Vehicle Edit Distribution after a short delay so overlay updates
             setTimeout(function(){ try{ var refreshReq = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' }; sendRequest(refreshReq); }catch(_){ } }, 700);
