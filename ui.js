@@ -1161,6 +1161,30 @@ function ensureVehicleOverlay() {
     });
     closeVehicleOverlayBtn.dataset.bound = "1";
   }
+  // Add device button (allow creating a new device row)
+  try{
+    var addVehicleBtn = document.getElementById('addVehicleBtn');
+    if(addVehicleBtn && !addVehicleBtn.dataset.bound){
+      addVehicleBtn.addEventListener('click', function(){
+        try{ addNewVehicle(); }catch(e){ console.warn('addNewVehicle failed', e); }
+      });
+      addVehicleBtn.dataset.bound = '1';
+    }
+  }catch(e){}
+}
+
+// Add a new vehicle by sending a Device Edit rowadd request over WebSocket
+function addNewVehicle(){
+  try{
+    if(!authLoggedIn){ updateStatus('Login required to add device','orange',3000); return; }
+    var req = { name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd', usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
+    // Optionally show a prompt to enter minimal identifying fields for UX
+    try{
+      var alias = prompt('Введите обозначение/alias для нового устройства (опционально):','');
+      if(alias !== null && alias !== '') req.alias = alias;
+    }catch(_){ }
+    try{ sendRequest(req); updateStatus('Отправлен запрос на добавление устройства','green',2000); } catch(e){ console.warn('sendRequest failed', e); updateStatus('Failed to send add device request','red',3000); }
+  }catch(e){ console.warn('addNewVehicle error', e); }
 }
 
   // Edit Vehicle button: send Vehicle Edit Distribution setup request
