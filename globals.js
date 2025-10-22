@@ -123,6 +123,21 @@ function buildLocalDateParam(raw, isEnd){
 	return raw;
 }
 
+// Global loading overlay helpers
+try{
+	// create overlay element if not present in HTML
+	if(typeof document !== 'undefined' && !document.getElementById('globalLoadingOverlay')){
+		var glo = document.createElement('div'); glo.id = 'globalLoadingOverlay';
+		var inner = document.createElement('div'); inner.className = 'global-loading-inner';
+		var spinner = document.createElement('div'); spinner.className = 'global-loading-spinner';
+		var txt = document.createElement('div'); txt.className = 'global-loading-text'; txt.textContent = 'Загрузка...';
+		inner.appendChild(spinner); inner.appendChild(txt); glo.appendChild(inner); document.body.appendChild(glo);
+	}
+}catch(e){ console.warn('Create global loading overlay failed', e); }
+
+function showLoadingOverlay(msg){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; if(msg){ var t = el.querySelector('.global-loading-text'); if(t) t.textContent = msg; } el.classList.add('visible'); }catch(e){} }
+function hideLoadingOverlay(){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; el.classList.remove('visible'); }catch(e){} }
+
 // Helper: format date as DD.MM.YY HH:mm:ss (always local time, no timezone shift)
 function formatAnomalyTime(date) {
 	if (!date) return '';

@@ -49,6 +49,18 @@
       </label>
       <button id="loginBtn" class="btn">Войти</button>
   <button id="deviceListBtn" class="btn" title="Показать список устройств">Device List</button>
+  <button id="deviceStatusBtn" class="btn" title="Показать статус устройства">
+    <span class="btn-icon" aria-hidden="true">
+      <!-- Clock / alarm icon (inline SVG) -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <path d="M12 7V12L15 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M20.59 6.41A9 9 0 1 0 6.41 20.59 9 9 0 0 0 20.59 6.41z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M7.88 3.39L6.46 1.97" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16.12 3.39L17.54 1.97" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="btn-label">Device Status</span>
+  </button>
   <button id="editVehicleBtn" class="btn" title="Редактировать распределение устройств">Edit Vehicle</button>
   <button id="auditBtn" class="btn" title="Аудит изменений">Audit</button>
       <!-- status dot only (no username) -->
@@ -424,6 +436,46 @@
           <table id="vehicleTable" class="vehicle-table">
             <thead id="vehicleTableHead"></thead>
             <tbody id="vehicleTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Device Status overlay (mirrors Vehicle overlay controls) -->
+    <div id="deviceStatusOverlay" class="vehicle-overlay" style="display:none;">
+      <div id="deviceStatusOverlayContent" class="vehicle-overlay-content">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Device Status</h2>
+          <button id="closeDeviceStatusOverlay" class="btn btn-danger">Закрыть</button>
+          <button id="deviceStatusAddBtn" class="btn btn-primary" title="Добавить запись" style="margin-left:8px;display:none;">Add</button>
+          <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
+            <input id="deviceStatusShowSearchInput" type="text" placeholder="Поиск по Device Status..." style="display:none; padding:4px 6px;" />
+            <button id="deviceStatusShowResetBtn" class="btn btn-secondary" style="display:none; margin-left:6px;">Сброс</button>
+            <button id="exportDeviceStatusXlsBtnShow" class="btn btn-outline" style="display:none; margin-left:6px;">Export xls</button>
+          </div>
+        </div>
+        <div class="vehicle-overlay-note" style="margin:6px 0 8px; display:flex; gap:8px; align-items:center;">
+          <label style="font-size:13px; white-space:nowrap;">Note:</label>
+          <input id="deviceStatusOverlayNoteInput" type="text" placeholder="Введите заметку..." style="flex:1 1 auto; padding:4px 6px;" />
+        </div>
+
+        <div class="vehicle-overlay-toolbar">
+          <input id="deviceStatusSearchInput" type="text" placeholder="Глобальный поиск..." class="vehicle-search-input" />
+          <button id="deviceStatusResetFilters" class="btn btn-secondary">Сброс</button>
+          <button id="exportDeviceStatusXlsBtn" class="btn btn-outline" title="Export visible to XLS" style="margin-left:8px;">Export xls</button>
+          <div id="deviceStatusColorFilters" class="color-filter-group">
+            <span class="color-filter-label"></span>
+            <button type="button" class="color-filter-btn cf-color-facacaff" data-cat=">365" title=">365 дн">365</button>
+            <button type="button" class="color-filter-btn cf-color-fce3d3ff" data-cat=">180" title=">180 дн">180</button>
+            <button type="button" class="color-filter-btn cf-color-ffecc7ff" data-cat=">30" title=">30 дн">30</button>
+            <button type="button" class="color-filter-btn cf-color-fff7ecff active" data-cat=">5" title=">5 дн">5</button>
+            <button type="button" class="color-filter-btn cf-color-ffffff active" data-cat="0" title="0 дн">0</button>
+          </div>
+        </div>
+
+        <div class="vehicle-overlay-body">
+          <table id="deviceStatusTable" class="vehicle-table">
+            <thead id="deviceStatusTableHead"></thead>
+            <tbody id="deviceStatusTableBody"></tbody>
           </table>
         </div>
       </div>

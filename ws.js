@@ -71,10 +71,16 @@ function connect() {
         // Full Device Track setup responses come under 'Device Track' as well (handled elsewhere)
       }
     } catch(e){}
-    // Allow device_log.js to capture its packets first
-    try { if(window.__handleDeviceLogResponse && window.__handleDeviceLogResponse(data)) { return; } } catch(e) { console.warn('DeviceLog handler error', e); }
-    // Full Device Track setup (raw) capture early
-    try { if(window.__handleFullTrackSetup && window.__handleFullTrackSetup(data)) { return; } } catch(e){ console.warn('FullTrack handler error', e); }
+    // NOTE: do NOT hide the global loading overlay here —
+    // the overlay should be dismissed only after the UI has finished
+    // rendering the overlay content (tables, mapping, etc.). Hiding
+    // here caused the spinner to disappear before DOM updates completed.
+  // Allow device_log.js to capture its packets first
+  try { if(window.__handleDeviceLogResponse && window.__handleDeviceLogResponse(data)) { return; } } catch(e) { console.warn('DeviceLog handler error', e); }
+  // Full Device Track setup (raw) capture early
+  try { if(window.__handleFullTrackSetup && window.__handleFullTrackSetup(data)) { return; } } catch(e){ console.warn('FullTrack handler error', e); }
+  // Audit response handler (audit.js will register this)
+  try { if(window.__handleAuditResponse && data && data.name === 'Audit' && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
     if (data.name === "login" && data.res && data.res[0]) {
       var r = data.res[0];
       if (r.uid) {
@@ -188,6 +194,26 @@ function connect() {
           tryApplyFleetMapping();
         }
       }
+      // Some 'init' responses return cols without f (no rows). Handle Device Status cols mapping here.
+      try {
+        if (data.name === 'Device Status' && data.res && data.res[0] && data.res[0].cols) {
+          try {
+            window.deviceStatusColMaps = window.deviceStatusColMaps || {};
+            var colsPayload = data.res[0].cols;
+            colsPayload.forEach(function(c){
+              try{
+                if(c && Array.isArray(c.k) && c.k.length){
+                  var map = {};
+                  c.k.forEach(function(ent){ if(ent && ent.key!==undefined) map[String(ent.key)] = ent.val; });
+                  window.deviceStatusColMaps[c.f] = map;
+                }
+              }catch(e){}
+            });
+            console.debug('Device Status cols mapped', Object.keys(window.deviceStatusColMaps));
+          } catch(e) { console.warn('Device Status cols parsing failed', e); }
+          // don't early-return here — allow other handlers to run if needed
+        }
+      } catch(e){}
       // Ensure overlay refs and attempt to render table for the current overlay mode
       try {
         if (typeof ensureVehicleOverlay === 'function') ensureVehicleOverlay();
@@ -200,12 +226,41 @@ function connect() {
             if (vehicleOverlay) vehicleOverlay.style.display = 'block';
           } catch(_) {}
         }
-        if (typeof renderVehicleTable === 'function') renderVehicleTable();
+        if (typeof renderVehicleTable === 'function') {
+          renderVehicleTable();
+          try{ hideLoadingOverlay(); }catch(_){ }
+        }
       } catch (e) { console.warn('Render vehicle table failed', e); }
       return;
     }
     if (data.res && data.res[0] && data.res[0].f) {
       var responseData = data.res[0].f;
+      if (data.name === 'Device Status') {
+        try {
+          // if this packet contains cols mapping (init response), store maps for fleet/vehicle
+          try {
+            var pkt = data.res[0];
+            if (pkt && pkt.cols && Array.isArray(pkt.cols)) {
+              window.deviceStatusColMaps = window.deviceStatusColMaps || {};
+              pkt.cols.forEach(function(c){
+                try{
+                  if(c && Array.isArray(c.k) && c.k.length){
+                    var map = {};
+                    c.k.forEach(function(ent){ if(ent && ent.key!==undefined) map[String(ent.key)] = ent.val; });
+                    window.deviceStatusColMaps[c.f] = map;
+                  }
+                }catch(e){}
+              });
+            }
+          } catch(e){}
+          window.deviceStatusData = Array.isArray(responseData) ? responseData.slice() : [];
+          try { if (typeof renderDeviceStatusTable === 'function') renderDeviceStatusTable(); } catch(_){ }
+          try { var overlay = document.getElementById('deviceStatusOverlay'); if (overlay) overlay.style.display = 'block'; } catch(_){ }
+          // Hide global loading overlay after Device Status UI is rendered
+          try{ hideLoadingOverlay(); }catch(_){ }
+        } catch(e) { console.warn('Device Status handling failed', e); }
+        return;
+      }
       if (data.name === "Startstop accumulation") {
         if (Array.isArray(responseData)) {
           if(!window._suppressRawTrackStops){
@@ -502,6 +557,14 @@ function sendRequest(req) {
         }
       }catch(e){ /* ignore parsing errors */ }
     }
+  }catch(e){}
+  try{
+    // Show global loading overlay for overlay-related requests so user sees dim + spinner
+    try{
+      if(req && req.name && (req.name === 'Vehicle Show' || req.name === 'Vehicle Edit Distribution' || req.name === 'Device Status' || req.name === 'Vehicle Select Min')){
+        try{ showLoadingOverlay('Загрузка...'); }catch(_){ }
+      }
+    }catch(_){ }
   }catch(e){}
   socket.send(JSON.stringify(req));
   updateStatus('Запрос отправлен. Ожидание ответа...', 'blue');
