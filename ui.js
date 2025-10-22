@@ -1120,15 +1120,25 @@ function applyVehicleFilters() {
   // Apply color/category filters only for the 'selectMin' overlay (vehicle). Device List ('show') should not be filtered by these buttons.
   try {
     if (vehicleOverlayMode === 'selectMin') {
-      var activeCats = Object.keys(window.vehicleColorVisibility || {}).filter(function(c){ return !!window.vehicleColorVisibility[c]; });
-      if (activeCats && activeCats.length > 0) {
-        vehicleFilteredData = vehicleFilteredData.filter(function(r){
-          var info = getRowAgeGrade(r, Date.now());
-          var cat = info.ageCategory || (info.ageCategory===null && null);
-          // Only include rows whose computed category matches one of the active categories
-          return activeCats.indexOf(String(cat)) !== -1;
-        });
-      }
+        var activeCats = Object.keys(window.vehicleColorVisibility || {}).filter(function(c){ return !!window.vehicleColorVisibility[c]; });
+        if (activeCats && activeCats.length > 0) {
+          vehicleFilteredData = vehicleFilteredData.filter(function(r){
+            var info = getRowAgeGrade(r, Date.now());
+            var cat = (info && (info.ageCategory !== undefined && info.ageCategory !== null)) ? info.ageCategory : null;
+            // If the row has no computed category but the user enabled filter '0',
+            // include rows where sdate is empty (treat as category '0').
+            if ((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1) {
+              try {
+                var sdateVal = (r && (r.sdate !== undefined ? r.sdate : (r.date !== undefined ? r.date : (r.fdate !== undefined ? r.fdate : ''))));
+                if (sdateVal == null || String(sdateVal).trim() === '') {
+                  cat = '0';
+                }
+              } catch (e) { /* ignore */ }
+            }
+            // Only include rows whose computed category matches one of the active categories
+            return activeCats.indexOf(String(cat)) !== -1;
+          });
+        }
     }
   } catch(e){ console.warn('Color filter failed', e); }
 }
@@ -1277,6 +1287,133 @@ function ensureVehicleOverlay() {
     var exportBtnShow = document.getElementById('exportVehicleXlsBtnShow');
     if (exportBtnShow && !exportBtnShow.dataset.bound){ exportBtnShow.addEventListener('click', function(){ exportVehicleTable('show'); }); exportBtnShow.dataset.bound='1'; }
   }catch(e){ console.warn('Binding export buttons failed', e); }
+
+  // Export Device Status visible rows to XLS
+  function exportDeviceStatusTable(mode){
+    try{
+      // Prefer reading the currently rendered table rows so export matches exactly what user sees.
+      var tbodyEl = document.getElementById('deviceStatusTableBody');
+      var theadEl = document.getElementById('deviceStatusTableHead');
+      var rowsFromDom = [];
+      if (tbodyEl) {
+        Array.prototype.slice.call(tbodyEl.querySelectorAll('tr')).forEach(function(tr){
+          // skip empty / placeholder rows that contain 'Нет данных'
+          if (!tr || !tr.children || tr.children.length === 0) return;
+          var firstCellText = (tr.children[0] && tr.children[0].textContent) ? tr.children[0].textContent.trim() : '';
+          if (firstCellText === 'Нет данных') return;
+          var rowObj = [];
+          Array.prototype.slice.call(tr.children).forEach(function(td){ rowObj.push((td.textContent||'').trim()); });
+          rowsFromDom.push(rowObj);
+        });
+      }
+
+      // Build headers from thead if available
+      var headers = [];
+      if (theadEl) {
+        var headRow = theadEl.querySelector('tr:first-child');
+        if (headRow) {
+          Array.prototype.slice.call(headRow.querySelectorAll('th')).forEach(function(th){ var key = th.dataset && th.dataset.key ? th.dataset.key : (th.textContent||'').replace(/ ▲| ▼$/,''); if (String(key) === '№') return; headers.push(key); });
+        }
+      }
+
+      if (rowsFromDom.length > 0) {
+        if (!headers.length) {
+          // create numeric headers H1..Hn if none available
+          for (var i = 0; i < rowsFromDom[0].length; i++) headers.push('C' + (i+1));
+        }
+        // build HTML table from DOM rows
+        var sb = [];
+        sb.push('<table><thead><tr>');
+        headers.forEach(function(h){ sb.push('<th>' + escapeHtml(String(h)) + '</th>'); });
+        sb.push('</tr></thead><tbody>');
+        rowsFromDom.forEach(function(r){ sb.push('<tr>'); r.forEach(function(cell){ sb.push('<td>' + escapeHtml(String(cell || '')) + '</td>'); }); sb.push('</tr>'); });
+        sb.push('</tbody></table>');
+        var html = '<html><head><meta charset="utf-8"></head><body>' + sb.join('') + '</body></html>';
+        // prefer XLSX if available
+        if (typeof XLSX !== 'undefined' && XLSX && typeof XLSX.utils !== 'undefined') {
+          try{
+            var ws_data = [];
+            ws_data.push(headers);
+            rowsFromDom.forEach(function(r){ ws_data.push(r); });
+            var wb = XLSX.utils.book_new(); var ws = XLSX.utils.aoa_to_sheet(ws_data); XLSX.utils.book_append_sheet(wb, ws, 'Device Status'); var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); var blob = new Blob([wbout], { type: 'application/octet-stream' }); var url = URL.createObjectURL(blob); var a = document.createElement('a'); var fname = 'device_status_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xlsx'; a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000); return;
+          }catch(e){ console.warn('SheetJS export failed for Device Status (DOM), falling back to HTML export', e); }
+        }
+        var blob = new Blob([html], { type: 'application/vnd.ms-excel' }); var url = URL.createObjectURL(blob); var a = document.createElement('a'); var fname = 'device_status_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xls'; a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000);
+        return;
+      }
+
+      // Fallback: use underlying data array (previous behavior)
+      var data = window.deviceStatusData && Array.isArray(window.deviceStatusData) ? window.deviceStatusData.slice() : [];
+      if(!data || !data.length){ showRouteToast('Нет данных для экспорта', 1500); return; }
+
+      // (rest of original data-based export preserved)
+      // Apply search & column filters similar to renderDeviceStatusTable
+      var searchInput = document.getElementById('deviceStatusSearchInput');
+      var showSearchInput = document.getElementById('deviceStatusShowSearchInput');
+      var term = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : ((showSearchInput && showSearchInput.value) ? showSearchInput.value.trim().toLowerCase() : '');
+      var filtered = data.slice();
+      if (term) {
+        filtered = filtered.filter(function(r){ return Object.values(r).some(function(v){ var s = String((typeof v === 'string' && v.indexOf('<div')!==-1) ? (function(t){ var tmp=document.createElement('div'); tmp.innerHTML = t; return tmp.textContent || tmp.innerText || t; })(v) : (v==null?'':v)); return s.toLowerCase().includes(term); }); });
+      }
+      Object.keys(deviceStatusColumnFilters || {}).forEach(function(col){ var val = deviceStatusColumnFilters[col]; if(!val) return; var needle = String(val).toLowerCase(); filtered = filtered.filter(function(r){ var cell = r[col]; var s = (cell==null?'':String(cell)); if(typeof cell === 'string' && cell.indexOf('<div')!==-1){ var tmp=document.createElement('div'); tmp.innerHTML = cell; s = tmp.textContent || tmp.innerText || s; } return s.toLowerCase().includes(needle); }); });
+
+      // Apply color/category filtering same as renderDeviceStatusTable
+      var activeCats = Object.keys(window.deviceStatusColorVisibility || {}).filter(function(c){ return !!window.deviceStatusColorVisibility[c]; });
+      var anyActive = activeCats.length > 0;
+      if(anyActive){
+        filtered = filtered.filter(function(row){
+          // compute probe for age grading
+          var probe = {};
+          if(row.sdate) probe.sdate = row.sdate;
+          if(row.fdate) probe.fdate = row.fdate;
+          if(row.date){ var parsed = (function(v){ if(!v) return null; var s=String(v).trim(); if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)||/\d{4}-\d{2}-\d{2}/.test(s)) return s.replace(' ','T'); var m=s.match(/^(\d{4})[ \-\/](\d{1,2})[ \-\/](\d{1,2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(m){ var yy=m[1],mm=m[2],dd=m[3],hh=m[4]||'00',mi=m[5]||'00',ss=m[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } var d2=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:[ \t](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(d2){ var dd=d2[1],mm=d2[2],yy=d2[3]; if(yy.length===2) yy='20'+yy; var hh=d2[4]||'00',mi=d2[5]||'00',ss=d2[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } return null; })(row.date); if(parsed) probe.fdate = parsed; else probe.fdate = row.date; }
+          var ageInfo = getRowAgeGrade(probe, Date.now());
+          var cat = ageInfo ? ageInfo.ageCategory : null;
+          if((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1){ try{ var dval = row.date; if(dval == null || String(dval).trim() === ''){ cat = '0'; } }catch(e){} }
+          return cat && activeCats.indexOf(String(cat)) !== -1;
+        });
+      } else {
+        // nothing active -> no rows
+        filtered = [];
+      }
+
+      if(!filtered || !filtered.length){ showRouteToast('Нет данных для экспорта', 1500); return; }
+
+      // Determine headers from rendered table if available, else from first row
+      if (!headers || !headers.length) headers = [];
+      if (!headers.length && theadEl) {
+        var headRow2 = theadEl.querySelector('tr:first-child');
+        if (headRow2) {
+          Array.prototype.slice.call(headRow2.querySelectorAll('th')).forEach(function(th){ var key = th.dataset && th.dataset.key ? th.dataset.key : (th.textContent||'').replace(/ ▲| ▼$/,''); if (String(key) === '№') return; headers.push(key); });
+        }
+      }
+      if(!headers.length){ headers = Object.keys(filtered[0] || {}).filter(function(k){ return String(k) !== '№'; }); }
+
+      // Build export table like exportVehicleTable
+      var sb = [];
+      sb.push('<table><thead><tr>');
+      headers.forEach(function(h){ sb.push('<th>' + escapeHtml(String(h)) + '</th>'); });
+      sb.push('</tr></thead><tbody>');
+      filtered.forEach(function(r){ sb.push('<tr>'); headers.forEach(function(h){ var v = r[h]; if(v == null) v = ''; sb.push('<td>' + escapeHtml(String(v)) + '</td>'); }); sb.push('</tr>'); });
+      sb.push('</tbody></table>');
+      var html = '<html><head><meta charset="utf-8"></head><body>' + sb.join('') + '</body></html>';
+
+      if (typeof XLSX !== 'undefined' && XLSX && typeof XLSX.utils !== 'undefined') {
+        try{
+          var ws_data = [];
+          ws_data.push(headers);
+          filtered.forEach(function(r){ var rowArr = headers.map(function(h){ var v = r[h]; return v == null ? '' : v; }); ws_data.push(rowArr); });
+          var wb = XLSX.utils.book_new(); var ws = XLSX.utils.aoa_to_sheet(ws_data); XLSX.utils.book_append_sheet(wb, ws, 'Device Status'); var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); var blob = new Blob([wbout], { type: 'application/octet-stream' }); var url = URL.createObjectURL(blob); var a = document.createElement('a'); var fname = 'device_status_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xlsx'; a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000); return;
+        }catch(e){ console.warn('SheetJS export failed for Device Status, falling back to HTML export', e); }
+      }
+      var blob = new Blob([html], { type: 'application/vnd.ms-excel' }); var url = URL.createObjectURL(blob); var a = document.createElement('a'); var fname = 'device_status_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xls'; a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000);
+    }catch(e){ console.warn('Export device status failed', e); showRouteToast('Экспорт не удался', 1800); }
+  }
+
+  try{
+    var expBtn = document.getElementById('exportDeviceStatusXlsBtn'); if(expBtn && !expBtn.dataset.bound){ expBtn.addEventListener('click', function(){ exportDeviceStatusTable(); }); expBtn.dataset.bound='1'; }
+    var expBtnShow = document.getElementById('exportDeviceStatusXlsBtnShow'); if(expBtnShow && !expBtnShow.dataset.bound){ expBtnShow.addEventListener('click', function(){ exportDeviceStatusTable('show'); }); expBtnShow.dataset.bound='1'; }
+  }catch(e){ console.warn('Binding device status export buttons failed', e); }
   // Bind Note input (persisted between overlay opens)
   try {
     var noteInput = document.getElementById('vehicleOverlayNoteInput');
@@ -1374,7 +1511,9 @@ function renderDeviceStatusTable(){
     Object.keys(deviceStatusColumnFilters || {}).forEach(function(col){ var val = deviceStatusColumnFilters[col]; if(!val) return; var needle = String(val).toLowerCase(); filtered = filtered.filter(function(r){ return String(renderCellValue(r[col])||'').toLowerCase().includes(needle); }); });
     // headers
     thead.innerHTML = '';
-    var headers = Object.keys(filtered.length ? filtered[0] : data[0]);
+  var headers = Object.keys(filtered.length ? filtered[0] : data[0]);
+  // Remove numeric index column from Device Status overlay if present
+  headers = headers.filter(function(h){ return String(h) !== '№'; });
     var trHead = document.createElement('tr'); trHead.className = 'vehicle-filter-row';
     headers.forEach(function(h){
       var th = document.createElement('th');
@@ -1404,8 +1543,55 @@ function renderDeviceStatusTable(){
     var filterRow = document.createElement('tr'); filterRow.className='vehicle-filter-row'; headers.forEach(function(h){ var thf = document.createElement('th'); if(h){ var inp = document.createElement('input'); inp.type='text'; inp.placeholder='Фильтр'; if(deviceStatusColumnFilters[h]) inp.value = deviceStatusColumnFilters[h]; inp.dataset.column = h; inp.addEventListener('input', function(){ deviceStatusColumnFilters[h] = inp.value; renderDeviceStatusTable(); }); thf.appendChild(inp); } filterRow.appendChild(thf); }); thead.appendChild(filterRow);
     // sort
     if (deviceStatusSortState.column) {
-      var col = deviceStatusSortState.column; var dir = deviceStatusSortState.dir;
-      filtered.sort(function(a,b){ var av = String(renderCellValue(a[col])||''); var bv = String(renderCellValue(b[col])||''); if(!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) return (parseFloat(av)-parseFloat(bv))*dir; return av.localeCompare(bv, 'ru', { numeric: true })*dir; });
+      var col = deviceStatusSortState.column;
+      var dir = deviceStatusSortState.dir;
+
+      // helper: try to coerce a cell value into a numeric timestamp for date-aware sorting
+      function parseDateValue(raw) {
+        try {
+          var s = renderCellValue(raw);
+          if (s == null || s === '') return null;
+          // If already a number, return it
+          if (typeof s === 'number') return s;
+          var maybe = String(s).trim();
+          // If it looks like a timestamp number
+          if (/^\d+$/.test(maybe)) {
+            var n = parseInt(maybe, 10);
+            // treat as seconds if length==10
+            if (String(n).length === 10) return n * 1000;
+            return n;
+          }
+          // Try ISO-ish or common formats using existing parser helper
+          var iso = parseDateStringToIso(maybe);
+          if (iso) {
+            var t = Date.parse(iso);
+            if (!isNaN(t)) return t;
+          }
+          // as a fallback, try Date.parse directly
+          var dp = Date.parse(maybe);
+          if (!isNaN(dp)) return dp;
+          return null;
+        } catch (e) { return null; }
+      }
+
+      filtered.sort(function(a,b){
+        var avRaw = a[col];
+        var bvRaw = b[col];
+        // first try numeric/date comparison
+        var avDate = parseDateValue(avRaw);
+        var bvDate = parseDateValue(bvRaw);
+        if (avDate != null || bvDate != null) {
+          if (avDate == null && bvDate == null) return 0;
+          if (avDate == null) return 1 * dir;
+          if (bvDate == null) return -1 * dir;
+          return (avDate - bvDate) * dir;
+        }
+        // fallback to numeric compare
+        var av = String(renderCellValue(avRaw) || '');
+        var bv = String(renderCellValue(bvRaw) || '');
+        if (!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) return (parseFloat(av) - parseFloat(bv)) * dir;
+        return av.localeCompare(bv, 'ru', { numeric: true }) * dir;
+      });
     }
     // render rows with color-category filtering based on date field (or sdate/fdate)
     tbody.innerHTML=''; var frag=document.createDocumentFragment(); var nowTs = Date.now();
@@ -1452,7 +1638,16 @@ function renderDeviceStatusTable(){
       // If any category button is active, show only rows matching active categories.
       // If no category is active, show no rows (user intention is to hide all).
       if(anyActive){
-        if(!cat || activeCats.indexOf(cat) === -1) return; // skip
+        // If category is missing but user enabled '0', include rows with empty date as '0'
+        if((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1){
+          try{
+            var dval = row.date;
+            if(dval == null || String(dval).trim() === ''){
+              cat = '0';
+            }
+          }catch(e){}
+        }
+        if(!cat || activeCats.indexOf(String(cat)) === -1) return; // skip
       } else {
         // nothing active -> don't render any rows
         return;
