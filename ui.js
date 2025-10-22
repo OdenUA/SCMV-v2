@@ -349,6 +349,7 @@ function init() {
   setDefaultDates();
   if(typeof initVehicleColorFilters==='function') initVehicleColorFilters();
   ensureVehicleOverlay();
+  try { if (typeof ensureDeviceStatusOverlay === 'function') ensureDeviceStatusOverlay(); } catch(e){}
   // adjust Dev Log buttons layout
   setTimeout(adjustDevLogButtons, 40);
   // Ensure floating panel toggle FAB behavior
@@ -1259,6 +1260,43 @@ function ensureVehicleOverlay() {
     });
     closeVehicleOverlayBtn.dataset.bound = "1";
   }
+}
+
+// Device Status overlay bindings
+function ensureDeviceStatusOverlay() {
+  var btn = document.getElementById('deviceStatusBtn');
+  var overlay = document.getElementById('deviceStatusOverlay');
+  var closeBtn = document.getElementById('closeDeviceStatusOverlay');
+  var refreshBtn = document.getElementById('refreshDeviceStatusBtn');
+  if (btn && !btn.dataset.bound) {
+    btn.addEventListener('click', function(){
+      try{ ensureDeviceStatusOverlay(); if(overlay) overlay.style.display='block'; }catch(_){ }
+      // construct request with provided auth (as requested)
+      var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
+      try { setReqStart && setReqStart('Device Status'); }catch(_){ }
+      try { sendRequest(req); updateStatus('Запрос Device Status...', 'blue', 3000); } catch(e){ console.warn('send Device Status failed', e); }
+    });
+    btn.dataset.bound = '1';
+  }
+  if (closeBtn && !closeBtn.dataset.bound) {
+    closeBtn.addEventListener('click', function(){ if (overlay) overlay.style.display = 'none'; }); closeBtn.dataset.bound='1';
+  }
+  if (refreshBtn && !refreshBtn.dataset.bound) {
+    refreshBtn.addEventListener('click', function(){
+      try{ var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' }; sendRequest(req); updateStatus('Обновление Device Status...', 'blue', 2000); }catch(e){ console.warn('refresh device status failed', e); }
+    }); refreshBtn.dataset.bound='1';
+  }
+}
+
+function renderDeviceStatusTable(){
+  try{
+    ensureDeviceStatusOverlay();
+    var data = window.deviceStatusData || [];
+    var thead = document.getElementById('deviceStatusThead');
+    var tbody = document.getElementById('deviceStatusTbody');
+    if(!thead || !tbody) return;
+    populateTable(tbody, thead, data);
+  }catch(e){ console.warn('renderDeviceStatusTable failed', e); }
 }
 
   // Edit Vehicle button: send Vehicle Edit Distribution setup request
