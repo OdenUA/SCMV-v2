@@ -50,6 +50,7 @@
       <button id="loginBtn" class="btn">Войти</button>
   <button id="deviceListBtn" class="btn" title="Показать список устройств">Device List</button>
   <button id="editVehicleBtn" class="btn" title="Редактировать распределение устройств">Edit Vehicle</button>
+  <button id="auditBtn" class="btn" title="Аудит изменений">Audit</button>
       <!-- status dot only (no username) -->
       <svg id="loginStatusDot" class="status-dot status-offline" width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="Offline" title="Offline">
         <circle cx="6" cy="6" r="5"></circle>
@@ -330,8 +331,11 @@
     <script src="mileage.js"></script>
     <script src="device_track.js"></script>
     <script src="device_log.js"></script>
+    <!-- SheetJS (XLSX) for client-side XLSX export -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="ui.js"></script>
     <script src="ws.js"></script>
+  <script src="audit.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         initMap();
@@ -352,6 +356,7 @@
           <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
             <input id="vehicleShowSearchInput" type="text" placeholder="Поиск по Device List..." style="display:none; padding:4px 6px;" />
             <button id="vehicleShowResetBtn" class="btn btn-secondary" style="display:none; margin-left:6px;">Сброс</button>
+            <button id="exportVehicleXlsBtnShow" class="btn btn-outline" style="display:none; margin-left:6px;">Export xls</button>
           </div>
         </div>
         <!-- NOTE: пользовательское поле, сохраняемое между вызовами оверлея -->
@@ -370,6 +375,7 @@
           <button id="vehicleResetFilters" class="btn btn-secondary">
             Сброс
           </button>
+          <button id="exportVehicleXlsBtn" class="btn btn-outline" title="Export visible Device List to XLS" style="margin-left:8px;">Export xls</button>
           <div id="vehicleColorFilters" class="color-filter-group">
             <span class="color-filter-label"></span>
             <button

@@ -13,6 +13,10 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 });
+// simple HTML escape helper
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');
+}
 // UI interactions (login, vehicle overlay, tables, directions toggle)
 function init() {
   (function preloadRemembered() {
@@ -1118,6 +1122,7 @@ function ensureVehicleOverlay() {
   var showSearchInput = document.getElementById("vehicleShowSearchInput");
   var showResetBtn = document.getElementById("vehicleShowResetBtn");
   var resetBtn = document.getElementById("vehicleResetFilters");
+  var exportBtn = document.getElementById('exportVehicleXlsBtn');
   // Show/hide filter toolbar and mode-specific search depending on overlay mode
   try {
     var toolbar = vehicleOverlay ? vehicleOverlay.querySelector('.vehicle-overlay-toolbar') : null;
@@ -1126,6 +1131,10 @@ function ensureVehicleOverlay() {
     }
   if (showSearchInput) showSearchInput.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
   if (showResetBtn) showResetBtn.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
+  try {
+    var exportBtnShowEl = document.getElementById('exportVehicleXlsBtnShow');
+    if (exportBtnShowEl) exportBtnShowEl.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
+  } catch (e) {}
   } catch(e){}
   // Bind events only once using dataset flag
   if (searchInput && !searchInput.dataset.bound) {
@@ -1160,6 +1169,80 @@ function ensureVehicleOverlay() {
     });
     resetBtn.dataset.bound = "1";
   }
+  // Export visible Vehicle overlay rows to XLS (simple HTML-based XLS)
+  function exportVehicleTable(mode){
+    try{
+      // choose active dataset
+      var activeData = (mode === 'show' || vehicleOverlayMode === 'show') ? vehicleShowData : vehicleSelectMinData;
+      var data = vehicleFilteredData && Array.isArray(vehicleFilteredData) ? vehicleFilteredData : (activeData && Array.isArray(activeData) ? activeData.slice() : []);
+      if(!data || !data.length){
+        showRouteToast('Нет данных для экспорта', 1500);
+        return;
+      }
+      // determine headers from rendered table (preserve ordering)
+      var headers = [];
+      var headRow = vehicleTableHead ? vehicleTableHead.querySelector('tr:first-child') : null;
+      if (headRow) {
+        Array.prototype.slice.call(headRow.querySelectorAll('th')).forEach(function(th){
+          var key = th.dataset && th.dataset.key ? th.dataset.key : (th.textContent || '').replace(/ ▲| ▼$/,'');
+          // exclude special columns
+          if (key === '№' || key === 'Action') return;
+          headers.push(key);
+        });
+      } else {
+        headers = Object.keys(data[0] || {}).filter(function(k){ return k !== '№' && k !== 'Action'; });
+      }
+      // build HTML table string
+      var sb = [];
+      sb.push('<table><thead><tr>');
+      headers.forEach(function(h){ sb.push('<th>' + escapeHtml(String(h)) + '</th>'); });
+      sb.push('</tr></thead><tbody>');
+      data.forEach(function(r){
+        sb.push('<tr>');
+        headers.forEach(function(h){
+          var v = r[h];
+          if (v == null) v = '';
+          sb.push('<td>' + escapeHtml(String(v)) + '</td>');
+        });
+        sb.push('</tr>');
+      });
+      sb.push('</tbody></table>');
+      var html = '<html><head><meta charset="utf-8"></head><body>' + sb.join('') + '</body></html>';
+      // If SheetJS available, prefer .xlsx export
+      if (typeof XLSX !== 'undefined' && XLSX && typeof XLSX.utils !== 'undefined') {
+        try {
+          var ws_data = [];
+          ws_data.push(headers);
+          data.forEach(function(r){
+            var rowArr = headers.map(function(h){ var v = r[h]; return v == null ? '' : v; });
+            ws_data.push(rowArr);
+          });
+          var wb = XLSX.utils.book_new();
+          var ws = XLSX.utils.aoa_to_sheet(ws_data);
+          XLSX.utils.book_append_sheet(wb, ws, 'Devices');
+          var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+          var blob = new Blob([wbout], { type: 'application/octet-stream' });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          var fname = 'device_list_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xlsx';
+          a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000);
+          return;
+        } catch (e) {
+          console.warn('SheetJS export failed, falling back to HTML export', e);
+        }
+      }
+      var blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var fname = 'device_list_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xls';
+      a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){ } }, 2000);
+    }catch(e){ console.warn('Export xls failed', e); showRouteToast('Экспорт не удался', 1800); }
+  }
+  try{
+    if (exportBtn && !exportBtn.dataset.bound){ exportBtn.addEventListener('click', function(){ exportVehicleTable(); }); exportBtn.dataset.bound='1'; }
+    var exportBtnShow = document.getElementById('exportVehicleXlsBtnShow');
+    if (exportBtnShow && !exportBtnShow.dataset.bound){ exportBtnShow.addEventListener('click', function(){ exportVehicleTable('show'); }); exportBtnShow.dataset.bound='1'; }
+  }catch(e){ console.warn('Binding export buttons failed', e); }
   // Bind Note input (persisted between overlay opens)
   try {
     var noteInput = document.getElementById('vehicleOverlayNoteInput');
