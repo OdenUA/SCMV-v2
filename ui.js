@@ -348,6 +348,7 @@ function init() {
 
   setDefaultDates();
   if(typeof initVehicleColorFilters==='function') initVehicleColorFilters();
+  if(typeof initDeviceStatusColorFilters==='function') initDeviceStatusColorFilters();
   ensureVehicleOverlay();
   try { if (typeof ensureDeviceStatusOverlay === 'function') ensureDeviceStatusOverlay(); } catch(e){}
   // adjust Dev Log buttons layout
@@ -1003,6 +1004,38 @@ if (!window.vehicleColorVisibility) {
   };
 }
 
+// Device Status color filter visibility (same defaults as vehicle)
+if (!window.deviceStatusColorVisibility) {
+  window.deviceStatusColorVisibility = {
+    ">365": false,
+    ">180": false,
+    ">30": false,
+    ">5": true,
+    "0": true,
+  };
+}
+
+// Initialize device status color filters (buttons 365/180/30/5/0)
+function initDeviceStatusColorFilters() {
+  var ctr = document.getElementById("deviceStatusColorFilters");
+  if (!ctr || ctr.dataset.bound) return;
+  ctr.dataset.bound = "1";
+  ctr.addEventListener("click", function (e) {
+    var btn = e.target.closest(".color-filter-btn");
+    if (!btn) return;
+    var cat = btn.getAttribute("data-cat");
+    if (!cat) return;
+    window.deviceStatusColorVisibility[cat] = !window.deviceStatusColorVisibility[cat];
+    btn.classList.toggle("active", window.deviceStatusColorVisibility[cat]);
+    renderDeviceStatusTable();
+  });
+  // set initial active states
+  Array.prototype.slice.call(ctr.querySelectorAll(".color-filter-btn")).forEach(function (b) {
+    var c = b.getAttribute("data-cat");
+    b.classList.toggle("active", !!window.deviceStatusColorVisibility[c]);
+  });
+}
+
 function initVehicleColorFilters() {
   var ctr = document.getElementById("vehicleColorFilters");
   if (!ctr || ctr.dataset.bound) return;
@@ -1271,10 +1304,13 @@ function ensureDeviceStatusOverlay() {
   if (btn && !btn.dataset.bound) {
     btn.addEventListener('click', function(){
       try{ ensureDeviceStatusOverlay(); if(overlay) overlay.style.display='block'; }catch(_){ }
-      // construct request with provided auth (as requested)
-      var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
-      try { setReqStart && setReqStart('Device Status'); }catch(_){ }
-      try { sendRequest(req); updateStatus('Запрос Device Status...', 'blue', 3000); } catch(e){ console.warn('send Device Status failed', e); }
+      // send init then setup (setup will return rows; init provides cols mapping)
+      var initReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'init', usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
+      var setupReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
+      try { setReqStart && setReqStart('Device Status init'); }catch(_){ }
+      try { sendRequest(initReq); } catch(e){ console.warn('send Device Status init failed', e); }
+      // send setup shortly after init so server can respond with cols first
+      setTimeout(function(){ try { setReqStart && setReqStart('Device Status'); sendRequest(setupReq); updateStatus('Запрос Device Status...', 'blue', 3000); } catch(e){ console.warn('send Device Status setup failed', e); } }, 150);
     });
     btn.dataset.bound = '1';
   }
@@ -1291,11 +1327,171 @@ function ensureDeviceStatusOverlay() {
 function renderDeviceStatusTable(){
   try{
     ensureDeviceStatusOverlay();
+    // prepare globals
+    if (typeof deviceStatusData === 'undefined') window.deviceStatusData = window.deviceStatusData || [];
+    if (typeof deviceStatusColumns === 'undefined') window.deviceStatusColumns = null;
+    if (typeof deviceStatusSortState === 'undefined') window.deviceStatusSortState = { column: null, dir: 1 };
+    if (typeof deviceStatusColumnFilters === 'undefined') window.deviceStatusColumnFilters = {};
+
     var data = window.deviceStatusData || [];
-    var thead = document.getElementById('deviceStatusThead');
-    var tbody = document.getElementById('deviceStatusTbody');
+    // If cols mapping wasn't provided by init response, try to build fallback maps
+    if (!window.deviceStatusColMaps) {
+      try {
+        window.deviceStatusColMaps = window.deviceStatusColMaps || {};
+        // fleet: try fleetKeyMap (created from Vehicle Select Min cols)
+        if (typeof fleetKeyMap !== 'undefined' && fleetKeyMap) {
+          window.deviceStatusColMaps['fleet'] = {};
+          Object.keys(fleetKeyMap).forEach(function(k){ window.deviceStatusColMaps['fleet'][String(k)] = fleetKeyMap[k]; });
+        }
+        // vehicle: try vehicleShowData or vehicleSelectMinData
+        var vmap = {};
+        if (Array.isArray(window.vehicleShowData) && window.vehicleShowData.length) {
+          window.vehicleShowData.forEach(function(r){ try{ if(r && (r.id!==undefined || r.vehicleid!==undefined)){ var id = r.id!==undefined? r.id : r.vehicleid; var label = r.vehicle || r.number || r.name || r.vehicleid || id; vmap[String(id)] = label; } }catch(e){} });
+        }
+        if (Object.keys(vmap).length === 0 && Array.isArray(window.vehicleSelectMinData) && window.vehicleSelectMinData.length) {
+          window.vehicleSelectMinData.forEach(function(r){ try{ if(r && (r.id!==undefined || r.vehicleid!==undefined)){ var id = r.id!==undefined? r.id : r.vehicleid; var label = r.vehicle || r.number || r.name || r.vehicleid || id; vmap[String(id)] = label; } }catch(e){} });
+        }
+        if (Object.keys(vmap).length) window.deviceStatusColMaps['vehicle'] = vmap;
+      } catch(e){ /* ignore fallback build errors */ }
+    }
+    var thead = document.getElementById('deviceStatusTableHead');
+    var tbody = document.getElementById('deviceStatusTableBody');
     if(!thead || !tbody) return;
-    populateTable(tbody, thead, data);
+    if (!data || !data.length) {
+      thead.innerHTML = '';
+      tbody.innerHTML = '<tr><td>Нет данных</td></tr>';
+      return;
+    }
+    if (!deviceStatusColumns) deviceStatusColumns = Object.keys(data[0] || {});
+    // apply column filters and search
+    var searchInput = document.getElementById('deviceStatusSearchInput');
+    var showSearchInput = document.getElementById('deviceStatusShowSearchInput');
+    var term = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : ((showSearchInput && showSearchInput.value) ? showSearchInput.value.trim().toLowerCase() : '');
+    var filtered = data.slice();
+    if (term) {
+      filtered = filtered.filter(function(r){ return Object.values(r).some(function(v){ var s = String(renderCellValue(v) || ''); return s.toLowerCase().includes(term); }); });
+    }
+    Object.keys(deviceStatusColumnFilters || {}).forEach(function(col){ var val = deviceStatusColumnFilters[col]; if(!val) return; var needle = String(val).toLowerCase(); filtered = filtered.filter(function(r){ return String(renderCellValue(r[col])||'').toLowerCase().includes(needle); }); });
+    // headers
+    thead.innerHTML = '';
+    var headers = Object.keys(filtered.length ? filtered[0] : data[0]);
+    var trHead = document.createElement('tr'); trHead.className = 'vehicle-filter-row';
+    headers.forEach(function(h){
+      var th = document.createElement('th');
+      th.dataset.key = h;
+      var displayLabel = h;
+      try { var hlc = String(h).toLowerCase(); if (hlc === 'контроль' || hlc === 'control') displayLabel = 'Питание'; } catch(e){}
+      th.textContent = displayLabel;
+      th.style.cursor='pointer';
+      th.addEventListener('click', function(){ if(deviceStatusSortState.column===h) deviceStatusSortState.dir *= -1; else { deviceStatusSortState.column = h; deviceStatusSortState.dir = 1; } renderDeviceStatusTable(); });
+      if(deviceStatusSortState.column===h){ th.textContent = th.textContent + (deviceStatusSortState.dir===1?' ▲':' ▼'); }
+      trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+    // make header th sticky similar to vehicle overlay
+    try {
+      var headRowEl = thead.querySelector('tr');
+      if (headRowEl) {
+        Array.prototype.slice.call(headRowEl.querySelectorAll('th')).forEach(function(th){ th.style.position='sticky'; th.style.top='0px'; th.style.zIndex=3; th.style.background='#f8f9fa'; });
+        var overlayBody = document.getElementById('deviceStatusOverlay') ? document.getElementById('deviceStatusOverlay').querySelector('.vehicle-overlay-body') : null;
+        try {
+          var headerH = headRowEl.offsetHeight || 0;
+          if (overlayBody && overlayBody.style) overlayBody.style.setProperty('--vehicle-table-filter-top', headerH + 'px');
+        } catch(e){}
+      }
+    } catch(e){}
+    // filter row
+    var filterRow = document.createElement('tr'); filterRow.className='vehicle-filter-row'; headers.forEach(function(h){ var thf = document.createElement('th'); if(h){ var inp = document.createElement('input'); inp.type='text'; inp.placeholder='Фильтр'; if(deviceStatusColumnFilters[h]) inp.value = deviceStatusColumnFilters[h]; inp.dataset.column = h; inp.addEventListener('input', function(){ deviceStatusColumnFilters[h] = inp.value; renderDeviceStatusTable(); }); thf.appendChild(inp); } filterRow.appendChild(thf); }); thead.appendChild(filterRow);
+    // sort
+    if (deviceStatusSortState.column) {
+      var col = deviceStatusSortState.column; var dir = deviceStatusSortState.dir;
+      filtered.sort(function(a,b){ var av = String(renderCellValue(a[col])||''); var bv = String(renderCellValue(b[col])||''); if(!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) return (parseFloat(av)-parseFloat(bv))*dir; return av.localeCompare(bv, 'ru', { numeric: true })*dir; });
+    }
+    // render rows with color-category filtering based on date field (or sdate/fdate)
+    tbody.innerHTML=''; var frag=document.createDocumentFragment(); var nowTs = Date.now();
+
+    // helper: try to parse common date strings into an ISO-like string suitable for Date()
+    function parseDateStringToIso(v){
+      if(!v) return null;
+      var s = String(v).trim();
+      // strip HTML if present
+      if(s.indexOf('<') !== -1){ var tmp = document.createElement('div'); tmp.innerHTML = s; s = tmp.textContent || tmp.innerText || s; }
+      // already ISO-ish or contains T
+      if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) || /\d{4}-\d{2}-\d{2}/.test(s)){
+        // replace space with T if necessary
+        return s.replace(' ', 'T');
+      }
+      // common 'YYYY-MM-DD HH:MM:SS'
+      var m = s.match(/^(\d{4})[ \-\/](\d{1,2})[ \-\/](\d{1,2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+      if(m){ var yy = m[1], mm = m[2], dd = m[3], hh = m[4]||'00', mi = m[5]||'00', ss = m[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); }
+      // dd.mm.yy or dd.mm.yyyy -> convert
+      var d2 = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:[ \t](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+      if(d2){ var dd = d2[1], mm = d2[2], yy = d2[3]; if(yy.length===2){ yy = '20' + yy; } var hh = d2[4]||'00', mi = d2[5]||'00', ss = d2[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); }
+      return null;
+    }
+
+    var activeCats = Object.keys(window.deviceStatusColorVisibility || {}).filter(function(c){ return !!window.deviceStatusColorVisibility[c]; });
+    var anyActive = activeCats.length > 0;
+
+    filtered.forEach(function(row, idx){
+      // compute age/category for this row: prefer 'date' field (possibly with HTML), fallback to sdate/fdate
+      var probe = {};
+      if(row.sdate) probe.sdate = row.sdate;
+      if(row.fdate) probe.fdate = row.fdate;
+      if(row.date){
+        var parsed = parseDateStringToIso(row.date);
+        if(parsed) probe.fdate = parsed;
+        else {
+          // keep raw text as fdate to allow parseRelativeDuration fallback
+          probe.fdate = row.date;
+        }
+      }
+      var ageInfo = getRowAgeGrade(probe, nowTs);
+      var cat = ageInfo ? ageInfo.ageCategory : null;
+
+      // If any category button is active, show only rows matching active categories.
+      // If no category is active, show no rows (user intention is to hide all).
+      if(anyActive){
+        if(!cat || activeCats.indexOf(cat) === -1) return; // skip
+      } else {
+        // nothing active -> don't render any rows
+        return;
+      }
+
+      var tr=document.createElement('tr');
+      headers.forEach(function(h){
+        var td=document.createElement('td');
+        var raw = row[h];
+        var val = renderCellValue(raw);
+        try{
+          // if this column has a mapping from init cols, replace id with label
+          if(window.deviceStatusColMaps && Object.prototype.hasOwnProperty.call(window.deviceStatusColMaps, h)){
+            var map = window.deviceStatusColMaps[h] || {};
+            var keyStr = String(val == null ? '' : val);
+            if(map[keyStr] !== undefined && map[keyStr] !== null){
+              val = map[keyStr];
+            }
+          } else {
+            // sometimes server provides numeric keys under different field names (fleet -> fleet, vehicle -> vehicle)
+            if(h === 'fleet' && window.deviceStatusColMaps && window.deviceStatusColMaps['fleet']){
+              var keyS = String(val == null ? '' : val);
+              if(window.deviceStatusColMaps['fleet'][keyS] !== undefined) val = window.deviceStatusColMaps['fleet'][keyS];
+            }
+            if(h === 'vehicle' && window.deviceStatusColMaps && window.deviceStatusColMaps['vehicle']){
+              var keyS2 = String(val == null ? '' : val);
+              if(window.deviceStatusColMaps['vehicle'][keyS2] !== undefined) val = window.deviceStatusColMaps['vehicle'][keyS2];
+            }
+          }
+        }catch(e){}
+        td.textContent = val;
+        tr.appendChild(td);
+      });
+      if(ageInfo && ageInfo.gradeColor) tr.style.background = ageInfo.gradeColor;
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+    // helpers
+    function renderCellValue(v){ try{ if(v==null) return ''; if(typeof v === 'string' && v.indexOf('<div')!==-1){ var tmp=document.createElement('div'); tmp.innerHTML = v; return tmp.textContent || tmp.innerText || ''; } return v; }catch(e){ return String(v); } }
   }catch(e){ console.warn('renderDeviceStatusTable failed', e); }
 }
 
