@@ -554,7 +554,8 @@ function renderVehicleTable() {
 
   // Filter inputs row
   var filterRow = document.createElement("tr");
-  filterRow.className = "vehicle-filter-row";
+    filterRow.className = "vehicle-filter-row";
+    filterRow.className += " sticky-filter-row"; // Added sticky class for better UX
   headers.forEach(function (h) {
     var thf = document.createElement("th");
     if (h !== "№" && h !== 'Action') {
@@ -1058,89 +1059,121 @@ function initVehicleColorFilters() {
     });
 }
 
+// Generic filter helper used by vehicle and device-status overlays.
+// Options: { data, headers, globalTerm, columnFilters, renderCellValue, colorVisibility, getRowCategory, colorMode }
+function filterTableData(opts) {
+  try {
+    var data = (opts.data && Array.isArray(opts.data)) ? opts.data.slice() : [];
+    var headers = opts.headers || null;
+    var term = (opts.globalTerm || '').trim().toLowerCase();
+    var columnFilters = opts.columnFilters || {};
+  // renderCellValue may accept (value, column, row) for column-aware rendering
+  var renderCellValue = typeof opts.renderCellValue === 'function' ? opts.renderCellValue : function(v){ return v == null ? '' : String(v); };
+
+    // Global term: search in all visible headers if headers provided, else in all values
+    if (term) {
+      if (headers && headers.length) {
+        data = data.filter(function(r){
+          return headers.some(function(h){
+            try { var s = String(renderCellValue(r[h], h, r) || ''); return s.toLowerCase().includes(term); } catch(e){ return false; }
+          });
+        });
+      } else {
+        data = data.filter(function(r){
+          try { return Object.keys(r).some(function(k){ return String(renderCellValue(r[k], k, r) || '').toLowerCase().includes(term); }); } catch(e){ return false; }
+        });
+      }
+    }
+
+    // Column filters
+    Object.keys(columnFilters || {}).forEach(function(col){
+      var val = columnFilters[col];
+      if (val == null || val === '') return;
+      var needle = String(val).toLowerCase();
+      data = data.filter(function(r){
+        try { var s = String(renderCellValue(r[col], col, r) || ''); return s.toLowerCase().includes(needle); } catch(e){ return false; }
+      });
+    });
+
+    // Color/category filtering if requested
+    if (opts.colorVisibility && typeof opts.getRowCategory === 'function') {
+      try {
+        var activeCats = Object.keys(opts.colorVisibility || {}).filter(function(c){ return !!opts.colorVisibility[c]; });
+        var anyActive = activeCats.length > 0;
+        if (opts.colorMode === 'require-active') {
+          // Unified behavior:
+          // - if any category active -> include rows that match the active categories OR rows with empty date-like field (always visible)
+          // - if no category active -> include only rows with empty date-like field
+          if (anyActive) {
+            data = data.filter(function(row){
+              try {
+                var sdateVal = (row && (row.sdate !== undefined ? row.sdate : (row.date !== undefined ? row.date : (row.fdate !== undefined ? row.fdate : ''))));
+                if (sdateVal == null || String(sdateVal).trim() === '') return true; // always show empty-date rows
+              } catch(e) { /* fallthrough to category check */ }
+              var cat = opts.getRowCategory(row);
+              if ((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1) {
+                try { var dval = row.date; if (dval == null || String(dval).trim() === '') cat = '0'; } catch(e){}
+              }
+              return cat && activeCats.indexOf(String(cat)) !== -1;
+            });
+          } else {
+            // no categories active -> include only rows with empty date/sdate/fdate
+            data = data.filter(function(row){
+              try {
+                var sdateVal = (row && (row.sdate !== undefined ? row.sdate : (row.date !== undefined ? row.date : (row.fdate !== undefined ? row.fdate : ''))));
+                return sdateVal == null || String(sdateVal).trim() === '';
+              } catch (e) { return false; }
+            });
+          }
+        } else {
+          // include-if-active: if none active -> keep all rows
+          if (anyActive) {
+            data = data.filter(function(row){
+              try {
+                var sdateVal = (row && (row.sdate !== undefined ? row.sdate : (row.date !== undefined ? row.date : (row.fdate !== undefined ? row.fdate : ''))));
+                if (sdateVal == null || String(sdateVal).trim() === '') return true; // always show empty-date rows
+              } catch(e) { /* continue to category check */ }
+              var cat = opts.getRowCategory(row);
+              if ((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1) {
+                try { var sdateVal2 = (row && (row.sdate !== undefined ? row.sdate : (row.date !== undefined ? row.date : (row.fdate !== undefined ? row.fdate : '')))); if (sdateVal2 == null || String(sdateVal2).trim() === '') cat = '0'; } catch(e){}
+              }
+              return activeCats.indexOf(String(cat)) !== -1;
+            });
+          }
+        }
+      } catch (e) { console.warn('Color filtering failed', e); }
+    }
+
+    return data;
+  } catch (e) { console.warn('filterTableData failed', e); return []; }
+}
+
 function applyVehicleFilters() {
   var searchInput = document.getElementById("vehicleSearchInput");
   var showSearchInput = document.getElementById("vehicleShowSearchInput");
-  var showResetBtn = document.getElementById("vehicleShowResetBtn");
   // Use active dataset based on overlay mode
   var activeData = vehicleOverlayMode === 'show' ? vehicleShowData : vehicleSelectMinData;
-  if (!activeData) {
-    vehicleFilteredData = null;
-    return;
-  }
-  var term = '';
-  if (vehicleOverlayMode === 'show') {
-    term = ((showSearchInput && showSearchInput.value) || "").trim().toLowerCase();
-  } else {
-    term = ((searchInput && searchInput.value) || "").trim().toLowerCase();
-  }
-  var data = activeData.slice();
-  if (term) {
-    data = data.filter(function (r) {
-      return Object.values(r).some(function (v) {
-        return String(v).toLowerCase().includes(term);
-      });
-    });
-  }
-  Object.keys(vehicleColumnFilters).forEach(function (col) {
-    var val = vehicleColumnFilters[col];
-    if (val == null || val === "") return;
-    var needle = String(val).toLowerCase();
-    data = data.filter(function (r) {
-      return String(r[col] || "")
-        .toLowerCase()
-        .includes(needle);
-    });
-  });
-  if (vehicleSortState.column) {
+  if (!activeData) { vehicleFilteredData = null; return; }
+  var term = vehicleOverlayMode === 'show' ? ((showSearchInput && showSearchInput.value) || '').trim().toLowerCase() : ((searchInput && searchInput.value) || '').trim().toLowerCase();
+
+  var headers = activeData && activeData.length ? Object.keys(activeData[0]) : (vehicleColumns || []);
+  // remove helper/internal keys
+  headers = headers.filter(function(h){ return h !== '__origIndex' && h !== '__fleetKey'; });
+
+  var filtered = filterTableData({ data: activeData, headers: headers, globalTerm: term, columnFilters: vehicleColumnFilters, renderCellValue: function(v){ return v == null ? '' : String(v); }, colorVisibility: window.vehicleColorVisibility, getRowCategory: function(r){ var info = getRowAgeGrade(r, Date.now()); return info ? info.ageCategory : null; }, colorMode: 'require-active' });
+
+  // Sorting (preserve previous vehicle sort behavior)
+  if (vehicleSortState && vehicleSortState.column) {
     var col = vehicleSortState.column;
     var dir = vehicleSortState.dir;
-    if (col === "№") {
-      data.sort(function (a, b) {
-        var ai = a.__origIndex || 0;
-        var bi = b.__origIndex || 0;
-        return (ai - bi) * dir;
-      });
+    if (col === '№') {
+      filtered.sort(function(a,b){ var ai = a.__origIndex || 0; var bi = b.__origIndex || 0; return (ai - bi) * dir; });
     } else {
-      data.sort(function (a, b) {
-        var av = a[col],
-          bv = b[col];
-        if (av == null && bv == null) return 0;
-        if (av == null) return 1;
-        if (bv == null) return -1;
-        if (!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv)))
-          return (parseFloat(av) - parseFloat(bv)) * dir;
-        return (
-          String(av).localeCompare(String(bv), "ru", { numeric: true }) * dir
-        );
-      });
+      filtered.sort(function(a,b){ var av = a[col], bv = b[col]; if (av == null && bv == null) return 0; if (av == null) return 1; if (bv == null) return -1; if (!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) return (parseFloat(av) - parseFloat(bv)) * dir; return String(av).localeCompare(String(bv), 'ru', { numeric: true }) * dir; });
     }
   }
-  vehicleFilteredData = data;
-  // Apply color/category filters only for the 'selectMin' overlay (vehicle). Device List ('show') should not be filtered by these buttons.
-  try {
-    if (vehicleOverlayMode === 'selectMin') {
-        var activeCats = Object.keys(window.vehicleColorVisibility || {}).filter(function(c){ return !!window.vehicleColorVisibility[c]; });
-        if (activeCats && activeCats.length > 0) {
-          vehicleFilteredData = vehicleFilteredData.filter(function(r){
-            var info = getRowAgeGrade(r, Date.now());
-            var cat = (info && (info.ageCategory !== undefined && info.ageCategory !== null)) ? info.ageCategory : null;
-            // If the row has no computed category but the user enabled filter '0',
-            // include rows where sdate is empty (treat as category '0').
-            if ((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1) {
-              try {
-                var sdateVal = (r && (r.sdate !== undefined ? r.sdate : (r.date !== undefined ? r.date : (r.fdate !== undefined ? r.fdate : ''))));
-                if (sdateVal == null || String(sdateVal).trim() === '') {
-                  cat = '0';
-                }
-              } catch (e) { /* ignore */ }
-            }
-            // Only include rows whose computed category matches one of the active categories
-            return activeCats.indexOf(String(cat)) !== -1;
-          });
-        }
-    }
-  } catch(e){ console.warn('Color filter failed', e); }
+
+  vehicleFilteredData = filtered;
 }
 
 function toggleVehicleSort(column) {
@@ -1347,35 +1380,15 @@ function ensureVehicleOverlay() {
       if(!data || !data.length){ showRouteToast('Нет данных для экспорта', 1500); return; }
 
       // (rest of original data-based export preserved)
-      // Apply search & column filters similar to renderDeviceStatusTable
+      // Use same filtering helper as renderDeviceStatusTable so export matches overlay
       var searchInput = document.getElementById('deviceStatusSearchInput');
       var showSearchInput = document.getElementById('deviceStatusShowSearchInput');
       var term = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : ((showSearchInput && showSearchInput.value) ? showSearchInput.value.trim().toLowerCase() : '');
-      var filtered = data.slice();
-      if (term) {
-        filtered = filtered.filter(function(r){ return Object.values(r).some(function(v){ var s = String((typeof v === 'string' && v.indexOf('<div')!==-1) ? (function(t){ var tmp=document.createElement('div'); tmp.innerHTML = t; return tmp.textContent || tmp.innerText || t; })(v) : (v==null?'':v)); return s.toLowerCase().includes(term); }); });
-      }
-      Object.keys(deviceStatusColumnFilters || {}).forEach(function(col){ var val = deviceStatusColumnFilters[col]; if(!val) return; var needle = String(val).toLowerCase(); filtered = filtered.filter(function(r){ var cell = r[col]; var s = (cell==null?'':String(cell)); if(typeof cell === 'string' && cell.indexOf('<div')!==-1){ var tmp=document.createElement('div'); tmp.innerHTML = cell; s = tmp.textContent || tmp.innerText || s; } return s.toLowerCase().includes(needle); }); });
 
-      // Apply color/category filtering same as renderDeviceStatusTable
-      var activeCats = Object.keys(window.deviceStatusColorVisibility || {}).filter(function(c){ return !!window.deviceStatusColorVisibility[c]; });
-      var anyActive = activeCats.length > 0;
-      if(anyActive){
-        filtered = filtered.filter(function(row){
-          // compute probe for age grading
-          var probe = {};
-          if(row.sdate) probe.sdate = row.sdate;
-          if(row.fdate) probe.fdate = row.fdate;
-          if(row.date){ var parsed = (function(v){ if(!v) return null; var s=String(v).trim(); if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)||/\d{4}-\d{2}-\d{2}/.test(s)) return s.replace(' ','T'); var m=s.match(/^(\d{4})[ \-\/](\d{1,2})[ \-\/](\d{1,2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(m){ var yy=m[1],mm=m[2],dd=m[3],hh=m[4]||'00',mi=m[5]||'00',ss=m[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } var d2=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:[ \t](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(d2){ var dd=d2[1],mm=d2[2],yy=d2[3]; if(yy.length===2) yy='20'+yy; var hh=d2[4]||'00',mi=d2[5]||'00',ss=d2[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } return null; })(row.date); if(parsed) probe.fdate = parsed; else probe.fdate = row.date; }
-          var ageInfo = getRowAgeGrade(probe, Date.now());
-          var cat = ageInfo ? ageInfo.ageCategory : null;
-          if((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1){ try{ var dval = row.date; if(dval == null || String(dval).trim() === ''){ cat = '0'; } }catch(e){} }
-          return cat && activeCats.indexOf(String(cat)) !== -1;
-        });
-      } else {
-        // nothing active -> no rows
-        filtered = [];
-      }
+  function renderCellForFilter(v, col){ try{ var raw = (v==null?'':v); if(window.deviceStatusColMaps && Object.prototype.hasOwnProperty.call(window.deviceStatusColMaps, col)){ var map = window.deviceStatusColMaps[col] || {}; var key = String(raw); if(map[key] !== undefined && map[key] !== null) return map[key]; } if(typeof raw === 'string' && raw.indexOf('<div')!==-1){ var tmp=document.createElement('div'); tmp.innerHTML = raw; return tmp.textContent || tmp.innerText || ''; } return raw; }catch(e){ return String(v); } }
+      function deviceStatusGetRowCategory(row){ try{ var probe = {}; if(row.sdate) probe.sdate = row.sdate; if(row.fdate) probe.fdate = row.fdate; if(row.date){ var parsed = (function(v){ if(!v) return null; var s=String(v).trim(); if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)||/\d{4}-\d{2}-\d{2}/.test(s)) return s.replace(' ','T'); var m=s.match(/^(\d{4})[ \-\/](\d{1,2})[ \-\/](\d{1,2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(m){ var yy=m[1],mm=m[2],dd=m[3],hh=m[4]||'00',mi=m[5]||'00',ss=m[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } var d2=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:[ \t](\d{2}):(\d{2})(?::(\d{2}))?)?/); if(d2){ var dd=d2[1],mm=d2[2],yy=d2[3]; if(yy.length===2) yy='20'+yy; var hh=d2[4]||'00',mi=d2[5]||'00',ss=d2[6]||'00'; return yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0')+'T'+String(hh).padStart(2,'0')+':'+String(mi).padStart(2,'0')+':'+String(ss).padStart(2,'0'); } return null; })(row.date); if(parsed) probe.fdate = parsed; else probe.fdate = row.date; } var ageInfo = getRowAgeGrade(probe, Date.now()); return ageInfo ? ageInfo.ageCategory : null; }catch(e){ return null; } }
+
+  var filtered = filterTableData({ data: data, headers: headers, globalTerm: term, columnFilters: deviceStatusColumnFilters, renderCellValue: function(v, col, row){ try{ var raw = (v==null?'':v); if(window.deviceStatusColMaps && Object.prototype.hasOwnProperty.call(window.deviceStatusColMaps, col)){ var map = window.deviceStatusColMaps[col] || {}; var key = String(raw); if(map[key] !== undefined && map[key] !== null) return map[key]; } if(typeof raw === 'string' && raw.indexOf('<') !== -1){ var tmp=document.createElement('div'); tmp.innerHTML = raw; return tmp.textContent || tmp.innerText || ''; } return raw; }catch(e){ return String(v); } }, colorVisibility: window.deviceStatusColorVisibility, getRowCategory: deviceStatusGetRowCategory, colorMode: 'require-active' });
 
       if(!filtered || !filtered.length){ showRouteToast('Нет данных для экспорта', 1500); return; }
 
@@ -1441,6 +1454,8 @@ function ensureDeviceStatusOverlay() {
   if (btn && !btn.dataset.bound) {
     btn.addEventListener('click', function(){
       try{ ensureDeviceStatusOverlay(); if(overlay) overlay.style.display='block'; }catch(_){ }
+      // set focus to Global Search input shortly after opening so cursor is placed there
+      setTimeout(function(){ try{ var gsi = document.getElementById('deviceStatusSearchInput'); if(gsi) gsi.focus(); }catch(e){} }, 20);
       // send init then setup (setup will return rows; init provides cols mapping)
       var initReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'init', usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
       var setupReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
@@ -1452,8 +1467,48 @@ function ensureDeviceStatusOverlay() {
     btn.dataset.bound = '1';
   }
   if (closeBtn && !closeBtn.dataset.bound) {
-    closeBtn.addEventListener('click', function(){ if (overlay) overlay.style.display = 'none'; }); closeBtn.dataset.bound='1';
+    // Close handler: hide overlay and clear Global Search + all column filters immediately
+    closeBtn.addEventListener('click', function(){
+      try{
+        // clear global search input and any show-search variant
+        var gsi = document.getElementById('deviceStatusSearchInput'); if(gsi) gsi.value = '';
+        var gsi2 = document.getElementById('deviceStatusShowSearchInput'); if(gsi2) gsi2.value = '';
+        // clear column filters state so next open starts clean
+        try { deviceStatusColumnFilters = {}; } catch(e){}
+        try { deviceStatusSortState = { column: null, dir: 1 }; } catch(e){}
+  // also clear any input values currently rendered in the overlay header (if present)
+  try{
+          var theadEl = document.getElementById('deviceStatusTableHead');
+          if(theadEl){ Array.prototype.slice.call(theadEl.querySelectorAll('input')).forEach(function(i){ try{ i.value = ''; }catch(_){} }); }
+        }catch(e){}
+      }catch(e){}
+      if (overlay) overlay.style.display = 'none';
+    }); closeBtn.dataset.bound='1';
   }
+  // Bind global search inputs and reset button to trigger re-rendering
+  try{
+    var searchInput = document.getElementById('deviceStatusSearchInput');
+    var showSearchInput = document.getElementById('deviceStatusShowSearchInput');
+    var resetBtn = document.getElementById('deviceStatusResetFilters');
+    if (searchInput && !searchInput.dataset.bound) {
+      searchInput.addEventListener('input', function(){ try{ renderDeviceStatusTable(); }catch(e){} });
+      searchInput.dataset.bound = '1';
+    }
+    if (showSearchInput && !showSearchInput.dataset.bound) {
+      showSearchInput.addEventListener('input', function(){ try{ renderDeviceStatusTable(); }catch(e){} });
+      showSearchInput.dataset.bound = '1';
+    }
+    if (resetBtn && !resetBtn.dataset.bound) {
+      resetBtn.addEventListener('click', function(){
+        try{ if(searchInput) searchInput.value = ''; }catch(_){}
+        try{ if(showSearchInput) showSearchInput.value = ''; }catch(_){}
+        try { deviceStatusColumnFilters = {}; } catch(e){}
+        try { deviceStatusSortState = { column: null, dir: 1 }; } catch(e){}
+        try{ renderDeviceStatusTable(); }catch(e){}
+      });
+      resetBtn.dataset.bound = '1';
+    }
+  }catch(e){ console.warn('Binding Device Status search/reset failed', e); }
   if (refreshBtn && !refreshBtn.dataset.bound) {
     refreshBtn.addEventListener('click', function(){
       try{ var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' }; sendRequest(req); updateStatus('Обновление Device Status...', 'blue', 2000); }catch(e){ console.warn('refresh device status failed', e); }
@@ -1500,18 +1555,20 @@ function renderDeviceStatusTable(){
       return;
     }
     if (!deviceStatusColumns) deviceStatusColumns = Object.keys(data[0] || {});
-    // apply column filters and search
+    // Capture focus info BEFORE rebuild (for column filter inputs inside thead)
+    var activeEl = document.activeElement;
+    var activeCol = activeEl && activeEl.dataset && activeEl.dataset.column ? activeEl.dataset.column : null;
+    var caretPos = activeEl && typeof activeEl.selectionStart === 'number' ? activeEl.selectionStart : null;
+
     var searchInput = document.getElementById('deviceStatusSearchInput');
     var showSearchInput = document.getElementById('deviceStatusShowSearchInput');
     var term = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : ((showSearchInput && showSearchInput.value) ? showSearchInput.value.trim().toLowerCase() : '');
-    var filtered = data.slice();
-    if (term) {
-      filtered = filtered.filter(function(r){ return Object.values(r).some(function(v){ var s = String(renderCellValue(v) || ''); return s.toLowerCase().includes(term); }); });
-    }
-    Object.keys(deviceStatusColumnFilters || {}).forEach(function(col){ var val = deviceStatusColumnFilters[col]; if(!val) return; var needle = String(val).toLowerCase(); filtered = filtered.filter(function(r){ return String(renderCellValue(r[col])||'').toLowerCase().includes(needle); }); });
-    // headers
+
+    // Compute visible headers from columns (do this before filtering so header inputs are stable)
+    var headers = (deviceStatusColumns && deviceStatusColumns.length) ? deviceStatusColumns.slice() : Object.keys(data[0] || {});
+    // Remove numeric index if present
+    headers = headers.filter(function(h){ return String(h) !== '№'; });
     thead.innerHTML = '';
-  var headers = Object.keys(filtered.length ? filtered[0] : data[0]);
   // Remove numeric index column from Device Status overlay if present
   headers = headers.filter(function(h){ return String(h) !== '№'; });
     var trHead = document.createElement('tr'); trHead.className = 'vehicle-filter-row';
@@ -1540,7 +1597,51 @@ function renderDeviceStatusTable(){
       }
     } catch(e){}
     // filter row
-    var filterRow = document.createElement('tr'); filterRow.className='vehicle-filter-row'; headers.forEach(function(h){ var thf = document.createElement('th'); if(h){ var inp = document.createElement('input'); inp.type='text'; inp.placeholder='Фильтр'; if(deviceStatusColumnFilters[h]) inp.value = deviceStatusColumnFilters[h]; inp.dataset.column = h; inp.addEventListener('input', function(){ deviceStatusColumnFilters[h] = inp.value; renderDeviceStatusTable(); }); thf.appendChild(inp); } filterRow.appendChild(thf); }); thead.appendChild(filterRow);
+    var filterRow = document.createElement('tr'); filterRow.className='vehicle-filter-row'; headers.forEach(function(h){
+      var thf = document.createElement('th');
+      if(h){
+        var inp = document.createElement('input');
+        inp.type='text';
+        inp.placeholder='Фильтр';
+        if(deviceStatusColumnFilters[h]) inp.value = deviceStatusColumnFilters[h];
+        inp.dataset.column = h;
+        inp.addEventListener('input', function(){
+          deviceStatusColumnFilters[h] = inp.value;
+          // re-render but preserve focus via captured info above
+          renderDeviceStatusTable();
+        });
+        thf.appendChild(inp);
+      }
+    filterRow.appendChild(thf);
+    });
+    thead.appendChild(filterRow);
+
+    // Restore focus if one of the column filter inputs was active before re-render
+    if (activeCol) {
+      try {
+        var newInput = thead.querySelector('input[data-column="' + activeCol + '"]');
+        if (newInput) {
+          newInput.focus();
+          if (caretPos != null) {
+            try { newInput.selectionStart = newInput.selectionEnd = Math.min(caretPos, newInput.value.length); } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Now apply filtering using the stable headers list via filterTableData
+    // Helper to compute category for color filters
+    function deviceStatusGetRowCategory(row){
+      try{
+        var probe = {};
+        if(row.sdate) probe.sdate = row.sdate;
+        if(row.fdate) probe.fdate = row.fdate;
+        if(row.date){ var parsed = parseDateStringToIso(row.date); if(parsed) probe.fdate = parsed; else probe.fdate = row.date; }
+        var ageInfo = getRowAgeGrade(probe, Date.now());
+        return ageInfo ? ageInfo.ageCategory : null;
+      }catch(e){ return null; }
+    }
+  var filtered = filterTableData({ data: data, headers: headers, globalTerm: term, columnFilters: deviceStatusColumnFilters, renderCellValue: function(v, col, row){ try{ var raw = (v==null?'':v); if(window.deviceStatusColMaps && Object.prototype.hasOwnProperty.call(window.deviceStatusColMaps, col)){ var map = window.deviceStatusColMaps[col] || {}; var key = String(raw); if(map[key] !== undefined && map[key] !== null) return map[key]; } if(typeof raw === 'string' && raw.indexOf('<')!==-1){ var tmp=document.createElement('div'); tmp.innerHTML = raw; return tmp.textContent || tmp.innerText || ''; } return raw; }catch(e){ return String(v); } }, colorVisibility: window.deviceStatusColorVisibility, getRowCategory: deviceStatusGetRowCategory, colorMode: 'require-active' });
     // sort
     if (deviceStatusSortState.column) {
       var col = deviceStatusSortState.column;
@@ -1616,43 +1717,13 @@ function renderDeviceStatusTable(){
       return null;
     }
 
-    var activeCats = Object.keys(window.deviceStatusColorVisibility || {}).filter(function(c){ return !!window.deviceStatusColorVisibility[c]; });
-    var anyActive = activeCats.length > 0;
-
     filtered.forEach(function(row, idx){
-      // compute age/category for this row: prefer 'date' field (possibly with HTML), fallback to sdate/fdate
+      // compute age/category for this row for coloring
       var probe = {};
       if(row.sdate) probe.sdate = row.sdate;
       if(row.fdate) probe.fdate = row.fdate;
-      if(row.date){
-        var parsed = parseDateStringToIso(row.date);
-        if(parsed) probe.fdate = parsed;
-        else {
-          // keep raw text as fdate to allow parseRelativeDuration fallback
-          probe.fdate = row.date;
-        }
-      }
+      if(row.date){ var parsed = parseDateStringToIso(row.date); if(parsed) probe.fdate = parsed; else probe.fdate = row.date; }
       var ageInfo = getRowAgeGrade(probe, nowTs);
-      var cat = ageInfo ? ageInfo.ageCategory : null;
-
-      // If any category button is active, show only rows matching active categories.
-      // If no category is active, show no rows (user intention is to hide all).
-      if(anyActive){
-        // If category is missing but user enabled '0', include rows with empty date as '0'
-        if((cat === null || cat === undefined) && activeCats.indexOf('0') !== -1){
-          try{
-            var dval = row.date;
-            if(dval == null || String(dval).trim() === ''){
-              cat = '0';
-            }
-          }catch(e){}
-        }
-        if(!cat || activeCats.indexOf(String(cat)) === -1) return; // skip
-      } else {
-        // nothing active -> don't render any rows
-        return;
-      }
-
       var tr=document.createElement('tr');
       headers.forEach(function(h){
         var td=document.createElement('td');
