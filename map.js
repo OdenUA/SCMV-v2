@@ -9,7 +9,48 @@ function initMap(){
   parkingLayerGroup = L.layerGroup().addTo(map); // Initialize and add to map
 
   // Custom route control
-  var RouteControl = L.Control.extend({options:{position:'topleft'}, onAdd:function(){ var c=L.DomUtil.create('div','leaflet-bar rt-control'); c.innerHTML='<a href="#" class="rt-toggle" title="Режим построения маршрута">📍</a><a href="#" class="rt-reset" title="Сбросить маршрут">⟳</a>'; var t=c.querySelector('.rt-toggle'); var r=c.querySelector('.rt-reset'); L.DomEvent.disableClickPropagation(c); L.DomEvent.on(t,'click',function(e){ e.preventDefault(); if(!routeModeActive){ startRouteMode(); } else { if(routeClickCount>=2){ buildGoogleMapsRouteManual(); stopRouteMode(); } else { stopRouteMode(); } } updateRouteButton(); }); L.DomEvent.on(r,'click',function(e){ e.preventDefault(); resetManualRoute(); }); routeControlRef=c; updateRouteButton(); return c; }});
+  var RouteControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      var container = L.DomUtil.create('div', 'leaflet-bar rt-control');
+
+  var toggle = L.DomUtil.create('a', 'rt-toggle', container);
+  toggle.href = '#';
+  toggle.title = 'Режим построения маршрута';
+  toggle.innerHTML = '📍';
+
+  var reset = L.DomUtil.create('a', 'rt-reset', container);
+      reset.href = '#';
+      reset.title = 'Сбросить маршрут';
+      reset.innerHTML = '⟳';
+
+      L.DomEvent.disableClickPropagation(container);
+
+      L.DomEvent.on(toggle, 'click', function (e) {
+        e.preventDefault();
+        if (!routeModeActive) {
+          startRouteMode();
+        } else {
+          if (routeClickCount >= 2) {
+            buildGoogleMapsRouteManual();
+            stopRouteMode();
+          } else {
+            stopRouteMode();
+          }
+        }
+        updateRouteButton();
+      });
+
+      L.DomEvent.on(reset, 'click', function (e) {
+        e.preventDefault();
+        resetManualRoute();
+      });
+
+      routeControlRef = container;
+      updateRouteButton();
+      return container;
+    }
+  });
   map.addControl(new RouteControl());
 
   // NOTE: original Leaflet layers control removed — we provide an

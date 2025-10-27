@@ -52,10 +52,14 @@ function startRouteMode() {
   document.body.classList.add("route-mode-active");
   showRouteToast("🎯 Кликните на карту для выбора начальной точки (1/25)");
 }
-function stopRouteMode() {
+function stopRouteMode(options) {
+  var opts = options || {};
+  var silent = !!opts.silent;
   routeModeActive = false;
-  map.getContainer().style.cursor = "";
-  map.off("click", onRouteMapClick, true);
+  if (map) {
+    map.getContainer().style.cursor = "";
+    map.off("click", onRouteMapClick, true);
+  }
   if (!routeBuilt) {
     clearRouteTempMarkers();
     if (routeManualPolyline) {
@@ -64,7 +68,9 @@ function stopRouteMode() {
     }
   }
   updateRouteButton();
-  showRouteToast("🛑 Режим маршрута выключен", 2000);
+  if (!silent) {
+    showRouteToast("🛑 Режим маршрута выключен", 2000);
+  }
   parkingMarkers.forEach(function (pm) {
     try {
       if (pm._storedPopupContent) {
@@ -133,7 +139,143 @@ function updateRouteButton() {
     }
   }
 }
-function updateResetButtonState() {}
+// Track-cut selection via popups (two clicks on scissors inside point popup)
+function createTrackCutButton(lat, lng, wdate) {
+  if (!wdate) return null;
+  try {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-link track-cut-btn';
+    btn.title = 'Запомнить точку для удаления диапазона';
+    btn.innerHTML = '✂️';
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      handleTrackCutSelection({ point: { lat: lat, lng: lng, wdate: wdate }, button: btn });
+    });
+    return btn;
+  } catch (err) {
+    console.warn('createTrackCutButton failed', err);
+    return null;
+  }
+}
+function handleTrackCutSelection(selection) {
+  var point = selection && (selection.point || selection);
+  var button = selection && selection.button;
+  if (!point || !point.wdate) {
+    showRouteToast('Не удалось определить время точки', 2200);
+    return;
+  }
+  if (trackCutFirstPoint && trackCutFirstButton && button === trackCutFirstButton) {
+    try { trackCutFirstButton.classList.remove('track-cut-selected'); } catch(_){ }
+    trackCutFirstPoint = null;
+    trackCutFirstButton = null;
+    showRouteToast('Выбор первой точки сброшен', 2000);
+    return;
+  }
+  if (!trackCutFirstPoint) {
+    trackCutFirstPoint = point;
+    if (trackCutFirstButton && trackCutFirstButton !== button) {
+      try { trackCutFirstButton.classList.remove('track-cut-selected'); } catch(_){ }
+    }
+    trackCutFirstButton = button || null;
+    if (trackCutFirstButton) {
+      try { trackCutFirstButton.classList.add('track-cut-selected'); } catch(_){ }
+    }
+    showRouteToast('Первая точка выбрана: ' + point.wdate, 2200);
+    return;
+  }
+  var first = trackCutFirstPoint;
+  var firstBtn = trackCutFirstButton;
+  trackCutFirstPoint = null;
+  trackCutFirstButton = null;
+  if (firstBtn) {
+    try { firstBtn.classList.remove('track-cut-selected'); } catch(_){ }
+  }
+  showTrackCutSql(first, point);
+}
+function showTrackCutSql(first, second) {
+  var sqlText = buildTrackCutSql(first, second);
+  if (!sqlText) {
+    showRouteToast('Не удалось сформировать SQL', 2400);
+    return;
+  }
+  try {
+    if (sqlModal) sqlModal.style.display = 'block';
+    if (sqlOutput) sqlOutput.textContent = sqlText;
+  } catch (err) {
+    console.warn('Не удалось открыть модальное окно SQL', err);
+  }
+  showRouteToast('SQL для удаления готов', 2200);
+}
+function buildTrackCutSql(first, second) {
+  if (!first || !second) return '';
+  var parse = (typeof parseTrackDate === 'function') ? parseTrackDate : function (s) { return new Date(s); };
+  var parseLocalWdate = function (raw) {
+    if (!raw) return new Date(NaN);
+    var m = raw.match(/^([0-9]{4})-([0-9]{2})-([0-9]{2})[T\s]([0-9]{2}):([0-9]{2}):([0-9]{2})$/);
+    if (m) {
+      return new Date(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4]),
+        Number(m[5]),
+        Number(m[6])
+      );
+    }
+    return parse(raw);
+  };
+  var startDate = parseLocalWdate(first.wdate);
+  var endDate = parseLocalWdate(second.wdate);
+  if (!startDate || isNaN(startDate.getTime())) startDate = parse(first.wdate);
+  if (!endDate || isNaN(endDate.getTime())) endDate = parse(second.wdate);
+  if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    console.warn('track-cut: failed to parse dates', first, second);
+    return '';
+  }
+  if (startDate.getTime() > endDate.getTime()) {
+    var tmp = startDate;
+    startDate = endDate;
+    endDate = tmp;
+    var tmpPoint = first;
+    first = second;
+    second = tmpPoint;
+  }
+  var pad = function (n) { return n.toString().padStart(2, '0'); };
+  var formatDateTime = function (d) {
+    return (
+      d.getFullYear() +
+      '-' + pad(d.getMonth() + 1) +
+      '-' + pad(d.getDate()) +
+      ' ' + pad(d.getHours()) +
+      ':' + pad(d.getMinutes()) +
+      ':' + pad(d.getSeconds())
+    );
+  };
+  var deviceId = (typeof deviceIdInput !== 'undefined' && deviceIdInput) ? (deviceIdInput.value || '') : '';
+  var sqlCommands = '';
+  sqlCommands += '-- От ' + (first.wdate || formatDateTime(startDate)) + ' до ' + (second.wdate || formatDateTime(endDate)) + '\n';
+  var current = new Date(startDate.getTime());
+  while (current.getTime() <= endDate.getTime()) {
+    var dayEnd = new Date(current.getTime());
+    dayEnd.setHours(23, 59, 59, 999);
+    var segmentEnd = new Date(Math.min(dayEnd.getTime(), endDate.getTime()));
+    var segmentStartStr = buildLocalDateParam(formatDateTime(current), false);
+    var segmentEndStr = buildLocalDateParam(formatDateTime(segmentEnd), true);
+    sqlCommands += "delete from snsrmain where deviceid='" + deviceId + "' and wdate >= '" + segmentStartStr + "' and wdate <= '" + segmentEndStr + "';\n";
+    current = new Date(dayEnd.getTime() + 1);
+  }
+  return sqlCommands;
+}
+function updateResetButtonState() {
+  if (!routeControlRef) return;
+  var resetEl = routeControlRef.querySelector(".rt-reset");
+  if (resetEl) {
+    var enabled = Array.isArray(routePointsManual) && routePointsManual.length > 0;
+    resetEl.style.opacity = enabled ? "1" : "0.4";
+  }
+}
 // Reset manual route: clear markers, polylines and state
 function resetManualRoute() {
   try {
@@ -160,17 +302,6 @@ function resetManualRoute() {
     updateResetButtonState();
     showRouteToast('♻️ Маршрут сброшен', 1400);
   } catch (err) { console.warn('resetManualRoute failed', err); }
-}
-
-function updateResetButtonState() {
-  if (routeControlRef) {
-    var resetEl = routeControlRef.querySelector('.rt-reset');
-    if (resetEl) {
-      var enabled = Array.isArray(routePointsManual) && routePointsManual.length > 0;
-      resetEl.style.opacity = enabled ? '1' : '0.4';
-      // keep it clickable but visually disabled when not used
-    }
-  }
 }
 function clearRouteTempMarkers() {
   routeTempMarkers.forEach(function (m) {

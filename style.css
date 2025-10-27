@@ -36,6 +36,36 @@ button:hover { background-color: #0056b3; }
     cursor: ns-resize;
     z-index: 401; /* Ensure it's above map panes */
 }
+.track-cut-btn,
+.track-cut-popup-btn {
+    margin-left: 6px;
+    font-size: 18px;
+    line-height: 1;
+    background-color: transparent;
+    border: none;
+    text-decoration: none;
+    transform: rotate(180deg);
+    transform-origin: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    color: inherit;
+    transition: background-color 0.2s ease;
+}
+.track-cut-btn:hover,
+.track-cut-popup-btn:hover {
+    text-decoration: none;
+}
+.track-cut-btn:focus,
+.track-cut-popup-btn:focus {
+    outline: none;
+    box-shadow: none;
+}
+.track-cut-selected {
+    background-color: rgba(25, 135, 84, 0.25);
+    border-radius: 6px;
+}
 table { 
     width: 100%; 
     border-collapse: collapse; 

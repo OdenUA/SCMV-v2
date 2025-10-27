@@ -88,6 +88,9 @@ var routeDistanceKm = null;
 var lastContextMenuEvent = 0;
 var routeMapsUrl = null;
 var routeControlRef = null;
+var trackCutFirstPoint = null;
+var trackCutFirstButton = null;
+var reportCurrentIntervals = null;
 // Start/Stop data
 var startstopStops = [];
 var mileageStopCoords = {};

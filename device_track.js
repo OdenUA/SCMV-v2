@@ -22,7 +22,16 @@ function attachRouteAwareClick(poly) {
     window._trackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {radius:7, color:'#ff4136', weight:2, fillColor:'#ff4136', fillOpacity:0.9}).addTo(trackLayerGroup);
   // Bind popup but honor route mode by delegating clicks
     try {
-      window._trackNearestMarker.bindPopup('<b>' + (nearest.wdate || '') + '</b>');
+      var popupNode = document.createElement('div');
+      popupNode.innerHTML = '<b>' + (nearest.wdate || '') + '</b>';
+      if (typeof createTrackCutButton === 'function') {
+        var cutBtn = createTrackCutButton(nearest.lat, nearest.lng, nearest.wdate);
+        if (cutBtn) {
+          cutBtn.classList.add('track-cut-popup-btn');
+          popupNode.appendChild(cutBtn);
+        }
+      }
+      window._trackNearestMarker.bindPopup(popupNode);
       window._trackNearestMarker.on('click', function(ev){
         if (routeModeActive) {
           var ll = ev && ev.latlng ? ev.latlng : window._trackNearestMarker.getLatLng();
@@ -363,7 +372,18 @@ function drawRawDeviceTrack(points){
     if(latlngs.length<2){
       if(latlngs.length===1){
         var m0 = L.marker(latlngs[0],{icon:startIcon}).addTo(trackLayerGroup);
-        m0.bindPopup(parsed[0].wdate||'');
+        try {
+          var popupStart = document.createElement('div');
+          popupStart.innerHTML = '<b>Старт</b><br>' + (parsed[0].wdate||'');
+          if (typeof createTrackCutButton === 'function') {
+            var cutBtnStart = createTrackCutButton(parsed[0].lat, parsed[0].lng, parsed[0].wdate);
+            if (cutBtnStart) {
+              cutBtnStart.classList.add('track-cut-popup-btn');
+              popupStart.appendChild(cutBtnStart);
+            }
+          }
+          m0.bindPopup(popupStart);
+        } catch(_){ m0.bindPopup(parsed[0].wdate||''); }
         m0.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:m0.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ m0.openPopup(); }catch(_){} } });
       }
       updateStatus('Device Track: недостаточно точек ('+latlngs.length+')', '#dc3545', 6000); return;
@@ -399,6 +419,13 @@ function drawRawDeviceTrack(points){
               btn.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
               (function(ts){ btn.addEventListener('click', function(e){ try{ e.preventDefault(); e.stopPropagation(); if(window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(ts); }catch(err){console.warn(err);} }); })(timeMatch ? timeMatch[1] : (pt.wdate||''));
               container.appendChild(btn);
+            }
+            if (typeof createTrackCutButton === 'function') {
+              var cutBtn = createTrackCutButton(pt.lat, pt.lng, pt.wdate);
+              if (cutBtn) {
+                cutBtn.classList.add('track-cut-popup-btn');
+                container.appendChild(cutBtn);
+              }
             }
             m.bindPopup(container);
             // Store marker by time part for cross-linking
@@ -443,10 +470,32 @@ function drawRawDeviceTrack(points){
     }
     // Start/End markers
   var mStart = L.marker(latlngs[0],{icon:startIcon}).addTo(trackLayerGroup);
-  mStart.bindPopup('<b>Старт</b><br>'+ (parsed[0].wdate||''));
+  try {
+    var startPopup = document.createElement('div');
+    startPopup.innerHTML = '<b>Старт</b><br>'+ (parsed[0].wdate||'');
+    if (typeof createTrackCutButton === 'function') {
+      var startCutBtn = createTrackCutButton(parsed[0].lat, parsed[0].lng, parsed[0].wdate);
+      if (startCutBtn) {
+        startCutBtn.classList.add('track-cut-popup-btn');
+        startPopup.appendChild(startCutBtn);
+      }
+    }
+    mStart.bindPopup(startPopup);
+  } catch(_){ mStart.bindPopup('<b>Старт</b><br>'+ (parsed[0].wdate||'')); }
   mStart.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:mStart.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ mStart.openPopup(); }catch(_){} } });
   var mEnd = L.marker(latlngs[latlngs.length-1],{icon:endIcon}).addTo(trackLayerGroup);
-  mEnd.bindPopup('<b>Финиш</b><br>'+ (parsed[parsed.length-1].wdate||''));
+  try {
+    var endPopup = document.createElement('div');
+    endPopup.innerHTML = '<b>Финиш</b><br>'+ (parsed[parsed.length-1].wdate||'');
+    if (typeof createTrackCutButton === 'function') {
+      var endCutBtn = createTrackCutButton(parsed[parsed.length-1].lat, parsed[parsed.length-1].lng, parsed[parsed.length-1].wdate);
+      if (endCutBtn) {
+        endCutBtn.classList.add('track-cut-popup-btn');
+        endPopup.appendChild(endCutBtn);
+      }
+    }
+    mEnd.bindPopup(endPopup);
+  } catch(_){ mEnd.bindPopup('<b>Финиш</b><br>'+ (parsed[parsed.length-1].wdate||'')); }
   mEnd.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:mEnd.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ mEnd.openPopup(); }catch(_){} } });
     // Fit bounds
       if (poly && typeof poly.getBounds === 'function') {
@@ -518,6 +567,13 @@ function drawRawDeviceTrack(points){
             var timeMatch2 = String(nearest.wdate).match(/(\d{2}:\d{2}:\d{2})/);
             (function(ts){ btn2.addEventListener('click', function(e){ try{ e.preventDefault(); e.stopPropagation(); if(window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(ts); }catch(err){console.warn(err);} }); })(timeMatch2 ? timeMatch2[1] : (nearest.wdate||''));
             container2.appendChild(btn2);
+          }
+          if (typeof createTrackCutButton === 'function') {
+            var cutBtn2 = createTrackCutButton(nearest.lat, nearest.lng, nearest.wdate);
+            if (cutBtn2) {
+              cutBtn2.classList.add('track-cut-popup-btn');
+              container2.appendChild(cutBtn2);
+            }
           }
           _rawTrackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {radius:7, color:'#ff4136', weight:2, fillColor:'#ff4136', fillOpacity:0.9}).addTo(trackLayerGroup).bindPopup(container2);
         } catch (e) {
@@ -1425,6 +1481,7 @@ function formatAnomalyTime(dt) {
     reportHead.innerHTML=''; reportBody.innerHTML='';
     // If there are anomaly intervals, show SQL button above report
     try {
+      reportCurrentIntervals = intervals;
       var hasAnoms = intervals.some(function(iv){ return iv.isAnomaly; });
       var existingBtn = document.getElementById('reportGenerateSqlBtn');
       if(hasAnoms){
@@ -1432,10 +1489,14 @@ function formatAnomalyTime(dt) {
           var btn = document.createElement('button'); btn.id='reportGenerateSqlBtn'; btn.className='btn btn-warning'; btn.textContent='Сформировать SQL для удаления';
           btn.style.marginBottom='8px';
           reportBody.parentElement.parentElement.insertBefore(btn, reportBody.parentElement);
-          btn.addEventListener('click', function(){ sqlModal.style.display='block'; generateSqlFromIntervals(intervals); });
+          btn.addEventListener('click', function(){
+            if(sqlModal) sqlModal.style.display='block';
+            generateSqlFromIntervals(reportCurrentIntervals || intervals);
+          });
         }
       } else {
         if(existingBtn) existingBtn.remove();
+        reportCurrentIntervals = null;
       }
     } catch(e){}
     if(!intervals.length){
