@@ -6,14 +6,14 @@ document.addEventListener('DOMContentLoaded', function(){
       var from = document.getElementById('dateFrom');
       var to = document.getElementById('dateTo');
       if(from && to && from.value){
-  // Take only the date portion (YYYY-MM-DD)
+        // Take only the date portion (YYYY-MM-DD)
         var datePart = from.value.split('T')[0];
         to.value = datePart + 'T23:59';
       }
     });
   }
 });
-// simple HTML escape helper
+// Simple HTML escape helper
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');
 }
@@ -79,8 +79,8 @@ function init() {
         var datesChanged = (lastFromTs !== null && curFromTs !== null && lastFromTs !== curFromTs) || (lastToTs !== null && curToTs !== null && lastToTs !== curToTs);
         var deviceChanged = (typeof window._lastSeenDeviceId !== 'undefined' && window._lastSeenDeviceId !== curDev);
         if(datesChanged || deviceChanged){ try{ if(typeof window.handleDeviceOrDateChange === 'function') window.handleDeviceOrDateChange({source:'button.click', button:'Mileage'}); }catch(_){} }
-  // Do not update last-seen snapshots here. sendRequest will update them
-  // when an actual request is sent so changes are detected reliably.
+        // Do not update last-seen snapshots here. sendRequest will update them
+        // when an actual request is sent so changes are detected reliably.
       }catch(e){}
       }
     });
@@ -197,6 +197,10 @@ function init() {
           if (window.clearFullDeviceTrackTable)
             window.clearFullDeviceTrackTable();
       }
+      // Отслеживание переключения устройства и очистка памяти
+      if (typeof window.trackDeviceSwitch === 'function') {
+        window.trackDeviceSwitch(deviceId);
+      }
       lastDeviceIdForMileage = deviceId;
       if (vehicleSelectMinData && deviceId) {
         var row = vehicleSelectMinData.find(function (r) {
@@ -257,6 +261,10 @@ function init() {
           updateDeviceTrackHeader();
         }
       }
+      // Отслеживание переключения устройства
+      if (typeof window.trackDeviceSwitch === 'function') {
+        window.trackDeviceSwitch(deviceId);
+      }
       // Clear previous track data
       window._trackData = [];
   // Ensure default render mode for normal Track is polyline
@@ -316,6 +324,10 @@ function init() {
       if (vehicleSelectMinData && deviceId) {
         var row = vehicleSelectMinData.find(function (r) { return String(r.id) === String(deviceId); });
         if (row) { selectedVehicleMeta = buildVehicleMeta(row); updateDeviceTrackHeader(); }
+      }
+      // Отслеживание переключения устройства
+      if (typeof window.trackDeviceSwitch === 'function') {
+        window.trackDeviceSwitch(deviceId);
       }
       window._trackData = [];
   // Force points-only mode for Track Raw

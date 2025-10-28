@@ -221,6 +221,10 @@ window.initDeviceLog = function() {
     }
     if (lastDeviceIdForLogs && lastDeviceIdForLogs !== deviceId) {
       hardClearDeviceLogTables();
+      // Отслеживание переключения устройства для автоочистки памяти
+      if (typeof window.trackDeviceSwitch === 'function') {
+        window.trackDeviceSwitch(deviceId);
+      }
     }
     var rng = isoRangeFromInputs();
     if (!rng.from || !rng.to) {
