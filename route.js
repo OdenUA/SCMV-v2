@@ -266,6 +266,9 @@ function buildTrackCutSql(first, second) {
     sqlCommands += "delete from snsrmain where deviceid='" + deviceId + "' and wdate >= '" + segmentStartStr + "' and wdate <= '" + segmentEndStr + "';\n";
     current = new Date(dayEnd.getTime() + 1);
   }
+  // Добавляем вызов recalcstartstop
+  var recalcDate = startDate.getFullYear() + '-' + pad(startDate.getMonth() + 1) + '-' + pad(startDate.getDate());
+  sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + recalcDate + "'::date, true);\n";
   return sqlCommands;
 }
 function updateResetButtonState() {

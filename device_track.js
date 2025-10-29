@@ -1575,9 +1575,14 @@ function formatAnomalyTime(dt) {
       return buildLocalDateParam(raw, isEnd);
     };
     var sqlCommands = '';
+    var minDate = null; // Для отслеживания минимальной даты
     anoms.forEach(function(iv){
       var startDate = new Date(iv.start);
       var endDate = new Date(iv.end);
+      // Отслеживаем минимальную дату для recalcstartstop
+      if (!minDate || startDate < minDate) {
+        minDate = startDate;
+      }
       // expand +/- 1 second as requested
       startDate.setSeconds(startDate.getSeconds() - 1);
       endDate.setSeconds(endDate.getSeconds() + 1);
@@ -1590,6 +1595,11 @@ function formatAnomalyTime(dt) {
         current = new Date(dayEnd.getTime() + 1);
       }
     });
+    // Добавляем вызов recalcstartstop с минимальной датой
+    if (minDate) {
+      var recalcDate = minDate.getFullYear() + '-' + pad(minDate.getMonth() + 1) + '-' + pad(minDate.getDate());
+      sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + recalcDate + "'::date, true);\n";
+    }
     sqlOutput.textContent = sqlCommands;
   }
   function focusInterval(idx){
