@@ -1575,14 +1575,10 @@ function formatAnomalyTime(dt) {
       return buildLocalDateParam(raw, isEnd);
     };
     var sqlCommands = '';
-    var minDate = null; // Для отслеживания минимальной даты
+    var affectedDates = {}; // Объект для хранения уникальных дат (ключ - строка даты)
     anoms.forEach(function(iv){
       var startDate = new Date(iv.start);
       var endDate = new Date(iv.end);
-      // Отслеживаем минимальную дату для recalcstartstop
-      if (!minDate || startDate < minDate) {
-        minDate = startDate;
-      }
       // expand +/- 1 second as requested
       startDate.setSeconds(startDate.getSeconds() - 1);
       endDate.setSeconds(endDate.getSeconds() + 1);
@@ -1592,14 +1588,17 @@ function formatAnomalyTime(dt) {
         var segmentStart = current;
         var segmentEnd = new Date(Math.min(dayEnd.getTime(), endDate.getTime()));
         sqlCommands += "delete from snsrmain where deviceid='"+deviceId+"' and wdate >= '"+formatForSqlLocal(segmentStart,false)+"' and wdate <= '"+formatForSqlLocal(segmentEnd,true)+"';\n";
+        // Сохраняем дату для recalcstartstop
+        var dateStr = current.getFullYear() + '-' + pad(current.getMonth() + 1) + '-' + pad(current.getDate());
+        affectedDates[dateStr] = true;
         current = new Date(dayEnd.getTime() + 1);
       }
     });
-    // Добавляем вызов recalcstartstop с минимальной датой
-    if (minDate) {
-      var recalcDate = minDate.getFullYear() + '-' + pad(minDate.getMonth() + 1) + '-' + pad(minDate.getDate());
-      sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + recalcDate + "'::date, true);\n";
-    }
+    // Добавляем вызовы recalcstartstop для каждой затронутой даты (сортируем для порядка)
+    var sortedDates = Object.keys(affectedDates).sort();
+    sortedDates.forEach(function(dateStr) {
+      sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + dateStr + "'::date, true);\n";
+    });
     sqlOutput.textContent = sqlCommands;
   }
   function focusInterval(idx){

@@ -256,6 +256,7 @@ function buildTrackCutSql(first, second) {
   var deviceId = (typeof deviceIdInput !== 'undefined' && deviceIdInput) ? (deviceIdInput.value || '') : '';
   var sqlCommands = '';
   sqlCommands += '-- От ' + (first.wdate || formatDateTime(startDate)) + ' до ' + (second.wdate || formatDateTime(endDate)) + '\n';
+  var affectedDates = []; // Массив для хранения дат, затронутых удалением
   var current = new Date(startDate.getTime());
   while (current.getTime() <= endDate.getTime()) {
     var dayEnd = new Date(current.getTime());
@@ -264,11 +265,15 @@ function buildTrackCutSql(first, second) {
     var segmentStartStr = buildLocalDateParam(formatDateTime(current), false);
     var segmentEndStr = buildLocalDateParam(formatDateTime(segmentEnd), true);
     sqlCommands += "delete from snsrmain where deviceid='" + deviceId + "' and wdate >= '" + segmentStartStr + "' and wdate <= '" + segmentEndStr + "';\n";
+    // Сохраняем дату для recalcstartstop
+    var dateStr = current.getFullYear() + '-' + pad(current.getMonth() + 1) + '-' + pad(current.getDate());
+    affectedDates.push(dateStr);
     current = new Date(dayEnd.getTime() + 1);
   }
-  // Добавляем вызов recalcstartstop
-  var recalcDate = startDate.getFullYear() + '-' + pad(startDate.getMonth() + 1) + '-' + pad(startDate.getDate());
-  sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + recalcDate + "'::date, true);\n";
+  // Добавляем вызовы recalcstartstop для каждой затронутой даты
+  affectedDates.forEach(function(dateStr) {
+    sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + dateStr + "'::date, true);\n";
+  });
   return sqlCommands;
 }
 function updateResetButtonState() {
