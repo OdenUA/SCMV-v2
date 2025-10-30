@@ -111,6 +111,8 @@
     
     if (reportType === 'monthly-mileage') {
       generateMonthlyMileageReport();
+    } else if (reportType === 'weekly-breakdown') {
+      generateWeeklyBreakdownReport();
     }
   }
 
@@ -339,12 +341,189 @@
     }
   }
 
+  // Generate weekly breakdown report
+  function generateWeeklyBreakdownReport() {
+    var deviceIdsText = document.getElementById('reportDeviceIds').value;
+    var monthValue = document.getElementById('reportMonth').value;
+
+    // Validate inputs
+    if (!deviceIdsText || deviceIdsText.trim().length === 0) {
+      showRouteToast('⚠ Укажите хотя бы один ID устройства');
+      return;
+    }
+
+    if (!monthValue) {
+      showRouteToast('⚠ Выберите месяц');
+      return;
+    }
+
+    var deviceIds = parseDeviceIds(deviceIdsText);
+    if (deviceIds.length === 0) {
+      showRouteToast('⚠ Не удалось распознать ID устройств');
+      return;
+    }
+
+    // Parse month (format: YYYY-MM)
+    var monthParts = monthValue.split('-');
+    if (monthParts.length !== 2) {
+      showRouteToast('⚠ Неверный формат месяца');
+      return;
+    }
+
+    var year = parseInt(monthParts[0], 10);
+    var month = parseInt(monthParts[1], 10);
+
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      showRouteToast('⚠ Неверный месяц');
+      return;
+    }
+
+    // Generate dates for the month
+    var dates = generateMonthDates(year, month);
+
+    // Split month into weeks
+    var weeks = splitIntoWeeks(dates);
+
+    // Initialize report data structure
+    reportData = {
+      deviceIds: deviceIds,
+      dates: dates,
+      weeks: weeks,
+      year: year,
+      month: month,
+      mileage: {}, // Structure: mileage[deviceId][dateKey] = value
+      pending: 0,
+      total: deviceIds.length * dates.length,
+      reportType: 'weekly-breakdown'
+    };
+
+    // Initialize mileage object
+    for (var i = 0; i < deviceIds.length; i++) {
+      reportData.mileage[deviceIds[i]] = {};
+    }
+
+    // Show progress
+    reportInProgress = true;
+    showReportProgress(0, reportData.total);
+
+    // Send requests for each device and each date
+    showRouteToast('📊 Начинаем формирование отчета...');
+    
+    for (var d = 0; d < deviceIds.length; d++) {
+      for (var dt = 0; dt < dates.length; dt++) {
+        sendMileageRequest(deviceIds[d], dates[dt]);
+      }
+    }
+  }
+
+  // Split month dates into weeks
+  function splitIntoWeeks(dates) {
+    var weeks = [];
+    var currentWeek = [];
+    
+    for (var i = 0; i < dates.length; i++) {
+      var dateObj = dates[i].dateObj;
+      var dayOfWeek = dateObj.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+      
+      // Start new week on Monday
+      if (currentWeek.length > 0 && dayOfWeek === 1) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
+      
+      currentWeek.push(dates[i]);
+    }
+    
+    // Add last week
+    if (currentWeek.length > 0) {
+      weeks.push(currentWeek);
+    }
+    
+    return weeks;
+  }
+
+  // Calculate weekly mileage breakdown (weekdays, saturday, sunday)
+  function calculateWeeklyBreakdown(deviceId, week) {
+    var weekdays = 0; // Monday-Friday
+    var saturday = 0;
+    var sunday = 0;
+    
+    for (var i = 0; i < week.length; i++) {
+      var dateInfo = week[i];
+      var dateKey = dateInfo.year + '-' + 
+                    String(dateInfo.month).padStart(2, '0') + '-' + 
+                    String(dateInfo.day).padStart(2, '0');
+      
+      var mileage = reportData.mileage[deviceId][dateKey];
+      if (typeof mileage !== 'number') {
+        mileage = 0;
+      }
+      
+      var dayOfWeek = dateInfo.dateObj.getDay();
+      
+      if (dayOfWeek === 0) {
+        // Sunday
+        sunday += mileage;
+      } else if (dayOfWeek === 6) {
+        // Saturday
+        saturday += mileage;
+      } else {
+        // Monday-Friday
+        weekdays += mileage;
+      }
+    }
+    
+    return {
+      weekdays: weekdays,
+      saturday: saturday,
+      sunday: sunday
+    };
+  }
+
+  // Get vehicle info from vehicleSelectMinData or vehicleShowData
+  function getVehicleInfo(deviceId) {
+    var vehicleData = window.vehicleShowData || window.vehicleSelectMinData;
+    
+    if (!vehicleData || !Array.isArray(vehicleData)) {
+      return {
+        number: '',
+        vehicle: '',
+        name: ''
+      };
+    }
+    
+    var row = vehicleData.find(function(r) {
+      if (!r) return false;
+      var id = r.id !== undefined ? r.id : r.vehicleid;
+      return String(id) === String(deviceId);
+    });
+    
+    if (!row) {
+      return {
+        number: '',
+        vehicle: '',
+        name: ''
+      };
+    }
+    
+    return {
+      number: row.number || row.vehicle || '',
+      vehicle: row.vehicle || row.name || '',
+      name: row.name || row.drivername || row.driver || ''
+    };
+  }
+
   // Finalize and export mileage report
   function finalizeMileageReport() {
     showRouteToast('✅ Отчет сформирован!');
 
-    // Build XLS data
-    var xlsData = buildMileageXlsData();
+    // Build XLS data based on report type
+    var xlsData;
+    if (reportData.reportType === 'weekly-breakdown') {
+      xlsData = buildWeeklyBreakdownXlsData();
+    } else {
+      xlsData = buildMileageXlsData();
+    }
 
     // Export to XLS
     exportMileageReport(xlsData);
@@ -405,6 +584,75 @@
     return data;
   }
 
+  // Build weekly breakdown XLS data
+  function buildWeeklyBreakdownXlsData() {
+    var data = [];
+    
+    // Header row 1: Main headers
+    var header1 = ['№ п/п', 'номерний знак авто', 'марка авто', 'П.І.Б.'];
+    for (var w = 0; w < reportData.weeks.length; w++) {
+      header1.push((w + 1) + ' тиждень');
+      header1.push(''); // суб.
+      header1.push(''); // нед
+    }
+    header1.push('Км');
+    header1.push('');
+    header1.push('Разом');
+    data.push(header1);
+    
+    // Header row 2: Day types
+    var header2 = ['', '', '', ''];
+    for (var w = 0; w < reportData.weeks.length; w++) {
+      header2.push('будні');
+      header2.push('суб.');
+      header2.push('нед');
+    }
+    header2.push('будні');
+    header2.push('вихідні');
+    header2.push('Км');
+    data.push(header2);
+    
+    // Data rows: one per device
+    for (var d = 0; d < reportData.deviceIds.length; d++) {
+      var deviceId = reportData.deviceIds[d];
+      var vehicleInfo = getVehicleInfo(deviceId);
+      
+      var row = [];
+      row.push(d + 1); // № п/п
+      row.push(vehicleInfo.number); // номерний знак
+      row.push(vehicleInfo.vehicle); // марка авто
+      row.push(vehicleInfo.name); // П.І.Б.
+      
+      var totalWeekdays = 0;
+      var totalWeekends = 0;
+      
+      // Add data for each week
+      for (var w = 0; w < reportData.weeks.length; w++) {
+        var week = reportData.weeks[w];
+        var breakdown = calculateWeeklyBreakdown(deviceId, week);
+        
+        row.push(breakdown.weekdays > 0 ? breakdown.weekdays.toFixed(2).replace('.', ',') : '');
+        row.push(breakdown.saturday > 0 ? breakdown.saturday.toFixed(2).replace('.', ',') : '');
+        row.push(breakdown.sunday > 0 ? breakdown.sunday.toFixed(2).replace('.', ',') : '');
+        
+        totalWeekdays += breakdown.weekdays;
+        totalWeekends += breakdown.saturday + breakdown.sunday;
+      }
+      
+      // Total weekdays
+      row.push(totalWeekdays > 0 ? totalWeekdays.toFixed(2).replace('.', ',') : '');
+      // Total weekends
+      row.push(totalWeekends > 0 ? totalWeekends.toFixed(2).replace('.', ',') : '');
+      // Grand total
+      var grandTotal = totalWeekdays + totalWeekends;
+      row.push(grandTotal > 0 ? grandTotal.toFixed(2).replace('.', ',') : '');
+      
+      data.push(row);
+    }
+    
+    return data;
+  }
+
   // Export mileage report to XLS file
   function exportMileageReport(xlsData) {
     if (typeof XLSX === 'undefined') {
@@ -425,8 +673,13 @@
       var sheetName = monthName + ' ' + reportData.year;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
       
-      // Generate filename
-      var filename = 'Пробег_' + monthName + '_' + reportData.year + '.xlsx';
+      // Generate filename based on report type
+      var filename;
+      if (reportData.reportType === 'weekly-breakdown') {
+        filename = 'Недельный_пробег_' + monthName + '_' + reportData.year + '.xlsx';
+      } else {
+        filename = 'Пробег_' + monthName + '_' + reportData.year + '.xlsx';
+      }
       
       // Save file
       XLSX.writeFile(wb, filename);
