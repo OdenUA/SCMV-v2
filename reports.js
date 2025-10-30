@@ -544,10 +544,15 @@
   function buildMileageXlsData() {
     var data = [];
     
-    // Header row: "Дата/Авто" + device IDs
+    // Header row: "Дата/Авто" + vehicle names (or device IDs if name not found)
     var header = ['Дата/Авто'];
     for (var i = 0; i < reportData.deviceIds.length; i++) {
-      header.push(reportData.deviceIds[i]);
+      var deviceId = reportData.deviceIds[i];
+      var vehicleInfo = getVehicleInfo(deviceId);
+      
+      // Use vehicle number/name, or fallback to device ID
+      var vehicleLabel = vehicleInfo.number || vehicleInfo.vehicle || deviceId;
+      header.push(vehicleLabel);
     }
     data.push(header);
 
