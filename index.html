@@ -63,6 +63,7 @@
   </button>
   <button id="editVehicleBtn" class="btn" title="Редактировать распределение устройств">Edit Vehicle</button>
   <button id="auditBtn" class="btn" title="Аудит изменений">Audit</button>
+  <button id="reportsBtn" class="btn" title="Отчеты">Reports</button>
       <!-- status dot only (no username) -->
       <svg id="loginStatusDot" class="status-dot status-offline" width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="Offline" title="Offline">
         <circle cx="6" cy="6" r="5"></circle>
@@ -349,12 +350,14 @@
     <script src="ui.js"></script>
     <script src="ws.js"></script>
   <script src="audit.js"></script>
+  <script src="reports.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         initMap();
         connect();
         init();
         initDeviceLog();
+        if (typeof initReports === 'function') initReports();
       });
     </script>
     <div id="vehicleOverlay" class="vehicle-overlay">
@@ -478,6 +481,52 @@
             <thead id="deviceStatusTableHead"></thead>
             <tbody id="deviceStatusTableBody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports overlay -->
+    <div id="reportsOverlay" class="vehicle-overlay" style="display:none;">
+      <div class="vehicle-overlay-content" style="max-width:700px;">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Отчеты</h2>
+          <button id="closeReportsOverlay" class="btn btn-danger">Закрыть</button>
+        </div>
+
+        <div style="padding:20px;">
+          <!-- Report Type Selection -->
+          <div style="margin-bottom:20px;">
+            <label style="display:block; margin-bottom:8px; font-weight:bold;">Тип отчета:</label>
+            <select id="reportTypeSelect" style="width:100%; padding:8px; font-size:14px;">
+              <option value="monthly-mileage">Месячный пробег по устройствам</option>
+            </select>
+          </div>
+
+          <!-- Monthly Mileage Report Parameters -->
+          <div id="monthlyMileageParams">
+            <div style="margin-bottom:20px;">
+              <label style="display:block; margin-bottom:8px; font-weight:bold;">Устройства (ID через запятую, пробел, tab, ; или новую строку):</label>
+              <textarea id="reportDeviceIds" rows="4" style="width:100%; padding:8px; font-size:14px; resize:vertical;" placeholder="Например: 123, 456, 789 или на отдельных строках"></textarea>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <label style="display:block; margin-bottom:8px; font-weight:bold;">Месяц:</label>
+              <input id="reportMonth" type="month" style="width:100%; padding:8px; font-size:14px;" />
+            </div>
+          </div>
+
+          <!-- Generate Button -->
+          <div style="text-align:center; margin-top:30px;">
+            <button id="generateReportBtn" class="btn btn-primary" style="padding:10px 30px; font-size:16px;">Сформировать отчет</button>
+          </div>
+
+          <!-- Progress/Status -->
+          <div id="reportStatus" style="margin-top:20px; padding:10px; background:#f0f0f0; border-radius:4px; display:none;">
+            <div id="reportProgress" style="margin-bottom:8px; font-weight:bold;"></div>
+            <div id="reportProgressBar" style="height:20px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
+              <div id="reportProgressFill" style="height:100%; background:#4CAF50; width:0%; transition:width 0.3s;"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

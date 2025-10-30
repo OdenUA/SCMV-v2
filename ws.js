@@ -81,6 +81,8 @@ function connect() {
   try { if(window.__handleFullTrackSetup && window.__handleFullTrackSetup(data)) { return; } } catch(e){ console.warn('FullTrack handler error', e); }
   // Audit response handler (audit.js will register this)
   try { if(window.__handleAuditResponse && data && data.name === 'Audit' && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
+  // Report response handler (reports.js will register this)
+  try { if(window.__handleReportResponse && window.__handleReportResponse(data)) { return; } } catch(e){ console.warn('Report handler error', e); }
     if (data.name === "login" && data.res && data.res[0]) {
       var r = data.res[0];
       if (r.uid) {
