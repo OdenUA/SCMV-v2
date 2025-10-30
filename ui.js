@@ -358,6 +358,44 @@ function init() {
     });
   }
 
+  // Fuel Report button handler
+  var sendFuelReportBtn = document.getElementById('sendFuelReport');
+  if(sendFuelReportBtn){
+    sendFuelReportBtn.addEventListener('click', function(){
+      if (!authLoggedIn) { 
+        alert('⚠ Сначала выполните вход'); 
+        return; 
+      }
+      
+      var dateTo = buildLocalDateParam(dateToInput.value, true);
+      var dateFrom = buildLocalDateParam(dateFromInput.value, false);
+      var deviceId = deviceIdInput.value;
+      
+      if (!deviceId) {
+        alert('⚠ Выберите устройство');
+        return;
+      }
+      
+      var fuelReq = {
+        name: "Fuel Litres",
+        type: "etbl",
+        mid: 2,
+        act: "filter",
+        filter: [
+          { selectedpgdatefrom: [dateFrom] },
+          { selectedvihicleid: [deviceId] },
+          { selectedpgdateto: [dateTo] }
+        ],
+        usr: authUser,
+        pwd: authPwd,
+        uid: authUid,
+        lang: 'en'
+      };
+      
+      sendRequest(fuelReq);
+    });
+  }
+
   setDefaultDates();
   if(typeof initVehicleColorFilters==='function') initVehicleColorFilters();
   if(typeof initDeviceStatusColorFilters==='function') initDeviceStatusColorFilters();
@@ -1924,6 +1962,63 @@ function sendAdditionalRequests(dateFrom, dateTo, deviceId) {
   sendRequest(requestAccumulation);
   sendRequest(requestSum);
 }
+
+// Fuel Report Response Handler
+window.__handleFuelReportResponse = function(data) {
+  if (!data || (data.name !== 'Fuel Report' && data.name !== 'Fuel Litres')) return false;
+  
+  // Открываем новое окно
+  var reportWindow = window.open('fuel_report.html', '_blank');
+  
+  if (!reportWindow) {
+    alert('⚠ Не удалось открыть окно отчета. Проверьте настройки блокировки всплывающих окон.');
+    return true;
+  }
+  
+  // Отправляем данные через postMessage с повторными попытками
+  var retryCount = 0;
+  var maxRetries = 20;
+  var retryInterval = 500;
+  
+  var sendDataToReport = function() {
+    try {
+      if (reportWindow.closed) {
+        console.warn('Report window was closed');
+        return;
+      }
+      
+      reportWindow.postMessage({
+        type: 'FUEL_REPORT_DATA',
+        data: data
+      }, '*');
+      
+      console.log('Data sent to report window, attempt:', retryCount + 1);
+      
+      if (retryCount < maxRetries) {
+        retryCount++;
+        setTimeout(sendDataToReport, retryInterval);
+      }
+    } catch (e) {
+      console.error('Error sending data to report:', e);
+    }
+  };
+  
+  // Слушаем сообщение о готовности от окна отчета
+  var readyListener = function(event) {
+    if (event.data && event.data.type === 'FUEL_REPORT_READY') {
+      console.log('Report window is ready');
+      sendDataToReport();
+      window.removeEventListener('message', readyListener);
+    }
+  };
+  
+  window.addEventListener('message', readyListener);
+  
+  // Начинаем отправлять данные сразу (на случай если окно уже готово)
+  setTimeout(sendDataToReport, 100);
+  
+  return true;
+};
 
 function setDefaultDates() {
   var now = new Date();

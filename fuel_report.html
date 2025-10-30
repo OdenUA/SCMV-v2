@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fuel Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            background: white;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #0d6efd;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .summary-row {
+            background-color: #b4d2ff !important;
+            font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+        .error {
+            color: #d32f2f;
+            padding: 20px;
+            background: #ffebee;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .meta-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .meta-info p {
+            margin: 5px 0;
+            color: #1976d2;
+        }
+        .print-btn {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .print-btn:hover {
+            background: #0d6efd;
+        }
+        @media print {
+            .print-btn {
+                display: none;
+            }
+            body {
+                background: white;
+            }
+            .container {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="print-btn" onclick="window.print()">🖨️ Печать</button>
+        <h1>Отчет по топливу</h1>
+        <div id="loading" class="loading">Загрузка данных...</div>
+        <div id="error" class="error" style="display:none;"></div>
+        <div id="metaInfo" class="meta-info" style="display:none;"></div>
+        <div id="content"></div>
+    </div>
+    <script>
+        // Получаем данные через postMessage
+        function loadReport() {
+            try {
+                // Слушаем сообщения от родительского окна
+                window.addEventListener('message', function(event) {
+                    // Для локального тестирования разрешаем все origins
+                    // В продакшене можно добавить проверку: if (event.origin !== window.location.origin) return;
+                    
+                    if (event.data && event.data.type === 'FUEL_REPORT_DATA') {
+                        const data = event.data.data;
+                        
+                        // Проверяем разные возможные форматы данных
+                        let fuelData = null;
+                        
+                        if (data && data.res && data.res[0] && data.res[0].f) {
+                            fuelData = data.res[0].f;
+                        } else if (data && data.res && Array.isArray(data.res) && data.res.length > 0) {
+                            // Возможно данные в другом формате
+                            fuelData = data.res;
+                        } else if (data && Array.isArray(data)) {
+                            // Возможно данные сразу массив
+                            fuelData = data;
+                        }
+                        
+                        if (!fuelData || !Array.isArray(fuelData) || fuelData.length === 0) {
+                            showError('Неверный формат данных или нет данных за выбранный период. Структура ответа: ' + JSON.stringify(data).substring(0, 200));
+                            return;
+                        }
+                        
+                        renderReport(data);
+                    }
+                });
+                
+                // Отправляем сообщение opener'у о готовности получить данные
+                if (window.opener) {
+                    try {
+                        window.opener.postMessage({
+                            type: 'FUEL_REPORT_READY'
+                        }, '*');
+                    } catch (e) {
+                        console.warn('Could not notify opener', e);
+                    }
+                }
+                
+                // Показываем сообщение о загрузке
+                setTimeout(function() {
+                    const loadingDiv = document.getElementById('loading');
+                    if (loadingDiv && loadingDiv.style.display !== 'none') {
+                        loadingDiv.textContent = 'Ожидание данных от основного окна...';
+                    }
+                }, 1000);
+                
+            } catch (e) {
+                showError('Ошибка инициализации: ' + e.message);
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function renderReport(data) {
+            document.getElementById('loading').style.display = 'none';
+            
+            // Отображаем метаинформацию
+            const metaDiv = document.getElementById('metaInfo');
+            const filter = data.filter || [];
+            let dateFrom = '', dateTo = '', vehicleId = '';
+            
+            filter.forEach(f => {
+                if (f.selectedpgdatefrom) dateFrom = new Date(f.selectedpgdatefrom[0]).toLocaleString('ru-RU');
+                if (f.selectedpgdateto) dateTo = new Date(f.selectedpgdateto[0]).toLocaleString('ru-RU');
+                if (f.selectedvihicleid) vehicleId = f.selectedvihicleid[0];
+            });
+            
+            metaDiv.innerHTML = `
+                <p><strong>Период:</strong> с ${dateFrom} по ${dateTo}</p>
+                <p><strong>ID устройства:</strong> ${vehicleId}</p>
+            `;
+            metaDiv.style.display = 'block';
+            
+            const rawData = data.res[0].f;
+            
+            // Анализируем данные и строим структуру
+            const analysis = analyzeData(rawData);
+            
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = '';
+            
+            // 1. Сводная таблица по бакам
+            contentDiv.appendChild(createSummaryTable(analysis));
+            
+            // 2. Таблица заправок и сливов
+            contentDiv.appendChild(createRefuelingsTable(analysis));
+            
+            // 3. Суточная таблица
+            contentDiv.appendChild(createDailyTable(analysis));
+        }
+        
+        // Функция расчета расстояния между двумя координатами (формула Haversine)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Радиус Земли в км
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // Расстояние в км
+        }
+        
+        function analyzeData(rawData) {
+            if (!rawData || rawData.length === 0) {
+                return {
+                    tankName: 'Топливный бак',
+                    startLevel: 0,
+                    endLevel: 0,
+                    refuelings: [],
+                    drains: [],
+                    dailyData: [],
+                    totalConsumption: 0
+                };
+            }
+            
+            // Фильтруем записи с нулевым уровнем топлива (ошибки датчика)
+            const filtered = rawData.filter(entry => entry.liters > 0);
+            
+            if (filtered.length === 0) {
+                return {
+                    tankName: 'Топливный бак',
+                    startLevel: 0,
+                    endLevel: 0,
+                    refuelings: [],
+                    drains: [],
+                    dailyData: [],
+                    totalConsumption: 0
+                };
+            }
+            
+            // Сортируем по дате (от старых к новым)
+            const sorted = filtered.slice().sort((a, b) => 
+                new Date(a.wdate) - new Date(b.wdate)
+            );
+            
+            const startLevel = sorted[0].liters;
+            const endLevel = sorted[sorted.length - 1].liters;
+            
+            // Ищем заправки и сливы
+            const refuelings = [];
+            const drains = [];
+            const REFUEL_THRESHOLD = 10; // Минимальный объем заправки
+            const DRAIN_THRESHOLD = -10; // Минимальный объем слива
+            
+            for (let i = 1; i < sorted.length; i++) {
+                const diff = sorted[i].liters - sorted[i-1].liters;
+                const timeDiff = (new Date(sorted[i].wdate) - new Date(sorted[i-1].wdate)) / 1000 / 60; // в минутах
+                
+                // Заправка: резкое увеличение > 50л и за короткое время (< 30 мин)
+                if (diff > REFUEL_THRESHOLD && timeDiff < 30) {
+                    refuelings.push({
+                        date: sorted[i].wdate,
+                        volume: Math.abs(diff).toFixed(2),
+                        latitude: sorted[i].latitude,
+                        longitude: sorted[i].longitude
+                    });
+                }
+                // Слив: резкое уменьшение > 50л и за короткое время (< 30 мин)
+                else if (diff < DRAIN_THRESHOLD && timeDiff < 30) {
+                    drains.push({
+                        date: sorted[i].wdate,
+                        volume: Math.abs(diff).toFixed(2),
+                        latitude: sorted[i].latitude,
+                        longitude: sorted[i].longitude
+                    });
+                }
+            }
+            
+            // Анализ по дням с учетом заправок
+            const dailyMap = {};
+            
+            // Группируем заправки по дням
+            const refuelingsByDay = {};
+            refuelings.forEach(r => {
+                const dayKey = new Date(r.date).toISOString().split('T')[0];
+                if (!refuelingsByDay[dayKey]) refuelingsByDay[dayKey] = 0;
+                refuelingsByDay[dayKey] += parseFloat(r.volume);
+            });
+            
+            // Группируем сливы по дням
+            const drainsByDay = {};
+            drains.forEach(d => {
+                const dayKey = new Date(d.date).toISOString().split('T')[0];
+                if (!drainsByDay[dayKey]) drainsByDay[dayKey] = 0;
+                drainsByDay[dayKey] += parseFloat(d.volume);
+            });
+            
+            // Обрабатываем данные по дням
+            sorted.forEach((entry, index) => {
+                const date = new Date(entry.wdate);
+                const dayKey = date.toISOString().split('T')[0];
+                
+                if (!dailyMap[dayKey]) {
+                    dailyMap[dayKey] = {
+                        date: dayKey,
+                        startLevel: entry.liters,
+                        endLevel: entry.liters,
+                        refuelings: refuelingsByDay[dayKey] || 0,
+                        drains: drainsByDay[dayKey] || 0,
+                        records: [],
+                        mileage: 0, // Пробег в км
+                        motorHours: 0, // Моточасы
+                        prevEntry: null
+                    };
+                } else {
+                    dailyMap[dayKey].endLevel = entry.liters;
+                    
+                    // Рассчитываем пробег между точками
+                    if (dailyMap[dayKey].prevEntry) {
+                        const dist = calculateDistance(
+                            dailyMap[dayKey].prevEntry.latitude,
+                            dailyMap[dayKey].prevEntry.longitude,
+                            entry.latitude,
+                            entry.longitude
+                        );
+                        // Игнорируем нереалистичные скачки (> 2 км между соседними точками)
+                        if (dist < 2) {
+                            dailyMap[dayKey].mileage += dist;
+                        }
+                        
+                        // Рассчитываем моточасы между точками
+                        const timeDiff = (new Date(entry.wdate) - new Date(dailyMap[dayKey].prevEntry.wdate)) / 1000 / 3600; // в часах
+                        // Игнорируем слишком большие промежутки времени (> 0,5 часа = скорее всего простой)
+                        if (timeDiff < 0.5) {
+                            dailyMap[dayKey].motorHours += timeDiff;
+                        }
+                    }
+                }
+                
+                dailyMap[dayKey].records.push(entry.liters);
+                dailyMap[dayKey].prevEntry = entry;
+            });
+            
+            // Рассчитываем расход по дням
+            const dailyData = Object.keys(dailyMap).sort().map(dayKey => {
+                const day = dailyMap[dayKey];
+                // Расход = начальный уровень - конечный уровень + заправки - сливы
+                const consumption = day.startLevel - day.endLevel + day.refuelings - day.drains;
+                
+                // Фактический расход без учета заправок/сливов (для расчета среднего)
+                const actualConsumption = day.startLevel - day.endLevel;
+                
+                // Средний расход л/100км (только если был реальный расход топлива)
+                // Если actualConsumption отрицательный (была заправка), не учитываем в среднем расходе
+                let avgConsumption = 0;
+                if (day.mileage > 0 && actualConsumption > 0) {
+                    avgConsumption = (actualConsumption / day.mileage * 100);
+                }
+                
+                return {
+                    date: dayKey,
+                    startLevel: day.startLevel.toFixed(2),
+                    endLevel: day.endLevel.toFixed(2),
+                    refuelings: day.refuelings.toFixed(2),
+                    drains: day.drains.toFixed(2),
+                    consumption: Math.max(0, consumption).toFixed(2),
+                    mileage: day.mileage.toFixed(2),
+                    motorHours: day.motorHours.toFixed(2),
+                    avgConsumption: avgConsumption.toFixed(2),
+                    actualConsumption: actualConsumption // Сохраняем для итоговых расчетов
+                };
+            });
+            
+            // Общий расход за период
+            const totalRefuelings = refuelings.reduce((sum, r) => sum + parseFloat(r.volume), 0);
+            const totalDrains = drains.reduce((sum, d) => sum + parseFloat(d.volume), 0);
+            const totalConsumption = startLevel - endLevel + totalRefuelings - totalDrains;
+            
+            // Общий пробег и моточасы
+            const totalMileage = dailyData.reduce((sum, d) => sum + parseFloat(d.mileage), 0);
+            const totalMotorHours = dailyData.reduce((sum, d) => sum + parseFloat(d.motorHours), 0);
+            
+            // Для среднего расхода суммируем только дни с реальным расходом (где начало > конец)
+            const totalActualConsumption = dailyData.reduce((sum, d) => {
+                return d.actualConsumption > 0 ? sum + d.actualConsumption : sum;
+            }, 0);
+            const totalMileageWithConsumption = dailyData.reduce((sum, d) => {
+                return d.actualConsumption > 0 ? sum + parseFloat(d.mileage) : sum;
+            }, 0);
+            const totalAvgConsumption = totalMileageWithConsumption > 0 ? (totalActualConsumption / totalMileageWithConsumption * 100) : 0;
+            
+            return {
+                tankName: 'Топливный бак',
+                startLevel: startLevel.toFixed(2),
+                endLevel: endLevel.toFixed(2),
+                refuelings: refuelings,
+                drains: drains,
+                dailyData: dailyData,
+                totalConsumption: Math.max(0, totalConsumption).toFixed(2),
+                totalRefuelings: totalRefuelings.toFixed(2),
+                totalDrains: totalDrains.toFixed(2),
+                totalMileage: totalMileage.toFixed(2),
+                totalMotorHours: totalMotorHours.toFixed(2),
+                totalAvgConsumption: totalAvgConsumption.toFixed(2)
+            };
+        }
+        
+        function createSummaryTable(analysis) {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <h2>Сводка по бакам</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Баки</th>
+                            <th>Уровень топлива на начало периода, л</th>
+                            <th colspan="2">Заправки</th>
+                            <th colspan="2">Сливы</th>
+                            <th>Уровень топлива на конец периода, л</th>
+                            <th>Расход топлива за период, л</th>
+                            <th>Пробег, км</th>
+                            <th>Моточасы</th>
+                            <th>Средний расход, л/100км</th>
+                        </tr>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th>Кол-во</th>
+                            <th>Объем, л</th>
+                            <th>Кол-во</th>
+                            <th>Объем, л</th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${analysis.tankName}</td>
+                            <td>${analysis.startLevel}</td>
+                            <td>${analysis.refuelings.length}</td>
+                            <td>${analysis.totalRefuelings}</td>
+                            <td>${analysis.drains.length}</td>
+                            <td>${analysis.totalDrains}</td>
+                            <td>${analysis.endLevel}</td>
+                            <td>${analysis.totalConsumption}</td>
+                            <td>${analysis.totalMileage}</td>
+                            <td>${analysis.totalMotorHours}</td>
+                            <td>${analysis.totalAvgConsumption}</td>
+                        </tr>
+                        <tr class="summary-row">
+                            <td>Все</td>
+                            <td>${analysis.startLevel}</td>
+                            <td>${analysis.refuelings.length}</td>
+                            <td>${analysis.totalRefuelings}</td>
+                            <td>${analysis.drains.length}</td>
+                            <td>${analysis.totalDrains}</td>
+                            <td>${analysis.endLevel}</td>
+                            <td>${analysis.totalConsumption}</td>
+                            <td>${analysis.totalMileage}</td>
+                            <td>${analysis.totalMotorHours}</td>
+                            <td>${analysis.totalAvgConsumption}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+            return div;
+        }
+        
+        function createRefuelingsTable(analysis) {
+            const div = document.createElement('div');
+            
+            // Объединяем заправки и сливы в одну таблицу
+            const events = [];
+            
+            analysis.refuelings.forEach(r => {
+                events.push({
+                    date: r.date,
+                    type: 'Заправка',
+                    volume: r.volume,
+                    latitude: r.latitude,
+                    longitude: r.longitude
+                });
+            });
+            
+            analysis.drains.forEach(d => {
+                events.push({
+                    date: d.date,
+                    type: 'Слив',
+                    volume: d.volume,
+                    latitude: d.latitude,
+                    longitude: d.longitude
+                });
+            });
+            
+            // Сортируем по дате
+            events.sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            let eventsHTML = '';
+            if (events.length > 0) {
+                // Просто показываем координаты (геокодинг отключен из-за CORS)
+                eventsHTML = events.map(e => `
+                    <tr style="${e.type === 'Слив' ? 'background-color: #ffebee;' : ''}">
+                        <td>${new Date(e.date).toLocaleString('ru-RU', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                        })}</td>
+                        <td><strong>${e.type}</strong></td>
+                        <td>${e.volume}</td>
+                        <td>${e.latitude.toFixed(6)}, ${e.longitude.toFixed(6)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                eventsHTML = '<tr><td colspan="4">Нет заправок и сливов</td></tr>';
+            }
+            
+            div.innerHTML = `
+                <h2>Заправки и сливы</h2>
+                <h3>${analysis.tankName}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Дата/время</th>
+                            <th>Тип</th>
+                            <th>Объем, л</th>
+                            <th>Координаты</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${eventsHTML}
+                    </tbody>
+                </table>
+            `;
+            return div;
+        }
+        
+        function createDailyTable(analysis) {
+            const div = document.createElement('div');
+            
+            let dailyHTML = '';
+            
+            if (analysis.dailyData.length > 0) {
+                dailyHTML = analysis.dailyData.map(day => {
+                    return `
+                        <tr>
+                            <td>${new Date(day.date).toLocaleDateString('ru-RU', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric'
+                            })}</td>
+                            <td>${day.startLevel}</td>
+                            <td>${day.endLevel}</td>
+                            <td>${day.refuelings}</td>
+                            <td>${day.drains}</td>
+                            <td>${day.consumption}</td>
+                            <td>${day.mileage}</td>
+                            <td>${day.motorHours}</td>
+                            <td>${day.avgConsumption}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                // Итоговая строка
+                const totalRefuel = analysis.dailyData.reduce((sum, d) => sum + parseFloat(d.refuelings), 0);
+                const totalDrain = analysis.dailyData.reduce((sum, d) => sum + parseFloat(d.drains), 0);
+                const totalConsump = analysis.dailyData.reduce((sum, d) => sum + parseFloat(d.consumption), 0);
+                const totalMileage = analysis.dailyData.reduce((sum, d) => sum + parseFloat(d.mileage), 0);
+                const totalMotorHours = analysis.dailyData.reduce((sum, d) => sum + parseFloat(d.motorHours), 0);
+                // Средний расход = суммируем только дни с расходом
+                const totalActualConsumption = analysis.dailyData.reduce((sum, d) => {
+                    return d.actualConsumption > 0 ? sum + d.actualConsumption : sum;
+                }, 0);
+                const totalMileageWithConsumption = analysis.dailyData.reduce((sum, d) => {
+                    return d.actualConsumption > 0 ? sum + parseFloat(d.mileage) : sum;
+                }, 0);
+                const totalAvgConsump = totalMileageWithConsumption > 0 ? (totalActualConsumption / totalMileageWithConsumption * 100) : 0;
+                
+                dailyHTML += `
+                    <tr class="summary-row">
+                        <td>Итого</td>
+                        <td>${analysis.startLevel}</td>
+                        <td>${analysis.endLevel}</td>
+                        <td>${totalRefuel.toFixed(2)}</td>
+                        <td>${totalDrain.toFixed(2)}</td>
+                        <td>${totalConsump.toFixed(2)}</td>
+                        <td>${totalMileage.toFixed(2)}</td>
+                        <td>${totalMotorHours.toFixed(2)}</td>
+                        <td>${totalAvgConsump.toFixed(2)}</td>
+                    </tr>
+                `;
+            } else {
+                dailyHTML = '<tr><td colspan="9">Нет данных</td></tr>';
+            }
+            
+            div.innerHTML = `
+                <h2>Суточная таблица</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>День</th>
+                            <th>Уровень на начало дня, л</th>
+                            <th>Уровень на конец дня, л</th>
+                            <th>Заправки, л</th>
+                            <th>Сливы, л</th>
+                            <th>Расход топлива, л</th>
+                            <th>Пробег, км</th>
+                            <th>Моточасы</th>
+                            <th>Средний расход, л/100км</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${dailyHTML}
+                    </tbody>
+                </table>
+            `;
+            return div;
+        }
+        
+        // Загружаем отчет при загрузке страницы
+        window.addEventListener('DOMContentLoaded', loadReport);
+    </script>
+</body>
+</html>

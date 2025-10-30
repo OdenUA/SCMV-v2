@@ -79,6 +79,8 @@ function connect() {
   try { if(window.__handleDeviceLogResponse && window.__handleDeviceLogResponse(data)) { return; } } catch(e) { console.warn('DeviceLog handler error', e); }
   // Full Device Track setup (raw) capture early
   try { if(window.__handleFullTrackSetup && window.__handleFullTrackSetup(data)) { return; } } catch(e){ console.warn('FullTrack handler error', e); }
+  // Fuel report response handler
+  try { if(window.__handleFuelReportResponse && window.__handleFuelReportResponse(data)) { return; } } catch(e){ console.warn('Fuel report handler error', e); }
   // Audit response handler (audit.js will register this)
   try { if(window.__handleAuditResponse && data && data.name === 'Audit' && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
   // Report response handler (reports.js will register this)
