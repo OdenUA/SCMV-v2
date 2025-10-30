@@ -52,7 +52,11 @@ function parseTrackDate(str){
   if(typeof str !== 'string') return new Date(str);
   if(/^(\d{2})\.(\d{2})\.(\d{2})\s\d{2}:\d{2}:\d{2}$/.test(str)) return new Date('20'+str.replace(/(\d{2})\.(\d{2})\.(\d{2})\s/, '$3-$2-$1T'));
   if(/^(\d{2})\.(\d{2})\.(\d{4})\s\d{2}:\d{2}:\d{2}$/.test(str)) return new Date(str.replace(/(\d{2})\.(\d{2})\.(\d{4})\s/, '$3-$2-$1T'));
-  if(/^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}$/.test(str)) return new Date(str+'Z');
+  // Server sends local time, not UTC - parse as local time without 'Z' suffix
+  if(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.test(str)) {
+    var m = str.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+    return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+  }
   if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)) return new Date(str);
   return new Date(str);
 }

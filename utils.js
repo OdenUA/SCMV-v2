@@ -105,6 +105,11 @@ function populateTable(tbody, thead, dataArray) {
     return;
   }
   var headers = Object.keys(dataArray[0]);
+  // Add Actions column header for GPS anomalies
+  var needsActions = dataArray.some(function(obj){ 
+    var type = obj["Anomaly Type"];
+    return type === "Out of Bounds" || type === "Distance Jump"; 
+  });
   var hr = document.createElement("tr");
   headers.forEach(function (h) {
     if (h === "layer") return;
@@ -112,6 +117,11 @@ function populateTable(tbody, thead, dataArray) {
     th.textContent = h;
     hr.appendChild(th);
   });
+  if (needsActions) {
+    var thAction = document.createElement("th");
+    thAction.textContent = "Actions";
+    hr.appendChild(thAction);
+  }
   thead.appendChild(hr);
   dataArray.forEach(function (obj, idx) {
     var tr = document.createElement("tr");
@@ -123,6 +133,24 @@ function populateTable(tbody, thead, dataArray) {
       td.textContent = v;
       tr.appendChild(td);
     });
+    // Add Actions cell with scissors button for GPS anomalies
+    if (needsActions) {
+      var tdAction = document.createElement("td");
+      var anomType = obj["Anomaly Type"];
+      if (anomType === "Out of Bounds" || anomType === "Distance Jump") {
+        var btnScissors = document.createElement("button");
+        btnScissors.type = "button";
+        btnScissors.className = "btn btn-link anomaly-scissors-btn";
+        btnScissors.title = "Сформировать SQL для удаления";
+        btnScissors.innerHTML = "✂️";
+        btnScissors.addEventListener("click", function(e){
+          e.stopPropagation();
+          generateAnomalySql(obj);
+        });
+        tdAction.appendChild(btnScissors);
+      }
+      tr.appendChild(tdAction);
+    }
     tr.addEventListener("click", function () {
       if (
         previouslySelectedLayer &&
@@ -159,6 +187,93 @@ function populateTable(tbody, thead, dataArray) {
     });
     tbody.appendChild(tr);
   });
+}
+
+// Generate SQL for deleting GPS anomaly points
+function generateAnomalySql(anomaly) {
+  try {
+    var startTime = anomaly["Start Time"];
+    var endTime = anomaly["End Time"];
+    if (!startTime || !endTime) {
+      showRouteToast("⚠ Не удалось определить временной диапазон", 2200);
+      return;
+    }
+    
+    // Parse times in format DD.MM.YY HH:mm:ss
+    function parseAnomalyTime(str) {
+      if (!str) return null;
+      var m = String(str).match(/^(\d{2})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+      if (!m) return null;
+      var dd = m[1], mm = m[2], yy = m[3], hh = m[4], mi = m[5], ss = m[6];
+      var fullYear = '20' + yy;
+      return new Date(fullYear, parseInt(mm,10)-1, parseInt(dd,10), parseInt(hh,10), parseInt(mi,10), parseInt(ss,10));
+    }
+    
+    var startDate = parseAnomalyTime(startTime);
+    var endDate = parseAnomalyTime(endTime);
+    
+    if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      showRouteToast("⚠ Ошибка парсинга времени", 2200);
+      return;
+    }
+    
+    // Expand range +/- 1 second
+    startDate.setSeconds(startDate.getSeconds() - 1);
+    endDate.setSeconds(endDate.getSeconds() + 1);
+    
+    var deviceId = (typeof deviceIdInput !== 'undefined' && deviceIdInput) ? (deviceIdInput.value || '') : '';
+    if (!deviceId) {
+      showRouteToast("⚠ Не определен ID устройства", 2200);
+      return;
+    }
+    
+    var pad = function(n) { return n.toString().padStart(2, '0'); };
+    var formatDateTime = function(d) {
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    };
+    
+    var sqlCommands = '';
+    sqlCommands += '-- Аномалия: ' + (anomaly["Anomaly Type"] || '') + '\n';
+    sqlCommands += '-- От ' + formatDateTime(startDate) + ' до ' + formatDateTime(endDate) + '\n';
+    
+    var affectedDates = [];
+    var current = new Date(startDate.getTime());
+    
+    while (current.getTime() <= endDate.getTime()) {
+      var dayEnd = new Date(current.getTime());
+      dayEnd.setHours(23, 59, 59, 999);
+      var segmentEnd = new Date(Math.min(dayEnd.getTime(), endDate.getTime()));
+      
+      var segmentStartStr = buildLocalDateParam(formatDateTime(current), false);
+      var segmentEndStr = buildLocalDateParam(formatDateTime(segmentEnd), true);
+      
+      sqlCommands += "DELETE FROM snsrmain WHERE deviceid='" + deviceId + "' AND wdate >= '" + segmentStartStr + "' AND wdate <= '" + segmentEndStr + "';\n";
+      
+      // Save date for recalcstartstop
+      var dateStr = current.getFullYear() + '-' + pad(current.getMonth() + 1) + '-' + pad(current.getDate());
+      affectedDates.push(dateStr);
+      
+      current = new Date(dayEnd.getTime() + 1);
+    }
+    
+    // Add recalcstartstop calls for each affected date
+    affectedDates.forEach(function(dateStr) {
+      sqlCommands += "SELECT recalcstartstop(" + deviceId + ", '" + dateStr + "'::date, true);\n";
+    });
+    
+    // Show SQL in modal
+    if (typeof sqlModal !== 'undefined' && sqlModal) {
+      sqlModal.style.display = 'block';
+    }
+    if (typeof sqlOutput !== 'undefined' && sqlOutput) {
+      sqlOutput.textContent = sqlCommands;
+    }
+    
+    showRouteToast('✂️ SQL для удаления аномалии готов', 2200);
+  } catch (err) {
+    console.warn('generateAnomalySql failed', err);
+    showRouteToast('⚠ Ошибка генерации SQL', 2200);
+  }
 }
 
 // Make polylines clickable in route mode & show nearest point popup for Device Track

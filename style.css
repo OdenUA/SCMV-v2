@@ -66,6 +66,32 @@ button:hover { background-color: #0056b3; }
     background-color: rgba(25, 135, 84, 0.25);
     border-radius: 6px;
 }
+
+/* Anomaly table scissors button */
+.anomaly-scissors-btn {
+    margin-left: 0;
+    font-size: 18px;
+    line-height: 1;
+    background-color: transparent;
+    border: none;
+    transform: rotate(180deg);
+    display: inline-flex;
+    padding: 4px;
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+}
+
+.anomaly-scissors-btn:hover {
+    background-color: rgba(25, 135, 84, 0.1);
+    border-radius: 4px;
+}
+
+.anomaly-scissors-btn:focus {
+    outline: 2px solid rgba(25, 135, 84, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 table { 
     width: 100%; 
     border-collapse: collapse; 
