@@ -108,7 +108,7 @@ function populateTable(tbody, thead, dataArray) {
   // Add Actions column header for GPS anomalies
   var needsActions = dataArray.some(function(obj){ 
     var type = obj["Anomaly Type"];
-    return type === "Out of Bounds" || type === "Distance Jump"; 
+    return type === "Out of Bounds" || type === "Distance Jump" || type === "Speed Spike"; 
   });
   var hr = document.createElement("tr");
   headers.forEach(function (h) {
@@ -137,7 +137,7 @@ function populateTable(tbody, thead, dataArray) {
     if (needsActions) {
       var tdAction = document.createElement("td");
       var anomType = obj["Anomaly Type"];
-      if (anomType === "Out of Bounds" || anomType === "Distance Jump") {
+      if (anomType === "Out of Bounds" || anomType === "Distance Jump" || anomType === "Speed Spike") {
         var btnScissors = document.createElement("button");
         btnScissors.type = "button";
         btnScissors.className = "btn btn-link anomaly-scissors-btn";
