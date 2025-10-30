@@ -282,7 +282,7 @@
                 const diff = sorted[i].liters - sorted[i-1].liters;
                 const timeDiff = (new Date(sorted[i].wdate) - new Date(sorted[i-1].wdate)) / 1000 / 60; // в минутах
                 
-                // Заправка: резкое увеличение > 50л и за короткое время (< 30 мин)
+                // Заправка: резкое увеличение > 10л и за короткое время (< 30 мин)
                 if (diff > REFUEL_THRESHOLD && timeDiff < 30) {
                     refuelings.push({
                         date: sorted[i].wdate,
@@ -291,7 +291,7 @@
                         longitude: sorted[i].longitude
                     });
                 }
-                // Слив: резкое уменьшение > 50л и за короткое время (< 30 мин)
+                // Слив: резкое уменьшение > 10л и за короткое время (< 30 мин)
                 else if (diff < DRAIN_THRESHOLD && timeDiff < 30) {
                     drains.push({
                         date: sorted[i].wdate,
@@ -356,8 +356,8 @@
                         
                         // Рассчитываем моточасы между точками
                         const timeDiff = (new Date(entry.wdate) - new Date(dailyMap[dayKey].prevEntry.wdate)) / 1000 / 3600; // в часах
-                        // Игнорируем слишком большие промежутки времени (> 0,5 часа = скорее всего простой)
-                        if (timeDiff < 0.5) {
+                        // Игнорируем слишком большие промежутки времени (> 15 мин = скорее всего простой)
+                        if (timeDiff < 0.25) {
                             dailyMap[dayKey].motorHours += timeDiff;
                         }
                     }
