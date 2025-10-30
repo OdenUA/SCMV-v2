@@ -1575,8 +1575,8 @@ function formatAnomalyTime(dt) {
     var deviceId = deviceIdInput.value || '';
     var pad = function(n){ return n.toString().padStart(2,'0'); };
     var formatForSqlLocal = function(d, isEnd){
-      var raw = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-      return buildLocalDateParam(raw, isEnd);
+      var raw = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+      return raw;
     };
     var sqlCommands = '';
     var affectedDates = {}; // Объект для хранения уникальных дат (ключ - строка даты)
