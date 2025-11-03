@@ -7,6 +7,11 @@
   var reportInProgress = false;
   var reportData = {};
   var pendingRequests = {}; // Map request key to metadata
+  var _pendingWatcherId = null;
+  // Queue & concurrency control for sending requests in batches
+  var _requestQueue = [];
+  var REPORT_CONCURRENCY = 12; // max parallel requests
+  var _activeSends = 0;
 
   // Initialize reports functionality
   window.initReports = function() {
@@ -176,6 +181,9 @@
     reportInProgress = true;
     showReportProgress(0, reportData.total);
 
+  // Start watcher to detect and clear stale pending requests
+  startPendingWatcher();
+
     // Send requests for each device and each date
     showRouteToast('📊 Начинаем формирование отчета...');
     
@@ -186,45 +194,71 @@
     }
   }
 
-  // Send single mileage request for one device and one day
+  // Enqueue a mileage request (will be sent by queue processor)
   function sendMileageRequest(deviceId, dateInfo) {
-    var dateFrom = formatDateForSql(dateInfo.year, dateInfo.month, dateInfo.day, 0, 0, 0);
-    var dateTo = formatDateForSql(dateInfo.year, dateInfo.month, dateInfo.day, 23, 59, 59);
+    _requestQueue.push({ deviceId: deviceId, dateInfo: dateInfo });
+    tryProcessQueue();
+  }
 
-    var request = {
-      name: 'Startstop Sum Result',
-      type: 'etbl',
-      mid: 6,
-      act: 'filter',
-      filter: [
-        { selecteduid: [authUid] },
-        { selectedvihicleid: [deviceId] },
-        { selectedpgdatefrom: [dateFrom] },
-        { selectedpgdateto: [dateTo] }
-      ],
-      usr: authUser,
-      pwd: authPwd,
-      uid: authUid,
-      lang: 'en'
-    };
+  // Process queue: send up to REPORT_CONCURRENCY parallel requests
+  function tryProcessQueue() {
+    try {
+      while (_activeSends < REPORT_CONCURRENCY && _requestQueue.length > 0) {
+        var task = _requestQueue.shift();
+        _activeSends++;
+        doSendMileageRequest(task.deviceId, task.dateInfo);
+      }
+  } catch (e) { }
+  }
 
-    var dateKey = dateInfo.year + '-' + String(dateInfo.month).padStart(2, '0') + '-' + String(dateInfo.day).padStart(2, '0');
-    
-    // Store request metadata using a key
-    var requestKey = deviceId + '|' + dateKey;
-    pendingRequests[requestKey] = {
-      deviceId: deviceId,
-      dateKey: dateKey,
-      dateFrom: dateFrom,
-      dateTo: dateTo
-    };
+  // Actually send one mileage request (called by queue processor)
+  function doSendMileageRequest(deviceId, dateInfo) {
+    try {
+      var dateFrom = formatDateForSql(dateInfo.year, dateInfo.month, dateInfo.day, 0, 0, 0);
+      var dateTo = formatDateForSql(dateInfo.year, dateInfo.month, dateInfo.day, 23, 59, 59);
 
-    reportData.pending++;
-    sendRequest(request);
+      var request = {
+        name: 'Startstop Sum Result',
+        type: 'etbl',
+        mid: 6,
+        act: 'filter',
+        filter: [
+          { selecteduid: [authUid] },
+          { selectedvihicleid: [deviceId] },
+          { selectedpgdatefrom: [dateFrom] },
+          { selectedpgdateto: [dateTo] }
+        ],
+        usr: authUser,
+        pwd: authPwd,
+        uid: authUid,
+        lang: 'en'
+      };
+
+      var dateKey = dateInfo.year + '-' + String(dateInfo.month).padStart(2, '0') + '-' + String(dateInfo.day).padStart(2, '0');
+      
+      // Store request metadata using a key
+      var requestKey = deviceId + '|' + dateKey;
+      pendingRequests[requestKey] = {
+        deviceId: deviceId,
+        dateKey: dateKey,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        _sentAt: Date.now()
+      };
+
+  // sent mileage request (silent)
+
+      reportData.pending++;
+      sendRequest(request);
+    } catch (e) {
+      try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
+      tryProcessQueue();
+    }
   }
 
   // Handle response from Startstop Sum Result
   function handleMileageResponse(data) {
+  // handleMileageResponse incoming (silent)
     // Try to match response to pending request
     // Extract device ID and date from response filter
     var deviceId = null;
@@ -254,20 +288,37 @@
     var metadata = null;
     var requestKey = null;
 
-    if (deviceId && dateFrom) {
-      // Extract date from dateFrom (YYYY-MM-DD HH:mm:ss -> YYYY-MM-DD)
-      var datePart = dateFrom.split(' ')[0];
-      requestKey = deviceId + '|' + datePart;
-      metadata = pendingRequests[requestKey];
+    // Helper: extract YYYY-MM-DD from various date formats ("YYYY-MM-DD ...", "YYYY-MM-DDTHH:MM:SSZ", etc.)
+    function extractDateKey(s) {
+      try {
+        if (!s) return null;
+        var m = String(s).match(/(\d{4}-\d{2}-\d{2})/);
+        if (m && m[1]) return m[1];
+        // Fallback: split by space
+        return String(s).split(' ')[0];
+      } catch (e) { return null; }
     }
 
-    if (!metadata) {
-      // Try all pending requests
+    if (deviceId && dateFrom) {
+      // Normalize to YYYY-MM-DD for robust matching
+      var datePart = extractDateKey(dateFrom);
+      if (datePart) {
+        requestKey = deviceId + '|' + datePart;
+        metadata = pendingRequests[requestKey];
+      }
+    }
+
+  if (!metadata) {
+      // Try all pending requests with normalized comparison
       var keys = Object.keys(pendingRequests);
+      var wantedFrom = extractDateKey(dateFrom);
+      var wantedTo = extractDateKey(dateTo);
       for (var k = 0; k < keys.length; k++) {
         var key = keys[k];
         var meta = pendingRequests[key];
-        if (meta.dateFrom === dateFrom && meta.dateTo === dateTo) {
+        var metaFrom = extractDateKey(meta.dateFrom);
+        var metaTo = extractDateKey(meta.dateTo);
+        if (metaFrom && wantedFrom && metaFrom === wantedFrom && metaTo && wantedTo && metaTo === wantedTo && String(meta.deviceId) === String(deviceId)) {
           metadata = meta;
           requestKey = key;
           break;
@@ -276,12 +327,28 @@
     }
 
     if (!metadata) {
-      // Not our request
+      // Still not found — emit a detailed debug/warn so we can inspect mismatches
+      try {
+        var pendingSummary = Object.keys(pendingRequests).slice(0, 50).map(function(k){
+          var m = pendingRequests[k];
+          return { key: k, dateFrom: m.dateFrom, dateTo: m.dateTo, deviceId: m.deviceId, ageMs: Date.now() - (m._sentAt || 0) };
+        });
+        // no logging to console
+      } catch(e) { }
       return;
     }
 
-    // Remove from pending
-    delete pendingRequests[requestKey];
+    // Matched a pending request
+    try { console.debug('reports: matched pending request', { requestKey: requestKey }); } catch(e){}
+
+  // Remove from pending
+  delete pendingRequests[requestKey];
+  // Decrement active sends and continue queue
+  try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
+  try { tryProcessQueue(); } catch(_){}
+
+  // Debug: show remaining pending count
+  try { console.debug('reports: completed request', { requestKey: requestKey, remainingPending: Object.keys(pendingRequests).length }); } catch(e){}
 
     var dateKey = metadata.dateKey;
     deviceId = metadata.deviceId;
@@ -311,9 +378,11 @@
 
     reportData.pending--;
 
-    // Update progress
-    var completed = reportData.total - reportData.pending;
-    showReportProgress(completed, reportData.total);
+  // Update progress
+  var completed = reportData.total - reportData.pending;
+  showReportProgress(completed, reportData.total);
+
+  try { console.debug('reports: progress', { completed: completed, total: reportData.total, pending: reportData.pending }); } catch(e){}
 
     // Check if all requests completed
     if (reportData.pending === 0) {
@@ -405,6 +474,9 @@
     // Show progress
     reportInProgress = true;
     showReportProgress(0, reportData.total);
+
+  // Start watcher to detect and clear stale pending requests
+  startPendingWatcher();
 
     // Send requests for each device and each date
     showRouteToast('📊 Начинаем формирование отчета...');
@@ -530,6 +602,10 @@
 
     // Reset
     reportInProgress = false;
+  // Stop pending watcher if running
+  stopPendingWatcher();
+  // Clear queue and active counters
+  try { _requestQueue = []; _activeSends = 0; } catch(e){}
     
     // Hide progress after a delay
     setTimeout(function() {
@@ -538,6 +614,50 @@
         statusDiv.style.display = 'none';
       }
     }, 3000);
+  }
+
+  // Pending watcher: clear stale requests after timeout to avoid hanging
+  function startPendingWatcher() {
+    try {
+      stopPendingWatcher();
+      var TIMEOUT_MS = 20000; // 20 seconds
+      _pendingWatcherId = setInterval(function() {
+        try {
+          var now = Date.now();
+          var keys = Object.keys(pendingRequests);
+          keys.forEach(function(k) {
+            var meta = pendingRequests[k];
+            if (!meta || !meta._sentAt) return;
+            if (now - meta._sentAt > TIMEOUT_MS) {
+              // mark as timed out: set mileage 0 and remove
+              try { console.warn('reports: pending request timed out, marking completed', { key: k, ageMs: now - meta._sentAt }); } catch(e){}
+              var deviceId = meta.deviceId;
+              var dateKey = meta.dateKey;
+              if (reportData && reportData.mileage && reportData.mileage[deviceId]) {
+                reportData.mileage[deviceId][dateKey] = 0;
+              }
+              try { delete pendingRequests[k]; } catch(e){}
+              // mark the send slot as free and continue queue
+              try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
+              try { reportData.pending = Math.max(0, (reportData.pending || 1) - 1); } catch(e){}
+              try { var completed = reportData.total - reportData.pending; showReportProgress(completed, reportData.total); console.debug('reports: progress (timeout)', { completed: completed, total: reportData.total, pending: reportData.pending }); } catch(e){}
+              try { tryProcessQueue(); } catch(_){}
+              // If no pending left, finalize
+              try { if (reportData.pending === 0) finalizeMileageReport(); } catch(e){}
+            }
+          });
+        } catch(e) { console.warn('reports: pending watcher error', e); }
+      }, 5000);
+    } catch(e) { console.warn('reports: startPendingWatcher failed', e); }
+  }
+
+  function stopPendingWatcher() {
+    try {
+      if (_pendingWatcherId) {
+        clearInterval(_pendingWatcherId);
+        _pendingWatcherId = null;
+      }
+    } catch(e) { /* ignore */ }
   }
 
   // Build XLS data array
