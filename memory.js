@@ -252,19 +252,23 @@
     
     if (lastDevice !== deviceId) {
       console.log('[Memory] Переключение устройства: ' + lastDevice + ' → ' + deviceId);
+      
+      // Cleanup BEFORE adding new device (only if there was a previous device)
+      // This prevents race condition where server response arrives before cleanup
+      if (lastDevice !== null) {
+        console.log('[Memory] Очистка данных предыдущего устройства перед переключением');
+        window.clearTrackMarkers();
+        window.deepCleanTrackData();
+      } else {
+        console.log('[Memory] Первая загрузка устройства, очистка не требуется');
+      }
+      
       deviceHistory.push(deviceId);
       
       // Limit history size
       if (deviceHistory.length > MAX_DEVICE_HISTORY) {
         deviceHistory.shift();
       }
-
-      // Automatic cleanup after switching
-      setTimeout(function() {
-        console.log('[Memory] Автоочистка после переключения устройства');
-        window.clearTrackMarkers();
-        window.deepCleanTrackData();
-      }, 100);
     }
   };
 
