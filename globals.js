@@ -119,6 +119,23 @@ var isResizing = false;
 var isDeviceLogInitialized = false;
 // Bounds
 var BOUNDS = {MIN_LAT:44.3, MAX_LAT:52.4, MIN_LON:22.1, MAX_LON:40.2};
+
+// --- Anomaly detection constants ---
+// Vehicle Track (processDeviceTrack)
+var ANOMALY_GAP_THRESHOLD_MS = 10 * 60 * 1000;          // 10 minutes - Time Gap threshold
+var ANOMALY_SPEED_THRESHOLD_KPH = 200;                  // 200 km/h - Speed Spike threshold
+var ANOMALY_JUMP_SPEED_THRESHOLD_KPH = 50;              // 50 km/h - calculated speed threshold for Position Jump
+var ANOMALY_REAL_SPEED_THRESHOLD_KPH = 10;              // 10 km/h - reported speed threshold for Position Jump
+var ANOMALY_POSITION_JUMP_DISTANCE_M = 800;             // 800 m - distance threshold for Position Jump
+
+// Raw Device Track (drawRawDeviceTrack)
+var ANOMALY_RAW_GAP_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes - Time Gap threshold for raw track
+var ANOMALY_RAW_SPEED_THRESHOLD_KPH = 150;              // 150 km/h - Speed Spike threshold for raw track
+
+// --- Anomaly layer storage (global) ---
+window._rawTrackGapLayers = [];
+window._rawTrackSpikeLayers = [];
+window._rawTrackJumpLayers = [];
 // Helper: build local date param (keeps user-entered local wall time, adds seconds if missing)
 function buildLocalDateParam(raw, isEnd){
 	if(!raw) return '';
@@ -141,32 +158,4 @@ try{
 function showLoadingOverlay(msg){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; if(msg){ var t = el.querySelector('.global-loading-text'); if(t) t.textContent = msg; } el.classList.add('visible'); }catch(e){} }
 function hideLoadingOverlay(){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; el.classList.remove('visible'); }catch(e){} }
 
-// Helper: format date as DD.MM.YY HH:mm:ss (always local time, no timezone shift)
-function formatAnomalyTime(date) {
-	if (!date) return '';
-	let d;
-	if (typeof date === 'string') {
-		// DD.MM.YY HH:mm:ss
-		if (/^\d{2}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}$/.test(date)) {
-			const [dmy, hms] = date.split(' ');
-			const [day, month, year] = dmy.split('.').map(Number);
-			const [hour, min, sec] = hms.split(':').map(Number);
-			const fullYear = year < 70 ? 2000 + year : 1900 + year;
-			d = new Date(fullYear, month - 1, day, hour, min, sec);
-		}
-		// YYYY-MM-DD HH:mm:ss
-		else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(date)) {
-			const [ymd, hms] = date.split(' ');
-			const [year, month, day] = ymd.split('-').map(Number);
-			const [hour, min, sec] = hms.split(':').map(Number);
-			d = new Date(year, month - 1, day, hour, min, sec);
-		} else {
-			// ISO, with timezone
-			d = new Date(date);
-		}
-	} else {
-		d = new Date(date);
-	}
-	const pad = n => n.toString().padStart(2, '0');
-	return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear().toString().slice(-2)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+// formatAnomalyTime moved to anomalies.js

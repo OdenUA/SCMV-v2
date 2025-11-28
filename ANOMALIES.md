@@ -25,7 +25,7 @@
 
 ## 1. Аномалии трека устройства (Device Track)
 
-Эти аномалии определяются в функции `processDeviceTrack()` в файле `device_track.js`.
+Эти аномалии определяются в функции `processDeviceTrack()` в файле `device_track.js`. Вспомогательные функции детектирования (`parseTrackDate`, `isOutOfBounds`, `addOutOfBoundsAnomaly`, `formatAnomalyTime`, `detectRawTrackAnomalies`, `linkAnomalyIndices`, `attachRouteAwareClick`) вынесены в отдельный файл `anomalies.js`.
 
 ### 1.1 Time Gap (Временной разрыв)
 
@@ -79,9 +79,9 @@ if (speedKph > SPEED_THRESHOLD_KPH) {
 
 ### 1.3 Position Jump (Прыжок позиции)
 
-**Описание:** Устройство "прыгнуло" на большое расстояние при малой заявленной скорости.
+**Описание:** Устройство "прыгнуло" на большое расстояние. Срабатывает по двум условиям:
 
-**Алгоритм расчёта:**
+**Алгоритм расчёта (условие 1 — по скорости):**
 ```javascript
 var JUMP_SPEED_THRESHOLD_KPH = 50;  // расчётная скорость
 var REAL_SPEED_THRESHOLD_KPH = 10;   // заявленная скорость устройства
@@ -92,11 +92,25 @@ if (speedKph > JUMP_SPEED_THRESHOLD_KPH && currentPoint.speed < REAL_SPEED_THRES
 }
 ```
 
-**Условие срабатывания:**
-- Расчётная скорость > **50 км/ч** И
-- Заявленная скорость устройства < **10 км/ч**
+**Алгоритм расчёта (условие 2 — по расстоянию):**
+```javascript
+var POSITION_JUMP_DISTANCE_M = 800; // 800 м
 
-**Суть:** Устройство сообщает о низкой скорости, но координаты говорят о быстром перемещении — признак сбоя GPS.
+if (distanceM >= POSITION_JUMP_DISTANCE_M) {
+    isGap = true;
+    anomalyType = "Position Jump";
+}
+```
+
+**Условия срабатывания (любое из двух):**
+1. Расчётная скорость > **50 км/ч** И заявленная скорость устройства < **10 км/ч**
+2. Расстояние между соседними точками ≥ **800 м**
+
+**Визуализация:** 
+- Красная пунктирная линия (dashArray: "10,5")
+- В popup отображается расстояние в км
+
+**Суть:** Резкое изменение координат, не соответствующее реальному движению — признак сбоя GPS или потери сигнала.
 
 ---
 
@@ -274,13 +288,17 @@ function drawMileageGaps() {
 
 ## 4. Константы и пороговые значения
 
+Все константы для детектирования аномалий вынесены в `globals.js`.
+
 | Константа | Значение | Описание | Файл |
 |-----------|----------|----------|------|
-| `GAP_THRESHOLD_MS` | 600 000 мс (10 мин) | Порог временного разрыва | device_track.js |
-| `SPEED_THRESHOLD_KPH` | 200 км/ч | Порог скачка скорости (Device Track) | device_track.js |
-| `SPEED_THRESHOLD_KPH` | 150 км/ч | Порог скачка скорости (Track Raw) | device_track.js |
-| `JUMP_SPEED_THRESHOLD_KPH` | 50 км/ч | Расчётная скорость для прыжка позиции | device_track.js |
-| `REAL_SPEED_THRESHOLD_KPH` | 10 км/ч | Заявленная скорость для прыжка позиции | device_track.js |
+| `ANOMALY_GAP_THRESHOLD_MS` | 600 000 мс (10 мин) | Порог временного разрыва | globals.js |
+| `ANOMALY_SPEED_THRESHOLD_KPH` | 200 км/ч | Порог скачка скорости (Device Track) | globals.js |
+| `ANOMALY_RAW_SPEED_THRESHOLD_KPH` | 150 км/ч | Порог скачка скорости (Track Raw) | globals.js |
+| `ANOMALY_JUMP_SPEED_THRESHOLD_KPH` | 50 км/ч | Расчётная скорость для прыжка позиции | globals.js |
+| `ANOMALY_REAL_SPEED_THRESHOLD_KPH` | 10 км/ч | Заявленная скорость для прыжка позиции | globals.js |
+| `ANOMALY_POSITION_JUMP_DISTANCE_M` | 800 м | Порог расстояния для прыжка позиции | globals.js |
+| `ANOMALY_RAW_GAP_THRESHOLD_MS` | 300 000 мс (5 мин) | Порог временного разрыва (Raw Track) | globals.js |
 | `satThreshold` | 10 (настраиваемый) | Минимальное количество спутников | device_track.js |
 | `BOUNDS.MIN_LAT` | 44.3° | Минимальная широта (юг) | globals.js |
 | `BOUNDS.MAX_LAT` | 52.4° | Максимальная широта (север) | globals.js |
@@ -334,7 +352,7 @@ SELECT recalcstartstop(<ID>, '<дата>'::date, true);
 |--------------|------------|-------|
 | Time Gap | Красный | Сплошная |
 | Speed Spike | Красный / Жёлтый | Сплошная / Пунктир |
-| Position Jump | Красный | Сплошная |
+| Position Jump | Красный | Пунктир (10,5) |
 | Out of Bounds | Фиолетовый (#800080) | Сплошная |
 | Mileage Gap | Красный | Пунктир (4,6) |
 
@@ -350,4 +368,5 @@ SELECT recalcstartstop(<ID>, '<дата>'::date, true);
 ---
 
 *Документ создан: 26.11.2025*
+*Обновлено: 28.11.2025 (рефакторинг: anomalies.js, глобальные константы)*
 *Версия системы: SCMV v2*

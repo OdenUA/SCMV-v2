@@ -1,73 +1,7 @@
-function attachRouteAwareClick(poly) {
-  if (!poly || !poly._dtPoints || !Array.isArray(poly._dtPoints)) return;
-  poly.on('click', function(ev) {
-  // If route mode is active, consume the click and convert it into a route point
-    if (routeModeActive) {
-      var ll = ev.latlng || (ev && ev.layer && ev.layer.getLatLng && ev.layer.getLatLng());
-      if (ll && typeof onRouteMapClick === 'function') {
-        try { onRouteMapClick({ latlng: ll }); } catch(_) {}
-      }
-      if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
-      return;
-    }
-    var ll = ev.latlng; if (!ll) return;
-    var pts = poly._dtPoints;
-    var minD = Infinity, nearest = null;
-    for (var j = 0; j < pts.length; j++) {
-      var d = map.distance(ll, L.latLng(pts[j].lat, pts[j].lng));
-      if (d < minD) { minD = d; nearest = pts[j]; if (d < 3) break; }
-    }
-    if (!nearest) return;
-    if (window._trackNearestMarker) { trackLayerGroup.removeLayer(window._trackNearestMarker); }
-    window._trackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {radius:7, color:'#ff4136', weight:2, fillColor:'#ff4136', fillOpacity:0.9}).addTo(trackLayerGroup);
-  // Bind popup but honor route mode by delegating clicks
-    try {
-      var popupNode = document.createElement('div');
-      popupNode.innerHTML = '<b>' + (nearest.wdate || '') + '</b>';
-      if (typeof createTrackCutButton === 'function') {
-        var cutBtn = createTrackCutButton(nearest.lat, nearest.lng, nearest.wdate);
-        if (cutBtn) {
-          cutBtn.classList.add('track-cut-popup-btn');
-          popupNode.appendChild(cutBtn);
-        }
-      }
-      window._trackNearestMarker.bindPopup(popupNode);
-      window._trackNearestMarker.on('click', function(ev){
-        if (routeModeActive) {
-          var ll = ev && ev.latlng ? ev.latlng : window._trackNearestMarker.getLatLng();
-          if (ll && typeof onRouteMapClick === 'function') { onRouteMapClick({ latlng: ll }); }
-          if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
-        } else {
-          try { window._trackNearestMarker.openPopup(); } catch(_){}
-        }
-      });
-      window._trackNearestMarker.openPopup();
-    } catch(_) { try { window._trackNearestMarker.openPopup(); } catch(_){} }
-  });
-}
 // Device Track & anomaly processing
-// Unified date parser supporting legacy formats and ISO; bare ISO treated as UTC
-function parseTrackDate(str){
-  if(!str) return new Date(NaN);
-  if(typeof str !== 'string') return new Date(str);
-  if(/^(\d{2})\.(\d{2})\.(\d{2})\s\d{2}:\d{2}:\d{2}$/.test(str)) return new Date('20'+str.replace(/(\d{2})\.(\d{2})\.(\d{2})\s/, '$3-$2-$1T'));
-  if(/^(\d{2})\.(\d{2})\.(\d{4})\s\d{2}:\d{2}:\d{2}$/.test(str)) return new Date(str.replace(/(\d{2})\.(\d{2})\.(\d{4})\s/, '$3-$2-$1T'));
-  // Server sends local time, not UTC - parse as local time without 'Z' suffix
-  if(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.test(str)) {
-    var m = str.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
-    return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
-  }
-  if(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)) return new Date(str);
-  return new Date(str);
-}
-function isOutOfBounds(lat, lon) {
-  return (
-    lat < BOUNDS.MIN_LAT ||
-    lat > BOUNDS.MAX_LAT ||
-    lon < BOUNDS.MIN_LON ||
-    lon > BOUNDS.MAX_LON
-  );
-}
+// Functions parseTrackDate, isOutOfBounds, attachRouteAwareClick, addOutOfBoundsAnomaly, 
+// formatAnomalyTime, detectRawTrackAnomalies, linkAnomalyIndices - moved to anomalies.js
+
 function processDeviceTrack(points) {
   // Use global _trackData if available
   if (Array.isArray(window._trackData) && window._trackData.length > 0) {
@@ -175,10 +109,7 @@ function processDeviceTrack(points) {
     });
     directionDecorator.addLayer(deco);
   });
-  var GAP_THRESHOLD_MS = 10 * 60 * 1000;
-  var SPEED_THRESHOLD_KPH = 200;
-  var JUMP_SPEED_THRESHOLD_KPH = 50;
-  var REAL_SPEED_THRESHOLD_KPH = 10;
+  // Use global constants from globals.js
   var currentSegmentLatLngs = [
     [sortedPoints[0].latitude, sortedPoints[0].longitude],
   ];
@@ -212,17 +143,25 @@ function processDeviceTrack(points) {
         addOutOfBoundsAnomaly(currentOutOfBoundsGroup, sortedPoints, anomalies);
         currentOutOfBoundsGroup = null;
       }
-      if (timeDiffMs > GAP_THRESHOLD_MS) {
+      if (timeDiffMs > ANOMALY_GAP_THRESHOLD_MS) {
         isGap = true;
         anomalyType = "Time Gap";
       } else if (timeDiffMs > 0) {
         speedKph = distanceM / 1000 / (timeDiffMs / 3600000);
-        if (speedKph > SPEED_THRESHOLD_KPH) {
+        if (speedKph > ANOMALY_SPEED_THRESHOLD_KPH) {
           isGap = true;
           anomalyType = "Speed Spike";
-        } else if (speedKph > JUMP_SPEED_THRESHOLD_KPH && currentPoint.speed < REAL_SPEED_THRESHOLD_KPH) {
+        } else if (speedKph > ANOMALY_JUMP_SPEED_THRESHOLD_KPH && currentPoint.speed < ANOMALY_REAL_SPEED_THRESHOLD_KPH) {
           isGap = true;
           anomalyType = "Position Jump";
+        }
+      }
+      // Distance-based Position Jump (distance > 1km regardless of speed/time)
+      if (!isGap && distanceM >= ANOMALY_POSITION_JUMP_DISTANCE_M) {
+        isGap = true;
+        anomalyType = "Position Jump";
+        if (timeDiffMs > 0) {
+          speedKph = distanceM / 1000 / (timeDiffMs / 3600000);
         }
       }
       if (isGap) {
@@ -241,7 +180,14 @@ function processDeviceTrack(points) {
           directionDecorator.addLayer(segDeco);
         }
         if (anomalyType !== "Out of Bounds") {
-          var gapPolyline = L.polyline([prevLL, currLL], { color: "red", weight: 3 }).addTo(trackLayerGroup).bindPopup("<b>Аномалия: " + anomalyType + "</b><br>С: " + prevPoint.wdate + "<br>По: " + currentPoint.wdate + "<br>Скорость: " + speedKph.toFixed(2) + " км/ч");
+          var popupContent = "<b>Аномалия: " + anomalyType + "</b><br>С: " + prevPoint.wdate + "<br>По: " + currentPoint.wdate;
+          if (anomalyType === "Position Jump") {
+            popupContent += "<br>Расстояние: " + (distanceM / 1000).toFixed(2) + " км";
+          } else {
+            popupContent += "<br>Скорость: " + speedKph.toFixed(2) + " км/ч";
+          }
+          var lineStyle = anomalyType === "Position Jump" ? { color: "red", weight: 3, dashArray: "10,5" } : { color: "red", weight: 3 };
+          var gapPolyline = L.polyline([prevLL, currLL], lineStyle).addTo(trackLayerGroup).bindPopup(popupContent);
           attachRouteAwareClick(gapPolyline);
           var gapDeco = L.polylineDecorator(gapPolyline, {
             patterns: [
@@ -319,35 +265,8 @@ function processDeviceTrack(points) {
         "<b>Финиш</b><br>" + sortedPoints[sortedPoints.length - 1].wdate
       );
   }
-  // Attach gap index for highlight
-  anomalies.forEach(function(anom){
-    // Time Gap highlight
-    if(anom["Anomaly Type"] === "Time Gap" && anom["Start Time"] && anom["End Time"]){
-      anom._gapIndex = null;
-      if(window._rawTrackGapLayers){
-        for(var i=0;i<window._rawTrackGapLayers.length;i++){
-          var gap = window._rawTrackGapLayers[i];
-          if(gap._gapInfo && gap._gapInfo.start.wdate === anom["Start Time"] && gap._gapInfo.end.wdate === anom["End Time"]){
-            anom._gapIndex = i;
-            break;
-          }
-        }
-      }
-    }
-    // Speed Spike highlight
-    if(anom["Anomaly Type"] === "Speed Spike" && anom["Start Time"] && anom["End Time"]){
-      anom._spikeIndex = null;
-      if(window._rawTrackSpikeLayers){
-        for(var i=0;i<window._rawTrackSpikeLayers.length;i++){
-          var spike = window._rawTrackSpikeLayers[i];
-          if(spike._spikeInfo && spike._spikeInfo.start.wdate === anom["Start Time"] && spike._spikeInfo.end.wdate === anom["End Time"]){
-            anom._spikeIndex = i;
-            break;
-          }
-        }
-      }
-    }
-  });
+  // Link anomaly indices for highlighting (function from anomalies.js)
+  linkAnomalyIndices(anomalies);
   return anomalies;
 }
 
@@ -446,32 +365,8 @@ function drawRawDeviceTrack(points){
         })(parsed[pi], pi);
       }
     }
-    // Draw gaps as red lines if time between points > 5 min
-    var GAP_THRESHOLD_MS = 5 * 60 * 1000;
-    window._rawTrackGapLayers = [];
-    window._rawTrackSpikeLayers = [];
-    for(var i=1;i<parsed.length;i++){
-      var prev = parsed[i-1], curr = parsed[i];
-      var tPrev = parseTrackDate(prev.wdate), tCurr = parseTrackDate(curr.wdate);
-      var dt = tCurr - tPrev;
-      var dist = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(curr.lat, curr.lng));
-      var speedKph = dt > 0 ? dist / 1000 / (dt / 3600000) : 0;
-      // Time Gap
-      if (dt > GAP_THRESHOLD_MS) {
-        var gapLine = L.polyline([[prev.lat, prev.lng],[curr.lat, curr.lng]],{color:'#ff4136',weight:4,opacity:0.95,dashArray:'8,6'}).addTo(trackLayerGroup)
-          .bindPopup('<b>Разрыв</b><br>'+prev.wdate+' → '+curr.wdate+'<br>'+Math.round(dt/60000)+' мин');
-        gapLine._gapInfo = {start: prev, end: curr, index: i-1};
-        window._rawTrackGapLayers.push(gapLine);
-      }
-      // Speed Spike
-      var SPEED_THRESHOLD_KPH = 150; // match anomaly detection
-      if (dt > 0 && speedKph > SPEED_THRESHOLD_KPH) {
-        var spikeLine = L.polyline([[prev.lat, prev.lng],[curr.lat, curr.lng]],{color:'#ffdc00',weight:4,opacity:0.95,dashArray:'6,4'}).addTo(trackLayerGroup)
-          .bindPopup('<b>Speed Spike</b><br>'+prev.wdate+' → '+curr.wdate+'<br>'+speedKph.toFixed(2)+' км/ч');
-        spikeLine._spikeInfo = {start: prev, end: curr, index: i-1, speed: speedKph};
-        window._rawTrackSpikeLayers.push(spikeLine);
-      }
-    }
+    // Detect raw track anomalies (function from anomalies.js)
+    detectRawTrackAnomalies(parsed);
     // Start/End markers
   var mStart = L.marker(latlngs[0],{icon:startIcon}).addTo(trackLayerGroup);
   try {
@@ -622,56 +517,8 @@ function drawRawDeviceTrack(points){
         window._rawPopupOpenBound = true;
       }
 }
-function addOutOfBoundsAnomaly(group, allPoints, anomalies) {
-  var parseDate = parseTrackDate;
-  var anomalyPoints = allPoints.filter(function (p) {
-    var d = parseDate(p.wdate);
-    return d >= group.startTime && d <= group.endTime;
-  });
-  if (!anomalyPoints.length) return;
-  var startIndex = allPoints.indexOf(anomalyPoints[0]);
-  var visualPoints =
-    startIndex > 0
-      ? [allPoints[startIndex - 1]].concat(anomalyPoints)
-      : anomalyPoints;
-  var anomalyLatLngs = visualPoints.map(function (p) {
-    return [p.latitude, p.longitude];
-  });
-  var poly = L.polyline(anomalyLatLngs, { color: "#800080", weight: 4 })
-    .addTo(trackLayerGroup)
-    .bindPopup(
-      "<b>Аномалия: Вне границ</b><br>С: " +
-        formatDate(group.startTime) +
-        "<br>По: " +
-        formatDate(group.endTime)
-    );
-  attachRouteAwareClick(poly);
-  var dist = 0;
-  for (var k = 1; k < anomalyLatLngs.length; k++) {
-    dist += L.latLng(anomalyLatLngs[k - 1]).distanceTo(
-      L.latLng(anomalyLatLngs[k])
-    );
-  }
-  var durSec = (group.endTime - group.startTime)/1000;
-  var durDisplay = durSec>=3600 ? (durSec/3600).toFixed(2)+' h' : durSec>=60 ? (durSec/60).toFixed(1)+' m' : Math.round(durSec)+' s';
-  anomalies.push({
-    "Start Time": formatAnomalyTime(group.startTime),
-    "End Time": formatAnomalyTime(group.endTime),
-    "Anomaly Type": "Out of Bounds",
-    "Calculated Speed (km/h)": "N/A",
-    "Reported Speed (km/h)": "N/A",
-    "Duration": durDisplay,
-    "Distance (km)": (dist / 1000).toFixed(2),
-    layer: poly,
-  });
-// Formats date for anomaly table: DD.MM.YY HH:mm:ss
-function formatAnomalyTime(dt) {
-  var d = typeof dt === 'string' ? parseTrackDate(dt) : dt;
-  if (!(d instanceof Date) || isNaN(d)) return '';
-  var pad = function(n){return n.toString().padStart(2,'0');};
-  return pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.' + String(d.getFullYear()).slice(-2) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-}
-}
+// Functions addOutOfBoundsAnomaly, formatAnomalyTime moved to anomalies.js
+
 // original generateSql removed; SQL generation is handled from report-specific actions now
 
 // Full raw Device Track (setup) table population
