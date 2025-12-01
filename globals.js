@@ -126,7 +126,7 @@ var ANOMALY_GAP_THRESHOLD_MS = 10 * 60 * 1000;          // 10 minutes - Time Gap
 var ANOMALY_SPEED_THRESHOLD_KPH = 200;                  // 200 km/h - Speed Spike threshold
 var ANOMALY_JUMP_SPEED_THRESHOLD_KPH = 50;              // 50 km/h - calculated speed threshold for Position Jump
 var ANOMALY_REAL_SPEED_THRESHOLD_KPH = 10;              // 10 km/h - reported speed threshold for Position Jump
-var ANOMALY_POSITION_JUMP_DISTANCE_M = 800;             // 800 m - distance threshold for Position Jump
+var ANOMALY_POSITION_JUMP_DISTANCE_M = 1200;             // 1200 m - distance threshold for Position Jump
 
 // Raw Device Track (drawRawDeviceTrack)
 var ANOMALY_RAW_GAP_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes - Time Gap threshold for raw track
