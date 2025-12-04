@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Edit Bulk - Очистка номера телефона</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #00d9ff;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #0f3460;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #e94560;
+            font-size: 1.1em;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #eee;
+            font-family: 'Consolas', monospace;
+            font-size: 14px;
+        }
+        input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+        .row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .row > div {
+            flex: 1;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn-primary {
+            background: #00d9ff;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #00b8d9;
+        }
+        .btn-danger {
+            background: #e94560;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #c73e54;
+        }
+        .btn-secondary {
+            background: #0f3460;
+            color: #eee;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #1a4a7a;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .status-connected {
+            background: #0a3d0a;
+            border: 1px solid #0f0;
+            color: #0f0;
+        }
+        .status-disconnected {
+            background: #3d0a0a;
+            border: 1px solid #f00;
+            color: #f00;
+        }
+        .status-processing {
+            background: #3d3d0a;
+            border: 1px solid #ff0;
+            color: #ff0;
+        }
+        #log {
+            background: #0a0a1a;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-success {
+            color: #0f0;
+        }
+        .log-error {
+            color: #f00;
+        }
+        .log-info {
+            color: #00d9ff;
+        }
+        .log-warn {
+            color: #ff0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #0f3460;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #e94560);
+            transition: width 0.3s;
+            width: 0%;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .settings-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .settings-row label {
+            margin-bottom: 0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .settings-row input[type="number"] {
+            width: 80px;
+            padding: 5px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Device Edit Bulk - Очистка номера телефона</h1>
+        
+        <div id="status" class="status-disconnected">⚫ Не подключено</div>
+        
+        <div class="section">
+            <h2>🔐 Авторизация</h2>
+            <div class="row">
+                <div>
+                    <label for="loginUser">Пользователь:</label>
+                    <input type="text" id="loginUser" placeholder="username">
+                </div>
+                <div>
+                    <label for="loginPassword">Пароль:</label>
+                    <input type="password" id="loginPassword" placeholder="password">
+                </div>
+            </div>
+            <div class="buttons">
+                <button id="connectBtn" class="btn-primary">Подключиться</button>
+                <button id="disconnectBtn" class="btn-secondary" disabled>Отключиться</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📝 ID устройств (каждый ID на новой строке)</h2>
+            <textarea id="deviceIds" placeholder="795
+1574
+820
+1722
+873
+..."></textarea>
+            <div class="settings-row" style="margin-top: 15px;">
+                <label>
+                    Задержка между запросами (мс):
+                    <input type="number" id="delayMs" value="500" min="100" max="5000">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="workstatusEnabled" checked>
+                    workstatus: 1
+                </label>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🚀 Выполнение</h2>
+            <div class="buttons">
+                <button id="startBtn" class="btn-primary" disabled>▶ Начать отправку</button>
+                <button id="stopBtn" class="btn-danger" disabled>⏹ Остановить</button>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">0 / 0</div>
+        </div>
+        
+        <div class="section">
+            <h2>📋 Лог</h2>
+            <button id="clearLogBtn" class="btn-secondary" style="margin-bottom: 10px;">Очистить лог</button>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket configuration
+        const wsUrl = "wss://scmv.vpngps.com:4445";
+        
+        // State
+        let socket = null;
+        let authUid = null;
+        let authUser = '';
+        let authPwd = '';
+        let isLoggedIn = false;
+        let isProcessing = false;
+        let shouldStop = false;
+        let currentIndex = 0;
+        let deviceIdsList = [];
+        let pendingRequestId = null;
+        
+        // DOM elements
+        const statusDiv = document.getElementById('status');
+        const loginUserInput = document.getElementById('loginUser');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const deviceIdsTextarea = document.getElementById('deviceIds');
+        const delayMsInput = document.getElementById('delayMs');
+        const workstatusCheckbox = document.getElementById('workstatusEnabled');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const logDiv = document.getElementById('log');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        
+        // Load saved credentials
+        try {
+            const savedUser = localStorage.getItem('dt_user');
+            const savedPwd = localStorage.getItem('dt_pwd');
+            if (savedUser) loginUserInput.value = savedUser;
+            if (savedPwd) loginPasswordInput.value = savedPwd;
+        } catch (e) {}
+        
+        // Logging
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status-${type}`;
+        }
+        
+        function updateProgress() {
+            const total = deviceIdsList.length;
+            const percent = total > 0 ? (currentIndex / total) * 100 : 0;
+            progressFill.style.width = `${percent}%`;
+            progressText.textContent = `${currentIndex} / ${total}`;
+        }
+        
+        // WebSocket functions
+        function connect() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                log('Уже подключено', 'warn');
+                return;
+            }
+            
+            log('Подключение к WebSocket...', 'info');
+            socket = new WebSocket(wsUrl);
+            
+            socket.onopen = function() {
+                updateStatus('🟢 Подключено', 'connected');
+                log('WebSocket подключен', 'success');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                
+                // Auto-login if credentials available
+                if (loginUserInput.value && loginPasswordInput.value) {
+                    sendLogin();
+                }
+            };
+            
+            socket.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    // Log received message name for debugging
+                    if (data.name) {
+                        log(`📩 Получено: ${data.name}`, 'info');
+                    }
+                    handleMessage(data);
+                } catch (e) {
+                    log(`Ошибка парсинга: ${e.message}`, 'error');
+                }
+            };
+            
+            socket.onclose = function() {
+                updateStatus('⚫ Отключено', 'disconnected');
+                log('WebSocket отключен', 'warn');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                startBtn.disabled = true;
+                isLoggedIn = false;
+                isProcessing = false;
+            };
+            
+            socket.onerror = function(err) {
+                log(`Ошибка WebSocket: ${err.message || 'Unknown'}`, 'error');
+            };
+        }
+        
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        }
+        
+        function sendRequest(req) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('WebSocket не подключен', 'error');
+                return false;
+            }
+            const msg = JSON.stringify(req);
+            console.log('send:' + msg);
+            socket.send(msg);
+            return true;
+        }
+        
+        function sendLogin() {
+            authUser = loginUserInput.value;
+            authPwd = loginPasswordInput.value;
+            
+            if (!authUser || !authPwd) {
+                log('Введите логин и пароль', 'error');
+                return;
+            }
+            
+            log(`Логин: ${authUser}...`, 'info');
+            
+            const req = {
+                name: "login",
+                type: "login",
+                mid: 0,
+                act: "setup",
+                usr: authUser,
+                pwd: authPwd,
+                uid: 0,
+                lang: "en"
+            };
+            sendRequest(req);
+        }
+        
+        function handleMessage(data) {
+            // Debug: log all incoming messages
+            console.log('recv:', data);
+            
+            // Login response - check multiple formats
+            if (data.name === "login") {
+                // Format 1: data.res[0].uid
+                if (data.res && data.res[0] && data.res[0].uid) {
+                    authUid = data.res[0].uid;
+                    isLoggedIn = true;
+                    log(`✅ Логин успешен (uid: ${authUid})`, 'success');
+                    startBtn.disabled = false;
+                    return;
+                }
+                // Format 2: data.uid directly
+                if (data.uid) {
+                    authUid = data.uid;
+                    isLoggedIn = true;
+                    log(`✅ Логин успешен (uid: ${authUid})`, 'success');
+                    startBtn.disabled = false;
+                    return;
+                }
+                // Error
+                log(`❌ Ошибка логина: ${data.msg || JSON.stringify(data)}`, 'error');
+                isLoggedIn = false;
+                return;
+            }
+            
+            // Device Edit response
+            if (data.name === "Device Edit") {
+                if (pendingRequestId !== null) {
+                    const cols = data.cols || (data.res && data.res[0] && data.res[0].cols);
+                    if (cols && cols.id) {
+                        log(`✅ ID ${cols.id} - сохранено успешно`, 'success');
+                    } else if (data.err) {
+                        log(`❌ ID ${pendingRequestId} - ошибка: ${data.err}`, 'error');
+                    } else {
+                        log(`✅ ID ${pendingRequestId} - ответ получен`, 'success');
+                    }
+                    pendingRequestId = null;
+                    
+                    // Continue processing
+                    if (isProcessing && !shouldStop) {
+                        const delay = parseInt(delayMsInput.value) || 500;
+                        setTimeout(processNext, delay);
+                    }
+                }
+                return;
+            }
+            
+            // Generic response for Device Edit (some servers return different format)
+            if (pendingRequestId !== null && data.res) {
+                log(`✅ ID ${pendingRequestId} - ответ получен`, 'success');
+                pendingRequestId = null;
+                
+                if (isProcessing && !shouldStop) {
+                    const delay = parseInt(delayMsInput.value) || 500;
+                    setTimeout(processNext, delay);
+                }
+            }
+        }
+        
+        function sendDeviceEdit(deviceId) {
+            const cols = {
+                id: String(deviceId),
+                iccid: "",
+                phone: ""
+            };
+            
+            if (workstatusCheckbox.checked) {
+                cols.workstatus = "1";
+            }
+            
+            const req = {
+                name: "Device Edit",
+                type: "etbl",
+                mid: 2,
+                act: "rowsave",
+                cols: cols,
+                usr: authUser,
+                pwd: authPwd,
+                uid: authUid,
+                lang: "en"
+            };
+            
+            pendingRequestId = deviceId;
+            log(`📤 Отправка: ID ${deviceId}`, 'info');
+            return sendRequest(req);
+        }
+        
+        function parseDeviceIds() {
+            const text = deviceIdsTextarea.value.trim();
+            if (!text) return [];
+            
+            return text.split(/[\n\r]+/)
+                .map(line => line.trim())
+                .filter(line => line && /^\d+$/.test(line));
+        }
+        
+        function processNext() {
+            if (shouldStop || currentIndex >= deviceIdsList.length) {
+                finishProcessing();
+                return;
+            }
+            
+            const deviceId = deviceIdsList[currentIndex];
+            currentIndex++;
+            updateProgress();
+            
+            if (!sendDeviceEdit(deviceId)) {
+                log(`❌ Не удалось отправить запрос для ID ${deviceId}`, 'error');
+                // Continue anyway
+                const delay = parseInt(delayMsInput.value) || 500;
+                setTimeout(processNext, delay);
+            }
+        }
+        
+        function startProcessing() {
+            if (!isLoggedIn) {
+                log('Необходимо авторизоваться', 'error');
+                return;
+            }
+            
+            deviceIdsList = parseDeviceIds();
+            if (deviceIdsList.length === 0) {
+                log('Список ID пуст или содержит некорректные значения', 'error');
+                return;
+            }
+            
+            log(`🚀 Начало обработки ${deviceIdsList.length} устройств`, 'info');
+            
+            isProcessing = true;
+            shouldStop = false;
+            currentIndex = 0;
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            updateStatus('🟡 Обработка...', 'processing');
+            updateProgress();
+            
+            processNext();
+        }
+        
+        function stopProcessing() {
+            shouldStop = true;
+            log('⏹ Остановка...', 'warn');
+        }
+        
+        function finishProcessing() {
+            isProcessing = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            
+            if (shouldStop) {
+                log(`⏹ Остановлено на ${currentIndex} из ${deviceIdsList.length}`, 'warn');
+                updateStatus('🟢 Подключено (остановлено)', 'connected');
+            } else {
+                log(`✅ Завершено: обработано ${deviceIdsList.length} устройств`, 'success');
+                updateStatus('🟢 Подключено (завершено)', 'connected');
+            }
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        startBtn.addEventListener('click', startProcessing);
+        stopBtn.addEventListener('click', stopProcessing);
+        clearLogBtn.addEventListener('click', () => { logDiv.innerHTML = ''; });
+        
+        // Auto-connect on load
+        // connect();
+    </script>
+</body>
+</html>

@@ -13,6 +13,44 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 });
+
+// Close overlays with Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    // Close vehicle overlay
+    var vehicleOv = document.getElementById('vehicleOverlay');
+    if (vehicleOv && vehicleOv.style.display !== 'none' && vehicleOv.style.display !== '') {
+      vehicleOv.style.display = 'none';
+      return;
+    }
+    // Close device status overlay
+    var deviceStatusOv = document.getElementById('deviceStatusOverlay');
+    if (deviceStatusOv && deviceStatusOv.style.display !== 'none' && deviceStatusOv.style.display !== '') {
+      // Clear filters before closing
+      try {
+        var gsi = document.getElementById('deviceStatusSearchInput'); if(gsi) gsi.value = '';
+        var gsi2 = document.getElementById('deviceStatusShowSearchInput'); if(gsi2) gsi2.value = '';
+        deviceStatusColumnFilters = {};
+        deviceStatusSortState = { column: null, dir: 1 };
+      } catch(ex){}
+      deviceStatusOv.style.display = 'none';
+      return;
+    }
+    // Close reports overlay
+    var reportsOv = document.getElementById('reportsOverlay');
+    if (reportsOv && reportsOv.style.display !== 'none' && reportsOv.style.display !== '') {
+      reportsOv.style.display = 'none';
+      return;
+    }
+    // Close SQL modal
+    var sqlMod = document.getElementById('sqlModal');
+    if (sqlMod && sqlMod.style.display !== 'none' && sqlMod.style.display !== '') {
+      sqlMod.style.display = 'none';
+      return;
+    }
+  }
+});
+
 // Simple HTML escape helper
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');
