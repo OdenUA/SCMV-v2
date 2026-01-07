@@ -3,39 +3,90 @@
   // Ensure dependencies exist
   function safeGetId(id){ try{ return document.getElementById(id); }catch(e){ return null; } }
   var auditBtn = safeGetId('auditBtn');
+
   // Build audit request payload
   function buildAuditReq(tableName){
     var dateFrom = '';
-    try{ dateFrom = buildLocalDateParam(dateFromInput && dateFromInput.value ? dateFromInput.value : '', false); }catch(e){ dateFrom = (dateFromInput && dateFromInput.value) ? dateFromInput.value : ''; }
+    // Global dateFromInput might be available
+    var inp = safeGetId('dateFrom'); 
+    try{ dateFrom = buildLocalDateParam(inp && inp.value ? inp.value : '', false); }catch(e){ dateFrom = (inp && inp.value) ? inp.value : ''; }
+    
+    // Fallback to defaults or global auth vars
     return {
       name: 'Audit',
       type: 'etbl',
       mid: 4,
       act: 'filter',
       filter: [ { selectedpgdatefrom: [ dateFrom ] }, { selectedtable: [ tableName ] } ],
-      usr: authUser,
-      pwd: authPwd,
-      uid: authUid,
+      usr: window.authUser,
+      pwd: window.authPwd,
+      uid: window.authUid,
       lang: 'en'
     }; 
   }
 
-  // Simple pretty formatter for auditorig/auditnewd strings: best-effort line breaks
-  function prettifyAuditBlob(s){
-    if(!s) return '';
-    try{
-      var t = String(s).trim();
-      // remove leading/trailing braces
-      if(t[0] === '{' && t[t.length-1] === '}') t = t.slice(1, -1);
-      // insert line breaks before keys: find occurrences of ' "key"' or '"key"' patterns
-      // We'll replace occurrences of '" ' (quote+space) that precede a '"' with '",\n"' — best-effort
-      // First, ensure double quotes are present
-      t = t.replace(/"\s+"/g, '",\n"');
-      // Also put each key on new line if key starts with a quote
-      t = t.replace(/\s*"([a-zA-Z0-9_]+)\":/g, '\n"$1":');
-      t = t.replace(/^\n+/,'');
-      return '{\n' + t + '\n}';
-    }catch(e){ return String(s); }
+  // Robust parser for broken JSON from audit logs
+  function parseAuditJson(str) {
+    if (!str) return null;
+    try {
+        // First try standard parse
+        return JSON.parse(str);
+    } catch(e) {
+        // Fallback: fix missing commas
+        var s = String(str).trim();
+        if (s.startsWith('{')) s = s.substring(1);
+        if (s.endsWith('}')) s = s.substring(0, s.length - 1);
+        s = s.trim();
+        // Insert commas between value-ends and next key
+        // value-ends: digit, quote, 'e' (true/false), 'l' (null), '}', ']'
+        // We look for patterns like: val "nextkey":
+        s = s.replace(/([0-9"l}e])\s*("[\w]+":)/g, '$1,$2');
+        try {
+            return JSON.parse('{' + s + '}');
+        } catch(e2) {
+            return null; // Give up
+        }
+    }
+  }
+
+  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Compare two objects and return HTML summary
+  function formatAuditChanges(origStr, newStr) {
+    var oldObj = parseAuditJson(origStr);
+    var newObj = parseAuditJson(newStr);
+    
+    // If parsing failed for both, and they are empty/null
+    if (!oldObj && !newObj) {
+        if (origStr || newStr) return '<i style="color:gray; font-size:10px;">Raw (parse error)</i>'; 
+        return ''; 
+    }
+    
+    if (!oldObj) oldObj = {};
+    if (!newObj) newObj = {};
+    
+    var changes = [];
+    var allKeys = {};
+    for (var k in oldObj) allKeys[k] = true;
+    for (var k in newObj) allKeys[k] = true;
+    
+    for (var k in allKeys) {
+        if (k === 'sdate') continue; 
+        
+        var vOld = oldObj[k];
+        var vNew = newObj[k];
+        
+        // Simple string comparison
+        if (JSON.stringify(vOld) !== JSON.stringify(vNew)) {
+            var dispOld = (vOld === undefined) ? '<i>(null)</i>' : escapeHtml(String(vOld));
+            var dispNew = (vNew === undefined) ? '<i>(deleted)</i>' : escapeHtml(String(vNew));
+            
+            changes.push('<div style="margin-bottom:2px;"><span style="color:#666;font-weight:bold;">' + escapeHtml(k) + ':</span> ' + dispOld + ' &rarr; <b>' + dispNew + '</b></div>');
+        }
+    }
+    
+    if (changes.length === 0) return '<i>No changes</i>';
+    return changes.join('');
   }
 
   // Render combined audit results into an HTML string and open in new tab
@@ -52,51 +103,82 @@
     rows.sort(function(a,b){ try{ return new Date(b.sdate).getTime() - new Date(a.sdate).getTime(); }catch(e){ return 0; }});
 
     var html = ['<!doctype html><html><head><meta charset="utf-8"><title>Audit Results</title>',
-      '<style>body{font-family:Arial,Helvetica,sans-serif;padding:14px;color:#222} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px;vertical-align:top} th{background:#f6f6f6;text-align:left} pre{white-space:pre-wrap;font-family:monospace;font-size:12px;margin:0;background:#fff;padding:6px;border-radius:4px}</style>',
-      '</head><body>', '<h2>Audit Results ('+rows.length+' records)</h2>',
-      '<p><button id="downloadCsv">Download CSV</button> <button id="closeBtn">Close</button></p>',
-      '<table id="auditTable"><thead><tr><th>ID</th><th>Table</th><th>Date</th><th>User</th><th>Action</th><th>Original</th><th>New</th></tr></thead><tbody>'];
+      '<style>',
+      'body{font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; padding:20px; color:#333; background-color: #f9f9f9;}',
+      'table{border-collapse:collapse; width:100%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: #fff;}',
+      'th,td{border:1px solid #ddd; padding:10px 12px; vertical-align:top; font-size: 14px;}',
+      'th{background:#f1f1f1; text-align:left; font-weight: 600; color: #555;}',
+      'tr:nth-child(even) {background-color: #fcfcfc;}',
+      'tr:hover {background-color: #f1f7ff;}',
+      'button {padding: 8px 16px; cursor: pointer; background: #0078d4; color: white; border: none; border-radius: 4px; font-size: 14px;}',
+      'button:hover {background: #0060aa;}',
+      '.change-list div { white-space: normal; word-break: break-all; }', 
+      '</style>',
+      '</head><body>', 
+      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">',
+      '<h2 style="margin:0;">Audit Results ('+rows.length+' records)</h2>',
+      '<div><button id="downloadCsv">Download CSV</button> <button id="closeBtn" style="background:#888;">Close</button></div>',
+      '</div>',
+      '<table id="auditTable"><thead><tr>',
+      '<th style="width:50px;">ID</th>',
+      '<th style="width:80px;">Table</th>',
+      '<th style="width:140px;">Date</th>',
+      '<th style="width:60px;">User</th>',
+      '<th style="width:60px;">Action</th>',
+      '<th>Changes</th>',
+      '</tr></thead><tbody>'
+    ];
 
     rows.forEach(function(r){
       var id = r.id !== undefined ? String(r.id) : '';
       var tbl = r.tbl || '';
-      var sdate = r.sdate ? formatAnomalyTime(r.sdate) : (r.sdate || '');
+      var sdate = r.sdate ? (window.formatAnomalyTime ? window.formatAnomalyTime(r.sdate) : r.sdate) : (r.sdate || '');
       var uid = r.uid !== undefined ? String(r.uid) : '';
       var act = r.act || '';
       var orig = r.auditorig || '';
       var neu = r.auditnewd || '';
+      
+      // Calculate changes
+      var changesHtml = formatAuditChanges(orig, neu);
+
       html.push('<tr>');
       html.push('<td>'+escapeHtml(id)+'</td>');
       html.push('<td>'+escapeHtml(tbl)+'</td>');
       html.push('<td>'+escapeHtml(sdate)+'</td>');
       html.push('<td>'+escapeHtml(uid)+'</td>');
       html.push('<td>'+escapeHtml(act)+'</td>');
-      html.push('<td><pre>'+escapeHtml(prettifyAuditBlob(orig))+'</pre></td>');
-      html.push('<td><pre>'+escapeHtml(prettifyAuditBlob(neu))+'</pre></td>');
+      html.push('<td class="change-list">'+changesHtml+'</td>');
       html.push('</tr>');
     });
 
     html.push('</tbody></table>');
-    // Add small script to support CSV download and close
+    
+    // Add script for CSV
       var inlineScript = `
         function downloadCSV(){
           try{
             var rows = [];
-            var ths = document.querySelectorAll("#auditTable thead th");
-            var headers = [];
-            ths.forEach(function(h){ headers.push(h.textContent.trim()); });
+            // headers
+            var headers = ["ID", "Table", "Date", "User", "Action", "Changes"];
             rows.push(headers.join(","));
+            
             var trs = document.querySelectorAll("#auditTable tbody tr");
             trs.forEach(function(tr){
               var cells = [];
-              Array.prototype.forEach.call(tr.children, function(td){
-                var text = td.textContent || "";
-                text = text.replace(/\n/g, " ").replace(/\s+/g, ' ').trim();
-                cells.push('"' + text.replace(/"/g,'""') + '"');
-              });
+              // Standard cells
+              for(var i=0; i<5; i++) {
+                 var text = tr.children[i].textContent || "";
+                 cells.push('"' + text.replace(/"/g,'""') + '"');
+              }
+              // Changes cell: extract text properly
+              var changeCell = tr.children[5];
+              var changeText = changeCell.innerText || changeCell.textContent || "";
+              changeText = changeText.replace(/\\n/g, " | ").replace(/\\s+/g, ' ').trim();
+              cells.push('"' + changeText.replace(/"/g,'""') + '"');
+              
               rows.push(cells.join(","));
             });
-            var csv = rows.join('\n');
+            var csv = rows.join('\\n');
             var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
@@ -119,20 +201,14 @@
     w.document.open(); w.document.write(html.join('\n')); w.document.close();
   }
 
-  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
   // Handler invoked by ws.js when Audit data arrives
   window.__handleAuditResponse = function(data){
     try{
       if(!window.__auditPending) return false;
-      // we accept packets with name 'Audit'
       if(!data || data.name !== 'Audit') return false;
-      // store packet
       window.__auditPending.received.push(data);
-      // When we received both expected tables, or after a small timeout, render
       if(window.__auditPending.received.length >= window.__auditPending.expected){
         var recs = window.__auditPending.received.map(function(p){ return p; });
-        // clear pending
         clearTimeout(window.__auditPending._timer);
         var cb = window.__auditPending._cb;
         window.__auditPending = null;
@@ -142,22 +218,23 @@
     }catch(e){ console.warn('audit handler error', e); return false; }
   };
 
-  // Main send function: request both 'vehicle' and 'deviceconf' and render combined
+  // Main send function
   function requestAudit(){
-    if(!authLoggedIn){ alert('Please login first'); return; }
-    // prepare pending
+    if(!window.authLoggedIn){ alert('Please login first'); return; }
     window.__auditPending = { expected: 2, received: [], _cb: function(recs){ renderAuditWindow(recs); }, _timer: null };
-    // fallback timeout to render whatever we have after 6s
     window.__auditPending._timer = setTimeout(function(){ if(window.__auditPending){ var cb = window.__auditPending._cb; var recs = window.__auditPending.received.slice(); window.__auditPending = null; if(typeof cb==='function') cb(recs); } }, 6000);
     try{
       var req1 = buildAuditReq('vehicle');
       var req2 = buildAuditReq('deviceconf');
-      // send them spaced slightly apart
-      sendRequest(req1);
-      setTimeout(function(){ sendRequest(req2); }, 150);
+      if(window.sendRequest) {
+          window.sendRequest(req1);
+          setTimeout(function(){ window.sendRequest(req2); }, 150);
+      } else {
+          console.error("sendRequest is not defined");
+      }
     }catch(e){ console.warn('send audit failed', e); }
   }
 
-  // Wire button if present
+  // Wire button
   try{ if(auditBtn){ auditBtn.addEventListener('click', requestAudit); } }catch(e){ }
 })();
