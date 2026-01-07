@@ -560,8 +560,34 @@ function tryApplyFleetMapping() {
   applyTo(vehicleShowData);
 }
 
+// Function to merge model/imei from Vehicle Show into Vehicle Select Min
+window.mergeVehicleDetails = function() {
+  try {
+    if (!vehicleSelectMinData || !vehicleSelectMinData.length) return;
+    // Ensure we have something to merge, or at least initialize columns if requested
+    var showDataAvailable = (vehicleShowData && vehicleShowData.length);
+    var showMap = {};
+    if (showDataAvailable) {
+      vehicleShowData.forEach(function(r){ if(r.id) showMap[r.id] = r; });
+    }
+    // Merge into vehicleSelectMinData
+    vehicleSelectMinData.forEach(function(r){
+      // Initialize model/imei to ensure columns appear
+      if(r.model === undefined) r.model = '';
+      if(r.imei === undefined) r.imei = '';
+      
+      if(showDataAvailable && r && r.id && showMap[r.id]) {
+        var s = showMap[r.id];
+        if(s.model !== undefined) r.model = s.model;
+        if(s.imei !== undefined) r.imei = s.imei;
+        if(s.notes && !r.notes) r.notes = s.notes; 
+      }
+    });
+  } catch(e) { console.warn('mergeVehicleDetails failed', e); }
+};
+
 function updateDeviceTrackHeader() {
-  // Now displays only fleet | number in side panel header
+  // Now displays fleet | number | model in side panel header
   if (!vehicleMetaDisplay) return;
   if (selectedVehicleMeta) {
     var parts = [];
@@ -569,6 +595,10 @@ function updateDeviceTrackHeader() {
       parts.push(String(selectedVehicleMeta.fleet));
     if (selectedVehicleMeta.number != null && selectedVehicleMeta.number !== "")
       parts.push(String(selectedVehicleMeta.number));
+    // Add model if present
+    if (selectedVehicleMeta.model != null && selectedVehicleMeta.model !== "")
+      parts.push(String(selectedVehicleMeta.model));
+      
     vehicleMetaDisplay.textContent = parts.join(" | ");
   } else {
     vehicleMetaDisplay.textContent = "";
@@ -1942,6 +1972,8 @@ function toggleVehicleOverlay() {
         if (vehicleOverlayMode === 'selectMin') {
           // Request minimal select list (vehicle)
           try { requestVehicleSelectMin && requestVehicleSelectMin(); } catch(e){ console.warn('requestVehicleSelectMin failed', e); }
+          // Also request detailed list (Vehicle Show) to merge model/imei
+          setTimeout(function(){ try { requestVehicleShow && requestVehicleShow(); } catch(e){ console.warn('requestVehicleShow (combined) failed', e); } }, 50);
         } else if (vehicleOverlayMode === 'show') {
           // For show mode, choose between edit distribution or normal device list
           if (typeof vehicleShowMode !== 'undefined' && vehicleShowMode === 'edit') {

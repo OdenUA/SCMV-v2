@@ -13,7 +13,7 @@ function buildVehicleMeta(row) {
     });
     if (dynamicKey) numberVal = row[dynamicKey];
   }
-  return { id: row.id, fleet: row.fleet, number: numberVal || "" };
+  return { id: row.id, fleet: row.fleet, number: numberVal || "", model: row.model || "" };
 }
 function parseRelativeDurationToMs(str) {
   if (!str || typeof str !== "string") return null;

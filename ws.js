@@ -188,6 +188,7 @@ function connect() {
             vehicleShowData = packet.f.slice();
             vehicleShowData.forEach(function (r, i) { if (r && r.__origIndex === undefined) r.__origIndex = i; });
             tryApplyFleetMapping();
+            if (typeof mergeVehicleDetails === 'function' && typeof vehicleOverlayMode !== 'undefined' && vehicleOverlayMode === 'selectMin') mergeVehicleDetails();
           } else {
             // we're currently editing — stash device-list payload so it can be applied later if needed
             try { window._vehicleShowPending = packet.f.slice(); } catch(_){}
@@ -196,6 +197,7 @@ function connect() {
           vehicleSelectMinData = packet.f.slice();
           vehicleSelectMinData.forEach(function (r, i) { if (r && r.__origIndex === undefined) r.__origIndex = i; });
           tryApplyFleetMapping();
+          if (typeof mergeVehicleDetails === 'function' && typeof vehicleOverlayMode !== 'undefined' && vehicleOverlayMode === 'selectMin') mergeVehicleDetails();
         }
       }
       // Some 'init' responses return cols without f (no rows). Handle Device Status cols mapping here.
