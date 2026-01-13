@@ -2,7 +2,7 @@
 function showRouteToast(text, duration) {
   duration = duration || 3000;
   var div = document.createElement("div");
-  div.className = "route-toast";
+  div.className = "3";
   div.textContent = text;
   document.body.appendChild(div);
   setTimeout(function () {

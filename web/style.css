@@ -415,7 +415,7 @@ h2 {
 .route-mode-active .rt-control .rt-toggle{background:#198754;color:#fff;}
 
 /* Route toast */
-.route-toast{position:fixed;top:20px;right:20px;background:#000;color:#fff;padding:8px 12px;border-radius:4px;z-index:10000;font-size:13px;max-width:280px;opacity:0;animation:toast-in .25s forwards;}
+.route-toast{position:fixed;top:350px;right:20px;background:#000;color:#fff;padding:8px 12px;border-radius:4px;z-index:10000;font-size:13px;max-width:280px;opacity:0;animation:toast-in .25s forwards;}
 @keyframes toast-in{to{opacity:1;}}
 
 /* Route point marker */
