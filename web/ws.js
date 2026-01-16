@@ -443,6 +443,25 @@ function connect() {
               
               delete pendingDeviceEditSaves[savedId];
               showRouteToast('Сохранено', 1200);
+              try{ hideLoadingOverlay(); }catch(_){}
+              
+              // Refresh data from server to ensure consistency
+              setTimeout(function(){
+                  var req = {
+                    name: "Device Edit",
+                    type: "etbl",
+                    mid: 2,
+                    act: "setup",
+                    filter: [],
+                    nowait: true,
+                    waitfor: [],
+                    usr: authUser,
+                    pwd: authPwd,
+                    uid: authUid,
+                    lang: "en"
+                  };
+                  sendRequest(req);
+              }, 200);
           }
        }
        return;
