@@ -335,7 +335,9 @@ function connect() {
             try { delete window.pendingVehicleSaves[pid]; } catch(_){}
           });
         }
-        showRouteToast('Ошибка: ' + errMsg, 3000);
+        // User requested ALERT instead of toast for errors, and ensure spinner is hidden
+        alert('Ошибка сохранения:\n\n' + errMsg);
+        try{ hideLoadingOverlay(); }catch(_){}
       } catch(e){ console.warn('Vehicle Edit Distribution error handling failed', e); }
       return;
     }
@@ -420,7 +422,8 @@ function connect() {
        } else if (isError) {
            // Error handling for Device Edit
            var errMsg = (r && r.msg) || data.msg || (data.ern ? ('Error #' + data.ern) : 'Ошибка сохранения');
-           showRouteToast('Ошибка: ' + errMsg, 5000);
+           // User requested ALERT instead of toast for errors
+           alert('Ошибка сохранения:\n\n' + errMsg);
            try{ hideLoadingOverlay(); }catch(_){}
            
            // Restore UI state if pending save exists
