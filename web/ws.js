@@ -239,158 +239,105 @@ function connect() {
       } catch (e) { console.warn('Render vehicle table failed', e); }
       return;
     }
-    if (data.res && data.res[0] && data.res[0].f) {
-      var responseData = data.res[0].f;
-      if (data.name === 'Device Status') {
-        try {
-          // if this packet contains cols mapping (init response), store maps for fleet/vehicle
-          try {
-            var pkt = data.res[0];
-            if (pkt && pkt.cols && Array.isArray(pkt.cols)) {
-              window.deviceStatusColMaps = window.deviceStatusColMaps || {};
-              pkt.cols.forEach(function(c){
-                try{
-                  if(c && Array.isArray(c.k) && c.k.length){
-                    var map = {};
-                    c.k.forEach(function(ent){ if(ent && ent.key!==undefined) map[String(ent.key)] = ent.val; });
-                    window.deviceStatusColMaps[c.f] = map;
-                  }
-                }catch(e){}
-              });
-            }
-          } catch(e){}
-          window.deviceStatusData = Array.isArray(responseData) ? responseData.slice() : [];
-          try { if (typeof renderDeviceStatusTable === 'function') renderDeviceStatusTable(); } catch(_){ }
-          try { var overlay = document.getElementById('deviceStatusOverlay'); if (overlay) overlay.style.display = 'block'; } catch(_){ }
-          // Hide global loading overlay after Device Status UI is rendered
-          try{ hideLoadingOverlay(); }catch(_){ }
-        } catch(e) { console.warn('Device Status handling failed', e); }
-        return;
-      }
-      if (data.name === "Startstop accumulation") {
-        if (Array.isArray(responseData)) {
-          if(!window._suppressRawTrackStops){
-            processStartstopAccumulationServerData(responseData);
-            rebuildStopMarkers();
-            renderStartstopStopsTable();
-          }
-          if (
-            Object.keys(mileageStopCoords).length === 0 &&
-            !mileageAutoRequested
-          ) {
-            mileageAutoRequested = true;
-            requestAutoMileageReport();
-          }
-        }
-        return;
-      } else if (data.name === "Startstop Sum Result") {
-        populateTable(
-          startstopSumResultTbody,
-          startstopSumResultThead,
-          responseData
-        );
-        return;
-      }
-      // Handle Vehicle Edit Distribution save confirmations/errors
-      if (data.name === 'Vehicle Edit Distribution') {
-        var colsPayload = data.cols || (data.res && data.res[0] && data.res[0].cols) || null;
-        var r = data.res && data.res[0] ? data.res[0] : null;
+    // Handle Vehicle Edit Distribution save confirmations/errors
+    if (data.name === 'Vehicle Edit Distribution') {
+      var colsPayload = data.cols || (data.res && data.res[0] && data.res[0].cols) || null;
+      var r = data.res && data.res[0] ? data.res[0] : null;
 
-        // Check for ERROR first (ern defined or msg contains error keywords)
-        var isError = (data.ern !== undefined && data.ern !== 0) || (r && r.ern !== undefined && r.ern !== 0) || (data.msg && (data.msg.indexOf('ERROR')!==-1 || data.msg.indexOf('failed')!==-1));
-        
-        // If server returned cols for saved row AND no explicit error, treat as success
-        if (!isError && colsPayload && colsPayload.id) {
-          try {
-            var savedId = String(colsPayload.id);
-            console.debug('Vehicle Edit Distribution: save confirmation received for id=', savedId, 'cols=', colsPayload);
-            var pending = window.pendingVehicleSaves && window.pendingVehicleSaves[savedId];
-            if (pending) {
-              // update vehicleShowData row if present
-              if (window.vehicleShowData && Array.isArray(window.vehicleShowData)) {
-                var row = window.vehicleShowData.find(function(x){ return String(x.id) === savedId; });
-                if (row) {
-                  Object.keys(colsPayload).forEach(function(k){
-                    row[k] = colsPayload[k];
-                  });
-                  tryApplyFleetMapping();
-                }
-              }
-              // finalize UI: replace editable inputs by new text
-              try {
-                var tr = pending.tr;
-                Object.keys(pending.newValues || {}).forEach(function(k){
-                    var headers = Array.prototype.slice.call(vehicleTableHead.querySelectorAll('tr:first-child th')).map(function(th){ return (th.dataset && th.dataset.key) ? th.dataset.key : th.textContent.replace(/ ▲| ▼$/,''); });
-                  var idx = headers.indexOf(k);
-                  if (idx === -1) return;
-                  var cell = tr.children[idx];
-                  if (!cell) return;
-                  var newVal = colsPayload[k] !== undefined ? String(colsPayload[k]) : pending.newValues[k];
-                  cell.textContent = newVal;
-                });
-                  // re-enable and reset button label
-                  try { pending.btn.disabled = false; pending.btn.textContent = 'Редактировать'; pending.btn.dataset.editing = '0'; } catch(e){}
-                  // re-enable any other edit buttons
-                  try { document.querySelectorAll('.vehicle-edit-btn').forEach(function(b){ try{ b.disabled = false; }catch(_){}}); } catch(_){}
-                } catch (e) { console.warn('Finalize saved row UI failed', e); }
-              // clear pending
-                try { 
-                  // remove cancel button if present
-                  try { if (pending.btn && pending.btn._cancelBtn && pending.btn._cancelBtn.parentNode) pending.btn._cancelBtn.parentNode.removeChild(pending.btn._cancelBtn); } catch(_){}
-                  delete window.pendingVehicleSaves[savedId]; 
-                } catch(_){}
-              showRouteToast('Сохранено', 1200);
-              // Request fresh edit distribution data to refresh overlay
-              try {
-                setTimeout(function(){
-                  try { updateStatus('Обновление данных после сохранения...', 'blue', 1200); }catch(_){ }
-                  try {
-                    window._vehicleShowForceApply = true;
-                    console.debug('Vehicle Edit: set _vehicleShowForceApply = true and scheduling refresh request');
-                    var req = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
-                    sendRequest(req);
-                    console.debug('Vehicle Edit: refresh request sent', req);
-                  } catch(e){ console.warn('refresh Vehicle Edit Distribution request failed', e); }
-                }, 200);
-              } catch (_) {}
-              return;
-            }
-          } catch(e){ console.warn('Vehicle Edit Distribution save handling error', e); }
-        }
-        // If not success, consider error path: look for ern or msg
-        // If we reached here, it likely indicates an error. Restore pending if exists
+      // Check for ERROR first (ern defined or msg contains error keywords)
+      var isError = (data.ern !== undefined && data.ern !== 0) || (r && r.ern !== undefined && r.ern !== 0) || (data.msg && (data.msg.indexOf('ERROR')!==-1 || data.msg.indexOf('failed')!==-1));
+      
+      // If server returned cols for saved row AND no explicit error, treat as success
+      if (!isError && colsPayload && colsPayload.id) {
         try {
-          var errMsg = (r && r.msg) || data.msg || (r && r.ern !== undefined ? ('err#'+r.ern) : 'Ошибка сохранения');
-          console.debug('Vehicle Edit Distribution: save error detected, msg=', errMsg, 'data=', data);
-          // try to find any pending and restore
-          if (window.pendingVehicleSaves) {
-            Object.keys(window.pendingVehicleSaves).forEach(function(pid){
-              var p = window.pendingVehicleSaves[pid];
-              try {
-                var tr = p.tr;
-                // restore original values
-                Object.keys(p.originalValues || {}).forEach(function(k){
-                  var headers = Array.prototype.slice.call(vehicleTableHead.querySelectorAll('tr:first-child th')).map(function(th){ return (th.dataset && th.dataset.key) ? th.dataset.key : th.textContent.replace(/ ▲| ▼$/,''); });
-                  var idx = headers.indexOf(k);
-                  if (idx === -1) return;
-                  var cell = tr.children[idx];
-                  if (!cell) return;
-                  cell.textContent = p.originalValues[k] || '';
+          var savedId = String(colsPayload.id);
+          console.debug('Vehicle Edit Distribution: save confirmation received for id=', savedId, 'cols=', colsPayload);
+          var pending = window.pendingVehicleSaves && window.pendingVehicleSaves[savedId];
+          if (pending) {
+            // update vehicleShowData row if present
+            if (window.vehicleShowData && Array.isArray(window.vehicleShowData)) {
+              var row = window.vehicleShowData.find(function(x){ return String(x.id) === savedId; });
+              if (row) {
+                Object.keys(colsPayload).forEach(function(k){
+                  row[k] = colsPayload[k];
                 });
-                try { 
-                  p.btn.disabled = false; p.btn.textContent = 'Редактировать'; p.btn.dataset.editing = '0'; 
-                  try { if (p.btn && p.btn._cancelBtn && p.btn._cancelBtn.parentNode) p.btn._cancelBtn.parentNode.removeChild(p.btn._cancelBtn); } catch(_){}
-                } catch(_){}
-                  // re-enable any other edit buttons
-                  try { document.querySelectorAll('.vehicle-edit-btn').forEach(function(b){ try{ b.disabled = false; }catch(_){}}); } catch(_){}
-              } catch(e){}
-              try { delete window.pendingVehicleSaves[pid]; } catch(_){}
-            });
+                tryApplyFleetMapping();
+              }
+            }
+            // finalize UI: replace editable inputs by new text
+            try {
+              var tr = pending.tr;
+              Object.keys(pending.newValues || {}).forEach(function(k){
+                  var headers = Array.prototype.slice.call(vehicleTableHead.querySelectorAll('tr:first-child th')).map(function(th){ return (th.dataset && th.dataset.key) ? th.dataset.key : th.textContent.replace(/ ▲| ▼$/,''); });
+                var idx = headers.indexOf(k);
+                if (idx === -1) return;
+                var cell = tr.children[idx];
+                if (!cell) return;
+                var newVal = colsPayload[k] !== undefined ? String(colsPayload[k]) : pending.newValues[k];
+                cell.textContent = newVal;
+              });
+                // re-enable and reset button label
+                try { pending.btn.disabled = false; pending.btn.textContent = 'Редактировать'; pending.btn.dataset.editing = '0'; } catch(e){}
+                // re-enable any other edit buttons
+                try { document.querySelectorAll('.vehicle-edit-btn').forEach(function(b){ try{ b.disabled = false; }catch(_){}}); } catch(_){}
+              } catch (e) { console.warn('Finalize saved row UI failed', e); }
+            // clear pending
+              try { 
+                // remove cancel button if present
+                try { if (pending.btn && pending.btn._cancelBtn && pending.btn._cancelBtn.parentNode) pending.btn._cancelBtn.parentNode.removeChild(pending.btn._cancelBtn); } catch(_){}
+                delete window.pendingVehicleSaves[savedId]; 
+              } catch(_){}
+            showRouteToast('Сохранено', 1200);
+            // Request fresh edit distribution data to refresh overlay
+            try {
+              setTimeout(function(){
+                try { updateStatus('Обновление данных после сохранения...', 'blue', 1200); }catch(_){ }
+                try {
+                  window._vehicleShowForceApply = true;
+                  console.debug('Vehicle Edit: set _vehicleShowForceApply = true and scheduling refresh request');
+                  var req = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
+                  sendRequest(req);
+                  console.debug('Vehicle Edit: refresh request sent', req);
+                } catch(e){ console.warn('refresh Vehicle Edit Distribution request failed', e); }
+              }, 200);
+            } catch (_) {}
+            return;
           }
-          showRouteToast('Ошибка: ' + errMsg, 3000);
-        } catch(e){ console.warn('Vehicle Edit Distribution error handling failed', e); }
-        return;
+        } catch(e){ console.warn('Vehicle Edit Distribution save handling error', e); }
       }
+      // If not success, consider error path: look for ern or msg
+      // If we reached here, it likely indicates an error. Restore pending if exists
+      try {
+        var errMsg = (r && r.msg) || data.msg || (r && r.ern !== undefined ? ('err#'+r.ern) : 'Ошибка сохранения');
+        console.debug('Vehicle Edit Distribution: save error detected, msg=', errMsg, 'data=', data);
+        // try to find any pending and restore
+        if (window.pendingVehicleSaves) {
+          Object.keys(window.pendingVehicleSaves).forEach(function(pid){
+            var p = window.pendingVehicleSaves[pid];
+            try {
+              var tr = p.tr;
+              // restore original values
+              Object.keys(p.originalValues || {}).forEach(function(k){
+                var headers = Array.prototype.slice.call(vehicleTableHead.querySelectorAll('tr:first-child th')).map(function(th){ return (th.dataset && th.dataset.key) ? th.dataset.key : th.textContent.replace(/ ▲| ▼$/,''); });
+                var idx = headers.indexOf(k);
+                if (idx === -1) return;
+                var cell = tr.children[idx];
+                if (!cell) return;
+                cell.textContent = p.originalValues[k] || '';
+              });
+              try { 
+                p.btn.disabled = false; p.btn.textContent = 'Редактировать'; p.btn.dataset.editing = '0'; 
+                try { if (p.btn && p.btn._cancelBtn && p.btn._cancelBtn.parentNode) p.btn._cancelBtn.parentNode.removeChild(p.btn._cancelBtn); } catch(_){}
+              } catch(_){}
+                // re-enable any other edit buttons
+                try { document.querySelectorAll('.vehicle-edit-btn').forEach(function(b){ try{ b.disabled = false; }catch(_){}}); } catch(_){}
+            } catch(e){}
+            try { delete window.pendingVehicleSaves[pid]; } catch(_){}
+          });
+        }
+        showRouteToast('Ошибка: ' + errMsg, 3000);
+      } catch(e){ console.warn('Vehicle Edit Distribution error handling failed', e); }
+      return;
     }
 
     // Handle Device Edit responses
@@ -405,8 +352,6 @@ function connect() {
            deviceEditData = pkt.f.slice();
            try { if(typeof renderDeviceEditTable === 'function') renderDeviceEditTable(); } catch(_){}
            setTimeout(function(){ try{ hideLoadingOverlay(); }catch(_){} }, 100);
-           // If overlay not visible, show it (unless this was a silent update)
-           // But normally we only fetch when opening, so it should be fine.
        }
        // Check for rowsave confirmation (cols payload with id)
        // Check for ERROR first
@@ -471,7 +416,6 @@ function connect() {
                   };
                   sendRequest(req);
               }, 200);
-
           }
        } else if (isError) {
            // Error handling for Device Edit
@@ -480,18 +424,8 @@ function connect() {
            try{ hideLoadingOverlay(); }catch(_){}
            
            // Restore UI state if pending save exists
-           var errCols = colsPayload || {};
-           var errId = String(errCols.id || errCols.ID || '');
-           // attempt to find ID in pending saves even if not in payload (not easy if payload missing)
-           // If we have single pending save relative to this action...
            if (pendingDeviceEditSaves) {
-                // If ID is known, revert only that. If not, maybe iterate?
-                // Usually error response returns same payload.
                 Object.keys(pendingDeviceEditSaves).forEach(function(pid){
-                     // If we have an ID in response matching, or if we just want to revert all pending?
-                     // Let's assume response matches if ID present.
-                     if (errId && String(pid) !== String(errId)) return;
-                     
                      var p = pendingDeviceEditSaves[pid];
                      try {
                          var tr = p.tr;
@@ -523,6 +457,60 @@ function connect() {
        }
        return;
     }
+
+    if (data.res && data.res[0] && data.res[0].f) {
+      var responseData = data.res[0].f;
+      if (data.name === 'Device Status') {
+        try {
+          // if this packet contains cols mapping (init response), store maps for fleet/vehicle
+          try {
+            var pkt = data.res[0];
+            if (pkt && pkt.cols && Array.isArray(pkt.cols)) {
+              window.deviceStatusColMaps = window.deviceStatusColMaps || {};
+              pkt.cols.forEach(function(c){
+                try{
+                  if(c && Array.isArray(c.k) && c.k.length){
+                    var map = {};
+                    c.k.forEach(function(ent){ if(ent && ent.key!==undefined) map[String(ent.key)] = ent.val; });
+                    window.deviceStatusColMaps[c.f] = map;
+                  }
+                }catch(e){}
+              });
+            }
+          } catch(e){}
+          window.deviceStatusData = Array.isArray(responseData) ? responseData.slice() : [];
+          try { if (typeof renderDeviceStatusTable === 'function') renderDeviceStatusTable(); } catch(_){ }
+          try { var overlay = document.getElementById('deviceStatusOverlay'); if (overlay) overlay.style.display = 'block'; } catch(_){ }
+          // Hide global loading overlay after Device Status UI is rendered
+          try{ hideLoadingOverlay(); }catch(_){ }
+        } catch(e) { console.warn('Device Status handling failed', e); }
+        return;
+      }
+      if (data.name === "Startstop accumulation") {
+        if (Array.isArray(responseData)) {
+          if(!window._suppressRawTrackStops){
+            processStartstopAccumulationServerData(responseData);
+            rebuildStopMarkers();
+            renderStartstopStopsTable();
+          }
+          if (
+            Object.keys(mileageStopCoords).length === 0 &&
+            !mileageAutoRequested
+          ) {
+            mileageAutoRequested = true;
+            requestAutoMileageReport();
+          }
+        }
+        return;
+      } else if (data.name === "Startstop Sum Result") {
+        populateTable(
+          startstopSumResultTbody,
+          startstopSumResultThead,
+          responseData
+        );
+        return;
+      }
+
     trackLayerGroup.clearLayers();
   // Remove previously displayed parking markers and gap-lines on any new track/data response
     try {
