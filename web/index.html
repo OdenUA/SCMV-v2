@@ -62,6 +62,7 @@
     <span class="btn-label">Device Status</span>
   </button>
   <button id="editVehicleBtn" class="btn" title="Редактировать распределение устройств">Edit Vehicle</button>
+  <button id="editDeviceBtn" class="btn" title="Редактировать параметры устройств">Edit Device</button>
   <button id="auditBtn" class="btn" title="Аудит изменений">Audit</button>
   <button id="reportsBtn" class="btn" title="Отчеты">Reports</button>
       <!-- status dot only (no username) -->
@@ -533,6 +534,38 @@
               <div id="reportProgressFill" style="height:100%; background:#4CAF50; width:0%; transition:width 0.3s;"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Edit Device Overlay -->
+    <div id="deviceEditOverlay" class="vehicle-overlay" style="display:none;">
+      <div id="deviceEditOverlayContent" class="vehicle-overlay-content">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Edit Device</h2>
+          <button id="closeDeviceEditOverlayBtn" class="btn btn-danger">Закрыть</button>
+          <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
+             <!-- Placeholder for potential export/extra buttons if needed -->
+          </div>
+        </div>
+        
+        <div class="vehicle-overlay-toolbar">
+          <input
+            id="deviceEditSearchInput"
+            type="text"
+            placeholder="Глобальный поиск..."
+            class="vehicle-search-input"
+          />
+          <button id="deviceEditResetFilters" class="btn btn-secondary">
+            Сброс
+          </button>
+        </div>
+        <div class="vehicle-overlay-body">
+          <table id="deviceEditTable" class="vehicle-table">
+            <thead id="deviceEditTableHead"></thead>
+            <tbody id="deviceEditTableBody"></tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -388,6 +388,65 @@ function connect() {
         return;
       }
     }
+
+    // Handle Device Edit responses
+    if (data.name === 'Device Edit') {
+       // Check for cols (init response)
+       var pkt = (data.res && data.res[0]) ? data.res[0] : null;
+       if (pkt && pkt.cols) {
+          deviceEditColumns = pkt.cols.map(function(c){ return c.f; });
+       }
+       // Check for rows (setup response)
+       if (pkt && pkt.f) {
+           deviceEditData = pkt.f.slice();
+           try { if(typeof renderDeviceEditTable === 'function') renderDeviceEditTable(); } catch(_){}
+           setTimeout(function(){ try{ hideLoadingOverlay(); }catch(_){} }, 100);
+           // If overlay not visible, show it (unless this was a silent update)
+           // But normally we only fetch when opening, so it should be fine.
+       }
+       // Check for rowsave confirmation (cols payload with id)
+       var colsPayload = data.cols || (pkt && pkt.cols) || null;
+       if (colsPayload && (colsPayload.id || colsPayload.ID)) {
+          var savedId = String(colsPayload.id || colsPayload.ID);
+          console.debug('Device Edit: save confirmation id=', savedId, colsPayload);
+          
+          if (pendingDeviceEditSaves[savedId]) {
+              var p = pendingDeviceEditSaves[savedId];
+              // Update local data
+              var row = deviceEditData.find(function(r){ return String(r.id) === savedId; });
+              if (row) {
+                  Object.keys(colsPayload).forEach(function(k){ row[k] = colsPayload[k]; });
+              }
+              // Update UI row
+              var tr = p.tr;
+              if (tr) {
+                  var headers = deviceEditColumns.slice();
+                  if(headers.indexOf('Action')===-1) headers.push('Action');
+                  
+                  headers.forEach(function(col, idx){
+                      if (col === 'Action') return;
+                      var cell = tr.children[idx];
+                      if(!cell) return;
+                      var newVal = colsPayload[col] !== undefined ? String(colsPayload[col]) : (p.newValues[col]);
+                      cell.textContent = newVal;
+                  });
+              }
+              // Revert button state
+              try {
+                  p.btn.disabled = false;
+                  p.btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Редактировать';
+                  p.btn.dataset.editing = '0';
+                  if (p.btn._cancelBtn && p.btn._cancelBtn.parentNode) p.btn._cancelBtn.parentNode.removeChild(p.btn._cancelBtn);
+              } catch(_){}
+               // Re-enable other buttons
+               try { document.querySelectorAll('#deviceEditTable .vehicle-edit-btn').forEach(function(b){ b.disabled = false; }); } catch(_){}
+              
+              delete pendingDeviceEditSaves[savedId];
+              showRouteToast('Сохранено', 1200);
+          }
+       }
+       return;
+    }
     trackLayerGroup.clearLayers();
   // Remove previously displayed parking markers and gap-lines on any new track/data response
     try {
@@ -567,7 +626,7 @@ function sendRequest(req) {
   try{
     // Show global loading overlay for overlay-related requests so user sees dim + spinner
     try{
-      if(req && req.name && (req.name === 'Vehicle Show' || req.name === 'Vehicle Edit Distribution' || req.name === 'Device Status' || req.name === 'Vehicle Select Min')){
+      if(req && req.name && (req.name === 'Vehicle Show' || req.name === 'Vehicle Edit Distribution' || req.name === 'Device Status' || req.name === 'Vehicle Select Min' || req.name === 'Device Edit')){
         try{ showLoadingOverlay('Загрузка...'); }catch(_){ }
       }
     }catch(_){ }

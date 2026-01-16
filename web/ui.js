@@ -48,6 +48,12 @@ document.addEventListener('keydown', function(e) {
       sqlMod.style.display = 'none';
       return;
     }
+    // Close Device Edit overlay
+    var deviceEditOv = document.getElementById('deviceEditOverlay');
+    if (deviceEditOv && deviceEditOv.style.display !== 'none' && deviceEditOv.style.display !== '') {
+      deviceEditOv.style.display = 'none';
+      return;
+    }
   }
 });
 
@@ -66,6 +72,16 @@ function init() {
         if (rememberCheckbox) rememberCheckbox.checked = true;
       }
   })();
+
+  if (document.getElementById('editDeviceBtn')) {
+    document.getElementById('editDeviceBtn').addEventListener('click', function(){
+      ensureDeviceEditOverlay();
+      if (deviceEditOverlay) {
+        deviceEditOverlay.style.display = 'block';
+        requestDeviceEdit();
+      }
+    });
+  }
 
   if (loginBtn) {
     loginBtn.addEventListener("click", function (e) {
@@ -2139,4 +2155,353 @@ function toggleParkingMarkersVisibility() {
       trackLayerGroup.removeLayer(m);
     });
   }
+}
+// ---------------------------------------------------------------------
+// Edit Device Overlay Logic
+// ---------------------------------------------------------------------
+
+var deviceEditOverlay = null;
+var deviceEditTableHead = null;
+var deviceEditTableBody = null;
+var closeDeviceEditOverlayBtn = null;
+var deviceEditData = [];
+var deviceEditFilteredData = null;
+var deviceEditColumns = [];
+var deviceEditColumnFilters = {};
+var deviceEditSortState = { column: null, dir: 1 };
+var pendingDeviceEditSaves = {}; // map id -> { btn, tr, originalValues, newValues }
+
+function requestDeviceEdit() {
+  if (!authLoggedIn) {
+    showRouteToast("⚠ Сначала выполните вход");
+    return;
+  }
+  // Init request to get columns
+  var initReq = {
+    name: "Device Edit",
+    type: "etbl",
+    mid: 2,
+    act: "init",
+    usr: authUser,
+    pwd: authPwd,
+    uid: authUid,
+    lang: "en"
+  };
+  // Setup request to get data
+  var setupReq = {
+    name: "Device Edit",
+    type: "etbl",
+    mid: 2,
+    act: "setup",
+    filter: [],
+    nowait: true,
+    waitfor: [],
+    usr: authUser,
+    pwd: authPwd,
+    uid: authUid,
+    lang: "en"
+  };
+  try { setReqStart && setReqStart('Device Edit'); } catch(_){}
+  sendRequest(initReq);
+  setTimeout(function(){ sendRequest(setupReq); updateStatus('Запрос Edit Device...', 'blue', 3000); }, 150);
+}
+
+function ensureDeviceEditOverlay() {
+  if (!deviceEditOverlay) deviceEditOverlay = document.getElementById("deviceEditOverlay");
+  if (!deviceEditTableHead) deviceEditTableHead = document.getElementById("deviceEditTableHead");
+  if (!deviceEditTableBody) deviceEditTableBody = document.getElementById("deviceEditTableBody");
+  if (!closeDeviceEditOverlayBtn) closeDeviceEditOverlayBtn = document.getElementById("closeDeviceEditOverlayBtn");
+  
+  var searchInput = document.getElementById("deviceEditSearchInput");
+  var resetBtn = document.getElementById("deviceEditResetFilters");
+
+  if (closeDeviceEditOverlayBtn && !closeDeviceEditOverlayBtn.dataset.bound) {
+    closeDeviceEditOverlayBtn.addEventListener("click", function () {
+      if (deviceEditOverlay) deviceEditOverlay.style.display = "none";
+    });
+    closeDeviceEditOverlayBtn.dataset.bound = "1";
+  }
+
+  if (searchInput && !searchInput.dataset.bound) {
+    searchInput.addEventListener("input", function () {
+      renderDeviceEditTable();
+    });
+    searchInput.dataset.bound = "1";
+  }
+
+  if (resetBtn && !resetBtn.dataset.bound) {
+    resetBtn.addEventListener("click", function () {
+      if (searchInput) searchInput.value = "";
+      deviceEditSortState = { column: null, dir: 1 };
+      deviceEditColumnFilters = {};
+      renderDeviceEditTable();
+    });
+    resetBtn.dataset.bound = "1";
+  }
+}
+
+function toggleDeviceEditSort(column) {
+  if (deviceEditSortState.column === column) {
+    deviceEditSortState.dir *= -1;
+  } else {
+    deviceEditSortState.column = column;
+    deviceEditSortState.dir = 1;
+  }
+  renderDeviceEditTable();
+}
+
+function applyDeviceEditFilters() {
+  var searchInput = document.getElementById("deviceEditSearchInput");
+  var term = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : "";
+  
+  if (!deviceEditData) { deviceEditFilteredData = null; return; }
+
+  // Use generic filter helper
+  var headers = deviceEditData.length ? Object.keys(deviceEditData[0]) : (deviceEditColumns || []);
+  
+  var filtered = filterTableData({
+     data: deviceEditData,
+     headers: headers,
+     globalTerm: term,
+     columnFilters: deviceEditColumnFilters,
+     renderCellValue: function(v){ return v == null ? '' : String(v); }
+  });
+
+  // Sorting
+  if (deviceEditSortState && deviceEditSortState.column) {
+    var col = deviceEditSortState.column;
+    var dir = deviceEditSortState.dir;
+    filtered.sort(function(a,b){
+       var av = a[col], bv = b[col];
+       if (av == null && bv == null) return 0;
+       if (av == null) return 1;
+       if (bv == null) return -1;
+       if (!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) return (parseFloat(av) - parseFloat(bv)) * dir;
+       return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
+    });
+  }
+  deviceEditFilteredData = filtered;
+}
+
+function renderDeviceEditTable() {
+  if (!deviceEditData || !deviceEditData.length) {
+    if (deviceEditTableHead) deviceEditTableHead.innerHTML = "";
+    if (deviceEditTableBody) deviceEditTableBody.innerHTML = "<tr><td>Нет данных</td></tr>";
+    return;
+  }
+  
+  if (!deviceEditColumns.length) deviceEditColumns = Object.keys(deviceEditData[0]);
+  
+  // Capture focus logic for column filters
+  var activeEl = document.activeElement;
+  var activeCol = (activeEl && activeEl.dataset && activeEl.dataset.edcolumn) ? activeEl.dataset.edcolumn : null;
+  var caretPos = (activeEl && typeof activeEl.selectionStart === "number") ? activeEl.selectionStart : null;
+
+  applyDeviceEditFilters();
+  var data = deviceEditFilteredData || deviceEditData;
+  
+  if (deviceEditTableHead) deviceEditTableHead.innerHTML = "";
+  if (deviceEditTableBody) deviceEditTableBody.innerHTML = "";
+  
+  var headers = deviceEditColumns.slice();
+  if (headers.indexOf("Action") === -1) headers.push("Action");
+  
+  // Header Row
+  var trHead = document.createElement("tr");
+  trHead.className = 'vehicle-filter-row';
+  headers.forEach(function(h){
+    var th = document.createElement("th");
+    th.textContent = h;
+    th.style.cursor = "pointer";
+    th.addEventListener("click", function(){ toggleDeviceEditSort(h); });
+    if (deviceEditSortState.column === h) {
+      th.textContent += (deviceEditSortState.dir === 1 ? " ▲" : " ▼");
+    }
+    trHead.appendChild(th);
+  });
+  deviceEditTableHead.appendChild(trHead);
+  
+  // Filter Row
+  var filterRow = document.createElement("tr");
+  filterRow.className = "vehicle-filter-row sticky-filter-row";
+  headers.forEach(function(h){
+     var thf = document.createElement("th");
+     if (h !== "Action") {
+       var inp = document.createElement("input");
+       inp.type = "text";
+       inp.placeholder = "Фильтр";
+       if (deviceEditColumnFilters[h]) inp.value = deviceEditColumnFilters[h];
+       inp.dataset.edcolumn = h;
+       inp.addEventListener("input", function(){
+         deviceEditColumnFilters[h] = inp.value;
+         renderDeviceEditTable();
+       });
+       thf.appendChild(inp);
+     }
+     filterRow.appendChild(thf);
+  });
+  deviceEditTableHead.appendChild(filterRow);
+  
+  // Sticky headers setup
+  try {
+     var headRow = deviceEditTableHead.querySelector('tr');
+     if (headRow) {
+         Array.prototype.slice.call(headRow.querySelectorAll('th')).forEach(function(th){
+             th.style.position = 'sticky';
+             th.style.top = '0px';
+             th.style.zIndex = 3;
+             th.style.background = '#f8f9fa';
+         });
+         var headerH = headRow.offsetHeight || 0;
+         var overlayBody = deviceEditOverlay ? deviceEditOverlay.querySelector('.vehicle-overlay-body') : null;
+         if (overlayBody) overlayBody.style.setProperty('--vehicle-table-filter-top', headerH + 'px');
+     }
+  } catch(e){}
+
+  // Restore focus
+  if (activeCol) {
+    var newInput = deviceEditTableHead.querySelector('input[data-edcolumn="' + activeCol + '"]');
+    if (newInput) {
+      newInput.focus();
+      if (caretPos != null) try{ newInput.selectionStart = newInput.selectionEnd = caretPos; }catch(_){}
+    }
+  }
+
+  // Render Rows
+  var frag = document.createDocumentFragment();
+  data.forEach(function(row){
+    var tr = document.createElement("tr");
+    headers.forEach(function(h){
+      var td = document.createElement("td");
+      if (h === 'Action') {
+         td.className = 'action-cell';
+         var editBtn = document.createElement('button');
+         editBtn.className = 'btn btn-warning btn-xs vehicle-edit-btn'; // reuse vehicle edit styling
+         editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Редактировать';
+         editBtn.dataset.editing = '0';
+         
+         editBtn.addEventListener('click', function(ev){
+            ev.stopPropagation();
+            var editing = editBtn.dataset.editing === '1';
+            
+            if (!editing) {
+               // ENTER EDIT MODE
+               editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Сохранить';
+               editBtn.dataset.editing = '1';
+               
+               // Disable other edit buttons
+               try {
+                 document.querySelectorAll('#deviceEditTable .vehicle-edit-btn').forEach(function(b){ if(b!==editBtn) b.disabled = true; });
+               } catch(_){}
+               
+               // Create Cancel button
+               var cancelBtn = document.createElement('button');
+               cancelBtn.className = 'btn btn-secondary btn-xs';
+               cancelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>Отменить';
+               cancelBtn.addEventListener('click', function(ev2){
+                 ev2.stopPropagation();
+                 // Restore values
+                 headers.forEach(function(col, idx){
+                   if (col === 'Action') return;
+                   var cell = tr.children[idx];
+                   if (!cell) return;
+                   var orig = cell.getAttribute('data-orig');
+                   cell.textContent = orig != null ? orig : '';
+                   cell.removeAttribute('data-orig');
+                 });
+                 // Revert button state
+                 editBtn.dataset.editing = '0';
+                 editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Редактировать';
+                 editBtn.disabled = false;
+                 // Re-enable other buttons
+                 try { document.querySelectorAll('#deviceEditTable .vehicle-edit-btn').forEach(function(b){ b.disabled = false; }); } catch(_){}
+                 if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+                 // remove pending save
+                 var rid = String(row && row.id || '');
+                 if (pendingDeviceEditSaves[rid]) delete pendingDeviceEditSaves[rid];
+               });
+               editBtn._cancelBtn = cancelBtn;
+               td.appendChild(cancelBtn);
+               
+               // Convert cells to inputs
+               headers.forEach(function(col, idx){
+                 if (col === 'Action') return;
+                 var cell = tr.children[idx];
+                 if (!cell) return;
+                 // If ID column, maybe read-only? User "Edit Vehicle" doesn't edit IDs usually, but let's assume all editable based on request except maybe 'date' or generated fields.
+                 // For now make all editable except ID.
+                 if (col.toLowerCase() === 'id') return; 
+
+                 var val = cell.textContent || '';
+                 cell.setAttribute('data-orig', val);
+                 var inp = document.createElement('input');
+                 inp.type = 'text';
+                 inp.value = val;
+                 inp.style.width = '100%';
+                 cell.innerHTML = '';
+                 cell.appendChild(inp);
+               });
+               
+            } else {
+               // SAVE
+               var payload = {};
+               headers.forEach(function(col, idx){
+                 if (col === 'Action') return;
+                 var cell = tr.children[idx];
+                 if (!cell) return;
+                 var inp = cell.querySelector('input');
+                 if (inp) {
+                   payload[col] = inp.value;
+                   cell.textContent = inp.value; // temporarily update UI
+                 } else {
+                   // if no input (e.g. read only ID), keep original value
+                   payload[col] = cell.textContent;
+                 }
+               });
+               
+               if (row && row.id) payload.id = row.id;
+
+               editBtn.disabled = true;
+               
+               // Construct rowsave request
+               var cols = {};
+               Object.keys(payload).forEach(function(k){ cols[k] = String(payload[k]); });
+               
+               var req = {
+                 name: 'Device Edit',
+                 type: 'etbl',
+                 mid: 2,
+                 act: 'rowsave',
+                 cols: cols,
+                 usr: authUser,
+                 pwd: authPwd,
+                 uid: authUid,
+                 lang: 'en'
+               };
+               
+               // Store pending state for handling confirmation/error
+               var rid = String(payload.id || '');
+               var originalValues = {};
+               headers.forEach(function(col, idx){
+                   if (col === 'Action') return;
+                   var cell = tr.children[idx];
+                   if(!cell) return;
+                   originalValues[col] = cell.getAttribute('data-orig') || cell.textContent;
+               });
+               pendingDeviceEditSaves[rid] = { btn: editBtn, tr: tr, originalValues: originalValues, newValues: cols };
+               
+               sendRequest(req);
+               showRouteToast('Сохранение отправлено', 1600);
+            }
+         });
+         
+         td.appendChild(editBtn);
+      } else {
+        td.textContent = row[h] != null ? row[h] : "";
+      }
+      tr.appendChild(td);
+    });
+    frag.appendChild(tr);
+  });
+  deviceEditTableBody.appendChild(frag);
 }
