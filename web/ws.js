@@ -511,6 +511,8 @@ function connect() {
         return;
       }
 
+    } // Close if (data.res ...) block that contained Device Status and Startstop
+
     trackLayerGroup.clearLayers();
   // Remove previously displayed parking markers and gap-lines on any new track/data response
     try {
