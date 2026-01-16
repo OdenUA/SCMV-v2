@@ -2290,7 +2290,20 @@ function renderDeviceEditTable() {
     return;
   }
   
-  if (!deviceEditColumns.length) deviceEditColumns = Object.keys(deviceEditData[0]);
+  // Filter columns as requested: id, imei, iccid, phone, date
+  var allowedCols = ['id', 'imei', 'iccid', 'phone', 'date'];
+  
+  // If we have columns from init, filter them. If not, derive from data and filter.
+  if (deviceEditColumns.length) {
+    deviceEditColumns = deviceEditColumns.filter(function(c){ return allowedCols.indexOf(c) !== -1; });
+  } else if (deviceEditData.length) {
+    deviceEditColumns = Object.keys(deviceEditData[0]).filter(function(c){ return allowedCols.indexOf(c) !== -1; });
+  }
+  // Ensure strict order if desired, or just rely on filter order. 
+  // Let's enforce the order from allowedCols if present in data
+  deviceEditColumns = allowedCols.filter(function(c){ 
+    return deviceEditColumns.indexOf(c) !== -1; 
+  });
   
   // Capture focus logic for column filters
   var activeEl = document.activeElement;
