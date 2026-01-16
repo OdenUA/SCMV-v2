@@ -295,8 +295,12 @@ function connect() {
       if (data.name === 'Vehicle Edit Distribution') {
         var colsPayload = data.cols || (data.res && data.res[0] && data.res[0].cols) || null;
         var r = data.res && data.res[0] ? data.res[0] : null;
-        // If server returned cols for saved row (either top-level echo or in res), treat as success
-        if (colsPayload && colsPayload.id) {
+
+        // Check for ERROR first (ern defined or msg contains error keywords)
+        var isError = (data.ern !== undefined && data.ern !== 0) || (r && r.ern !== undefined && r.ern !== 0) || (data.msg && (data.msg.indexOf('ERROR')!==-1 || data.msg.indexOf('failed')!==-1));
+        
+        // If server returned cols for saved row AND no explicit error, treat as success
+        if (!isError && colsPayload && colsPayload.id) {
           try {
             var savedId = String(colsPayload.id);
             console.debug('Vehicle Edit Distribution: save confirmation received for id=', savedId, 'cols=', colsPayload);
@@ -405,8 +409,13 @@ function connect() {
            // But normally we only fetch when opening, so it should be fine.
        }
        // Check for rowsave confirmation (cols payload with id)
+       // Check for ERROR first
+       var r = (data.res && data.res[0]) ? data.res[0] : null;
+       var isError = (data.ern !== undefined && data.ern !== 0) || (r && r.ern !== undefined && r.ern !== 0) || (data.msg && (data.msg.indexOf('ERROR')!==-1 || data.msg.indexOf('failed')!==-1));
+
        var colsPayload = data.cols || (pkt && pkt.cols) || null;
-       if (colsPayload && (colsPayload.id || colsPayload.ID)) {
+       
+       if (!isError && colsPayload && (colsPayload.id || colsPayload.ID)) {
           var savedId = String(colsPayload.id || colsPayload.ID);
           console.debug('Device Edit: save confirmation id=', savedId, colsPayload);
           
@@ -462,7 +471,55 @@ function connect() {
                   };
                   sendRequest(req);
               }, 200);
+
           }
+       } else if (isError) {
+           // Error handling for Device Edit
+           var errMsg = (r && r.msg) || data.msg || (data.ern ? ('Error #' + data.ern) : 'Ошибка сохранения');
+           showRouteToast('Ошибка: ' + errMsg, 5000);
+           try{ hideLoadingOverlay(); }catch(_){}
+           
+           // Restore UI state if pending save exists
+           var errCols = colsPayload || {};
+           var errId = String(errCols.id || errCols.ID || '');
+           // attempt to find ID in pending saves even if not in payload (not easy if payload missing)
+           // If we have single pending save relative to this action...
+           if (pendingDeviceEditSaves) {
+                // If ID is known, revert only that. If not, maybe iterate?
+                // Usually error response returns same payload.
+                Object.keys(pendingDeviceEditSaves).forEach(function(pid){
+                     // If we have an ID in response matching, or if we just want to revert all pending?
+                     // Let's assume response matches if ID present.
+                     if (errId && String(pid) !== String(errId)) return;
+                     
+                     var p = pendingDeviceEditSaves[pid];
+                     try {
+                         var tr = p.tr;
+                         // restore original values
+                         if(p.originalValues) {
+                             Object.keys(p.originalValues).forEach(function(k){
+                               var headers = deviceEditColumns.slice();
+                               if(headers.indexOf('Action')===-1) headers.push('Action');
+                               var idx = headers.indexOf(k);
+                               if (idx === -1) return;
+                               var cell = tr.children[idx];
+                               if (!cell) return;
+                               cell.textContent = p.originalValues[k] || '';
+                             });
+                         }
+                         // restoration logic
+                          try {
+                              p.btn.disabled = false;
+                              p.btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Редактировать';
+                              p.btn.dataset.editing = '0';
+                              if (p.btn._cancelBtn && p.btn._cancelBtn.parentNode) p.btn._cancelBtn.parentNode.removeChild(p.btn._cancelBtn);
+                              // Re-enable other buttons
+                              try { document.querySelectorAll('#deviceEditTable .vehicle-edit-btn').forEach(function(b){ b.disabled = false; }); } catch(_){}
+                          } catch(_){}
+                     } catch(e){}
+                     delete pendingDeviceEditSaves[pid];
+                });
+           }
        }
        return;
     }
