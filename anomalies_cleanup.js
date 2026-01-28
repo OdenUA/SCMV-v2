@@ -88,11 +88,27 @@
       
       startTime: Date.now(),
       
+      // Queueing for Phase 1
+      queue: [],
+      activeRequests: 0,
+      maxConcurrency: 10,
+      
       // Phase 2
       totalTracks: 0,
       processedTracks: 0,
       currentCandidate: null
     };
+    
+    // Start Watchdog
+    if (window._acWatchdog) clearInterval(window._acWatchdog);
+    window._acWatchdog = setInterval(function() {
+        if (!cleanupInProgress) {
+             clearInterval(window._acWatchdog); 
+             return;
+        }
+        var elapsed = ((Date.now() - cleanupData.startTime)/1000).toFixed(0);
+        console.log('[AC Watchdog] ' + elapsed + 's | Phase 1: ' + cleanupData.currentMileageDone + '/' + cleanupData.totalMileage + ' (Pend: ' + cleanupData.pendingMileage + ', Active: ' + cleanupData.activeRequests + ', Queue: ' + cleanupData.queue.length + ') | Candidates: ' + cleanupData.candidates.length);
+    }, 5000);
     
     cleanupInProgress = true;
     updateProgressUI('Шаг 1/2: Анализ пробегов (запросы)...', 0);
@@ -100,9 +116,20 @@
     // BATCH REQUEST for Mileage (Phase 1)
     deviceIds.forEach(function(did) {
       dates.forEach(function(dt) {
-        sendMileageRequest(did, dt);
+        // Queue instead of send immediately
+        cleanupData.queue.push({did: did, dt: dt});
       });
     });
+    
+    processQueue();
+  }
+  
+  function processQueue() {
+      while (cleanupData.queue.length > 0 && cleanupData.activeRequests < cleanupData.maxConcurrency) {
+          var task = cleanupData.queue.shift();
+          cleanupData.activeRequests++;
+          sendMileageRequest(task.did, task.dt);
+      }
   }
 
   function parseDeviceIds(text) {
@@ -145,6 +172,7 @@
       lang: 'en'
     };
     cleanupData.pendingMileage++;
+    // console.log('[AC] Request Mileage:', deviceId, dateFrom);
     sendRequest(req);
   }
 
@@ -158,11 +186,29 @@
             if(f.selectedvihicleid) deviceId = f.selectedvihicleid[0];
             if(f.selectedpgdatefrom) dateFrom = f.selectedpgdatefrom[0];
         });
-    } catch(e){ return false; }
-    if(!deviceId || !dateFrom) return false;
+    } catch(e){ 
+        console.warn('[AC] Filter parse error', e);
+        return false; 
+    }
+    
+    if(!deviceId || !dateFrom) {
+        // console.warn('[AC] Missing deviceId or dateFrom in response', data);
+        return false;
+    }
 
+    // Is it ours? (simple check)
+    // If we are not running cleanup, we shouldn't steal responses, but the hook checks cleanupInProgress
+    
     cleanupData.pendingMileage--;
+    cleanupData.activeRequests--;
     cleanupData.currentMileageDone++;
+
+    // Console log for debugging the stuck state
+    if (cleanupData.currentMileageDone % 10 === 0 || cleanupData.pendingMileage < 5) {
+        console.log('[AC] Mileage Progress:', cleanupData.currentMileageDone, '/', cleanupData.totalMileage, 'Pending:', cleanupData.pendingMileage, 'Active:', cleanupData.activeRequests);
+    }
+    
+    processQueue(); // Trigger next batch
     
     // Parse
     var mileage = 0;
@@ -174,6 +220,7 @@
     }
 
     if (mileage > 3000) {
+      console.log('[AC] Found candidate > 3000:', deviceId, dateFrom, mileage);
       var dateKey = dateFrom.split(' ')[0];
       cleanupData.candidates.push({
         deviceId: deviceId,
@@ -200,8 +247,13 @@
 
   function checkMileageCompletion() {
     if (cleanupData.pendingMileage <= 0) {
+      console.log('[AC] Phase 1 Complete. Pending:', cleanupData.pendingMileage, 'Total Requests:', cleanupData.totalMileage, 'Processed:', cleanupData.currentMileageDone);
       // Small delay to ensure any lagging UI updates finish
       setTimeout(startTrackAnalysisPhase, 500);
+    } else if (cleanupData.currentMileageDone >= cleanupData.totalMileage) {
+        // Fallback catch-all if pending counting drifted
+        console.warn('[AC] Total processed matched total expected, forcing next phase. Pending was:', cleanupData.pendingMileage);
+        setTimeout(startTrackAnalysisPhase, 500);
     }
   }
 
