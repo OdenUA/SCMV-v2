@@ -118,6 +118,12 @@
       generateMonthlyMileageReport();
     } else if (reportType === 'weekly-breakdown') {
       generateWeeklyBreakdownReport();
+    } else if (reportType === 'anomalies-cleanup') {
+      if (typeof window.runAnomalyCleanup === 'function') {
+        window.runAnomalyCleanup();
+      } else {
+        showRouteToast('⚠ Модуль удаления аномалий не загружен');
+      }
     }
   }
 

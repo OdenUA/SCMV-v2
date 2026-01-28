@@ -357,6 +357,7 @@
     <script src="ws.js"></script>
   <script src="audit.js"></script>
   <script src="reports.js"></script>
+  <script src="anomalies_cleanup.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         initMap();
@@ -506,6 +507,7 @@
             <select id="reportTypeSelect" style="width:100%; padding:8px; font-size:14px;">
               <option value="monthly-mileage">Месячный пробег по устройствам</option>
               <option value="weekly-breakdown">Недельный пробег с разбивкой по дням</option>
+              <option value="anomalies-cleanup">SQL для удаления аномалий (>3000км)</option>
             </select>
           </div>
 
