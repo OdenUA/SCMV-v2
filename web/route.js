@@ -2,8 +2,20 @@
 function showRouteToast(text, duration) {
   duration = duration || 3000;
   var div = document.createElement("div");
-  div.className = "3";
+  div.className = "route-toast";
   div.textContent = text;
+  
+  // Position toast below filterPanel if visible
+  try {
+    var panel = document.getElementById('filterPanel');
+    if(panel && panel.getBoundingClientRect){
+      var rect = panel.getBoundingClientRect();
+      if(rect.bottom > 0) {
+        div.style.top = (rect.bottom + 10) + 'px';
+      }
+    }
+  } catch(e){}
+
   document.body.appendChild(div);
   setTimeout(function () {
     div.remove();

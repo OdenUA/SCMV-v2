@@ -1,0 +1,65 @@
+com.scmv.android.app-lifecycle-livedata-core-2.7.0-0 C:\Users\Izhe\.gradle\caches\transforms-4\00015a9ebf358a98041ff423f806ef6d\transformed\lifecycle-livedata-core-2.7.0\res
+com.scmv.android.app-ui-text-release-1 C:\Users\Izhe\.gradle\caches\transforms-4\05d3bc65bdc0a9e8f35a486e991d2e91\transformed\ui-text-release\res
+com.scmv.android.app-material-ripple-release-2 C:\Users\Izhe\.gradle\caches\transforms-4\0b52df7eab334e4153830491ef57d6af\transformed\material-ripple-release\res
+com.scmv.android.app-ui-tooling-data-release-3 C:\Users\Izhe\.gradle\caches\transforms-4\10e1792e1ba7a22576a968b3f5a95add\transformed\ui-tooling-data-release\res
+com.scmv.android.app-savedstate-1.2.1-4 C:\Users\Izhe\.gradle\caches\transforms-4\14907164f2d53f56b5c63f1f7c9b3e47\transformed\savedstate-1.2.1\res
+com.scmv.android.app-navigation-common-ktx-2.7.7-5 C:\Users\Izhe\.gradle\caches\transforms-4\15eaa16cbb6e5677c674d9324ef7547a\transformed\navigation-common-ktx-2.7.7\res
+com.scmv.android.app-core-ktx-1.12.0-6 C:\Users\Izhe\.gradle\caches\transforms-4\169b51f283d184516e7705ccae1edbd2\transformed\core-ktx-1.12.0\res
+com.scmv.android.app-ui-graphics-release-7 C:\Users\Izhe\.gradle\caches\transforms-4\16c192c68ef3315c5c415680625619bc\transformed\ui-graphics-release\res
+com.scmv.android.app-datastore-preferences-1.0.0-8 C:\Users\Izhe\.gradle\caches\transforms-4\1df09dd8c5b6789309375261692107c1\transformed\datastore-preferences-1.0.0\res
+com.scmv.android.app-lifecycle-viewmodel-savedstate-2.7.0-9 C:\Users\Izhe\.gradle\caches\transforms-4\1f0ba4ce6145fa1ebba3214ae42f445d\transformed\lifecycle-viewmodel-savedstate-2.7.0\res
+com.scmv.android.app-navigation-compose-2.7.7-10 C:\Users\Izhe\.gradle\caches\transforms-4\20d0f1c42cf58e271f3c9a72ade8122f\transformed\navigation-compose-2.7.7\res
+com.scmv.android.app-core-1.12.0-11 C:\Users\Izhe\.gradle\caches\transforms-4\210240c48da4fd9649c3cf57f0a92303\transformed\core-1.12.0\res
+com.scmv.android.app-animation-release-12 C:\Users\Izhe\.gradle\caches\transforms-4\23cbc210d91ef2789dbf654e91bbefb4\transformed\animation-release\res
+com.scmv.android.app-ui-unit-release-13 C:\Users\Izhe\.gradle\caches\transforms-4\2b50e6cc76ba3a3d28e3d6cc7c04d226\transformed\ui-unit-release\res
+com.scmv.android.app-lifecycle-runtime-compose-2.7.0-14 C:\Users\Izhe\.gradle\caches\transforms-4\36dc2aafec997fee3fd218402f07b6dc\transformed\lifecycle-runtime-compose-2.7.0\res
+com.scmv.android.app-lifecycle-viewmodel-compose-2.7.0-15 C:\Users\Izhe\.gradle\caches\transforms-4\3ec669b60ec9e3d5963dd3d03e4aaac4\transformed\lifecycle-viewmodel-compose-2.7.0\res
+com.scmv.android.app-ui-test-manifest-1.6.1-16 C:\Users\Izhe\.gradle\caches\transforms-4\4207d80cff93de90559aa199bbc985ad\transformed\ui-test-manifest-1.6.1\res
+com.scmv.android.app-annotation-experimental-1.4.0-17 C:\Users\Izhe\.gradle\caches\transforms-4\4fbb75f63b2641c57a85bb8dbee31550\transformed\annotation-experimental-1.4.0\res
+com.scmv.android.app-navigation-runtime-2.7.7-18 C:\Users\Izhe\.gradle\caches\transforms-4\5499265f6dc073c8aaa6a97b80289cbd\transformed\navigation-runtime-2.7.7\res
+com.scmv.android.app-runtime-release-19 C:\Users\Izhe\.gradle\caches\transforms-4\5530d06d3690bcf35062b1b827e65320\transformed\runtime-release\res
+com.scmv.android.app-customview-poolingcontainer-1.0.0-20 C:\Users\Izhe\.gradle\caches\transforms-4\55b0e008949df2772dc307be5985416c\transformed\customview-poolingcontainer-1.0.0\res
+com.scmv.android.app-navigation-runtime-ktx-2.7.7-21 C:\Users\Izhe\.gradle\caches\transforms-4\5819b0969e64c2c0f14d44bf9aeb6804\transformed\navigation-runtime-ktx-2.7.7\res
+com.scmv.android.app-emoji2-views-helper-1.3.0-22 C:\Users\Izhe\.gradle\caches\transforms-4\5bff123bdbb7fe85d9a4e8f39e7abf7b\transformed\emoji2-views-helper-1.3.0\res
+com.scmv.android.app-datastore-1.0.0-23 C:\Users\Izhe\.gradle\caches\transforms-4\624e6361c52bc12582cc9788844acc43\transformed\datastore-1.0.0\res
+com.scmv.android.app-fragment-1.5.1-24 C:\Users\Izhe\.gradle\caches\transforms-4\627e2b06b7075136e4f3e99a55b82ac6\transformed\fragment-1.5.1\res
+com.scmv.android.app-lifecycle-livedata-core-ktx-2.7.0-25 C:\Users\Izhe\.gradle\caches\transforms-4\66fc7ea165476519a9faecbc29350cc0\transformed\lifecycle-livedata-core-ktx-2.7.0\res
+com.scmv.android.app-core-runtime-2.2.0-26 C:\Users\Izhe\.gradle\caches\transforms-4\6be798bb149acaa2a2ddb6d7615b8ac2\transformed\core-runtime-2.2.0\res
+com.scmv.android.app-appcompat-1.6.1-27 C:\Users\Izhe\.gradle\caches\transforms-4\70f51efb1a277e5a74cd092f06e8753d\transformed\appcompat-1.6.1\res
+com.scmv.android.app-foundation-release-28 C:\Users\Izhe\.gradle\caches\transforms-4\77e732cc3e38dbb9e8a33f36a77fe479\transformed\foundation-release\res
+com.scmv.android.app-ui-util-release-29 C:\Users\Izhe\.gradle\caches\transforms-4\77eb1e320a27eb9661bd713a6aeaa39b\transformed\ui-util-release\res
+com.scmv.android.app-ui-geometry-release-30 C:\Users\Izhe\.gradle\caches\transforms-4\7977fddecee5f1c861a05f25e0ad6123\transformed\ui-geometry-release\res
+com.scmv.android.app-lifecycle-livedata-2.7.0-31 C:\Users\Izhe\.gradle\caches\transforms-4\7c4c3b99173c989db0d12b80bfcc8856\transformed\lifecycle-livedata-2.7.0\res
+com.scmv.android.app-osmdroid-android-6.1.18-32 C:\Users\Izhe\.gradle\caches\transforms-4\81b043d075047f6c7a5a1a9f06892b87\transformed\osmdroid-android-6.1.18\res
+com.scmv.android.app-profileinstaller-1.3.0-33 C:\Users\Izhe\.gradle\caches\transforms-4\827e32bb81e9f590b42737d34cf73b18\transformed\profileinstaller-1.3.0\res
+com.scmv.android.app-runtime-saveable-release-34 C:\Users\Izhe\.gradle\caches\transforms-4\83ec0c73d1eceb27d82080d543700ac3\transformed\runtime-saveable-release\res
+com.scmv.android.app-lifecycle-process-2.7.0-35 C:\Users\Izhe\.gradle\caches\transforms-4\8ea9f3b17647ad8cf9a55d2f32f19a4a\transformed\lifecycle-process-2.7.0\res
+com.scmv.android.app-foundation-layout-release-36 C:\Users\Izhe\.gradle\caches\transforms-4\93d6c31fcc23bddd557a45ba5d391492\transformed\foundation-layout-release\res
+com.scmv.android.app-material-release-37 C:\Users\Izhe\.gradle\caches\transforms-4\959f80b0f2ce84600684d050b28f13bc\transformed\material-release\res
+com.scmv.android.app-material-icons-core-release-38 C:\Users\Izhe\.gradle\caches\transforms-4\9ccb45a498eb73dcce875e289840d5bd\transformed\material-icons-core-release\res
+com.scmv.android.app-activity-ktx-1.8.2-39 C:\Users\Izhe\.gradle\caches\transforms-4\9d80a91a719ac77f51e9a7669f0eb69e\transformed\activity-ktx-1.8.2\res
+com.scmv.android.app-material-icons-extended-release-40 C:\Users\Izhe\.gradle\caches\transforms-4\a07075f32cf6cc29d4f6c8f9830b62e3\transformed\material-icons-extended-release\res
+com.scmv.android.app-savedstate-ktx-1.2.1-41 C:\Users\Izhe\.gradle\caches\transforms-4\b2af03419429277738f053cae8225bdb\transformed\savedstate-ktx-1.2.1\res
+com.scmv.android.app-ui-release-42 C:\Users\Izhe\.gradle\caches\transforms-4\b754292f973b56a8ba1a488a91d8632c\transformed\ui-release\res
+com.scmv.android.app-lifecycle-runtime-2.7.0-43 C:\Users\Izhe\.gradle\caches\transforms-4\b9a72c734aa4fccdfa5c15682655b1b4\transformed\lifecycle-runtime-2.7.0\res
+com.scmv.android.app-animation-core-release-44 C:\Users\Izhe\.gradle\caches\transforms-4\c0ccb44490d536c607e7a94970dec5eb\transformed\animation-core-release\res
+com.scmv.android.app-lifecycle-viewmodel-ktx-2.7.0-45 C:\Users\Izhe\.gradle\caches\transforms-4\c2ae78dadf5fb74fbbfa339c25702546\transformed\lifecycle-viewmodel-ktx-2.7.0\res
+com.scmv.android.app-hilt-navigation-compose-1.1.0-46 C:\Users\Izhe\.gradle\caches\transforms-4\c665a4f87cfabd76e4463e71f26252ce\transformed\hilt-navigation-compose-1.1.0\res
+com.scmv.android.app-navigation-common-2.7.7-47 C:\Users\Izhe\.gradle\caches\transforms-4\c693bc6cd0728e738b93c82f6ae412bf\transformed\navigation-common-2.7.7\res
+com.scmv.android.app-emoji2-1.3.0-48 C:\Users\Izhe\.gradle\caches\transforms-4\c8efda35797fe6474191348403df96cb\transformed\emoji2-1.3.0\res
+com.scmv.android.app-activity-compose-1.8.2-49 C:\Users\Izhe\.gradle\caches\transforms-4\cd519a1f45a925b727d30018e1f6dcf1\transformed\activity-compose-1.8.2\res
+com.scmv.android.app-material3-release-50 C:\Users\Izhe\.gradle\caches\transforms-4\d019286b0bdfbc74aea02a9fa10b450f\transformed\material3-release\res
+com.scmv.android.app-lifecycle-viewmodel-2.7.0-51 C:\Users\Izhe\.gradle\caches\transforms-4\d020d8c236bae0162ffbd8a669f765c2\transformed\lifecycle-viewmodel-2.7.0\res
+com.scmv.android.app-hilt-navigation-1.1.0-52 C:\Users\Izhe\.gradle\caches\transforms-4\dbcda21999ffd37b2662398ceb6e1f5d\transformed\hilt-navigation-1.1.0\res
+com.scmv.android.app-ui-tooling-release-53 C:\Users\Izhe\.gradle\caches\transforms-4\dc026e1bc8d3419a63a49b3614c82541\transformed\ui-tooling-release\res
+com.scmv.android.app-lifecycle-runtime-ktx-2.7.0-54 C:\Users\Izhe\.gradle\caches\transforms-4\e01e2cb9600aadbe6f9a36249893e711\transformed\lifecycle-runtime-ktx-2.7.0\res
+com.scmv.android.app-startup-runtime-1.1.1-55 C:\Users\Izhe\.gradle\caches\transforms-4\e4e273bcefcea91bb57b0ece08ab0821\transformed\startup-runtime-1.1.1\res
+com.scmv.android.app-activity-1.8.2-56 C:\Users\Izhe\.gradle\caches\transforms-4\e6d80d66c8b9f4f479442d1c68ff939b\transformed\activity-1.8.2\res
+com.scmv.android.app-ui-tooling-preview-release-57 C:\Users\Izhe\.gradle\caches\transforms-4\ecbbff35fb268f8e8a8c46a4445a3346\transformed\ui-tooling-preview-release\res
+com.scmv.android.app-appcompat-resources-1.6.1-58 C:\Users\Izhe\.gradle\caches\transforms-4\fb2373386b9429808fb2f08cd23676a7\transformed\appcompat-resources-1.6.1\res
+com.scmv.android.app-resValues-59 D:\scmv\SCMV v2\android\app\build\generated\res\resValues\debug
+com.scmv.android.app-packageDebugResources-60 D:\scmv\SCMV v2\android\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.scmv.android.app-packageDebugResources-61 D:\scmv\SCMV v2\android\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.scmv.android.app-debug-62 D:\scmv\SCMV v2\android\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.scmv.android.app-debug-63 D:\scmv\SCMV v2\android\app\src\debug\res
+com.scmv.android.app-main-64 D:\scmv\SCMV v2\android\app\src\main\res

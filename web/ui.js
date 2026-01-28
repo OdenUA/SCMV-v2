@@ -386,7 +386,7 @@ function init() {
       window._trackData = [];
   // Force points-only mode for Track Raw
   try { window.rawTrackRenderMode = 'points'; if(typeof window.updateRawTrackModeButton === 'function') window.updateRawTrackModeButton(); } catch(_){}
-  window._suppressRawTrackStops = true;
+  window._suppressRawTrackStops = false; 
       var trackReq = {
         name: "Vehicle Track",
         type: "map",
@@ -408,7 +408,6 @@ function init() {
 
   setReqStart && setReqStart('Vehicle Track');
   sendRequest(trackReq);
-      setTimeout(function(){ window._suppressRawTrackStops = false; }, 50);
     });
   }
 

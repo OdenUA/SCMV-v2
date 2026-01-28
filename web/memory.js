@@ -61,6 +61,9 @@
       if (typeof window._focusedIntervalIndex !== 'undefined') {
         window._focusedIntervalIndex = null;
       }
+      // Also clear Stops and Coordinates data for device switch
+      try { if (window.startstopStops) window.startstopStops = []; } catch(e){}
+      try { if (window.mileageStopCoords) window.mileageStopCoords = {}; } catch(e){}
 
       // 4. Reset state flags
       if (typeof window._devLogRequestedFull !== 'undefined') {
