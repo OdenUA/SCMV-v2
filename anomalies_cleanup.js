@@ -425,21 +425,22 @@
   function generateRecalcSql(statements) {
       var map = {};
       statements.forEach(function(s) {
-          try {
-             var mDid = s.match(/deviceid='([^']+)'/);
-             var mWdate = s.match(/wdate >= '([^']+)'/);
-             if (mDid && mWdate) {
-                 var did = mDid[1];
-                 var dateStr = mWdate[1].split(' ')[0]; // YYYY-MM-DD
-                 var key = did + '|' + dateStr;
-                 map[key] = { id: did, date: dateStr };
-             }
-          } catch(e) {}
+        try {
+         var mDid = s.match(/deviceid='([^']+)'/);
+         var mWdate = s.match(/wdate >= '([^']+)'/);
+         if (mDid && mWdate) {
+           var did = mDid[1];
+           var dateStr = mWdate[1].split(' ')[0]; // YYYY-MM-DD
+           var key = did + '|' + dateStr;
+           map[key] = { id: did, date: dateStr };
+         }
+        } catch(e) {}
       });
       var res = [];
       Object.keys(map).sort().forEach(function(k) {
-          var o = map[k];
-          res.push("select recalcstartstop(" + o.id + ", '" + o.date + "');");
+        var o = map[k];
+        // Use explicit SELECT, cast date to ::date and pass true flag
+        res.push("SELECT recalcstartstop(" + o.id + ", '" + o.date + "'::date, true);");
       });
       return res;
   }
