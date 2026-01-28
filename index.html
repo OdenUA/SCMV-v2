@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Device Track</title>
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      // Global error catcher to surface syntax/runtime errors early for debugging
+      window.onerror = function(message, source, lineno, colno, error) {
+        try {
+          console.error('Global error caught:', message, source, lineno, colno, error);
+          var st = document.getElementById('status');
+          if (st) st.textContent = 'JS error: ' + String(message).slice(0,200) + ' @ ' + (source || 'unknown') + ':' + (lineno||0);
+        } catch (e) {}
+        return false; // allow default handling as well
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+  </head>
+  <body>
+    <div class="login-panel">
+      <label>
+        Логин
+        <input type="text" id="loginUser" value="" />
+      </label>
+      <label>
+        Пароль
+        <input type="password" id="loginPassword" value="" />
+      </label>
+      <label class="remember-wrap">
+        <input
+          type="checkbox"
+          id="rememberCredentials"
+          class="remember-checkbox"
+        />
+        Запомнить
+      </label>
+      <button id="loginBtn" class="btn">Войти</button>
+  <button id="deviceListBtn" class="btn" title="Показать список устройств">Device List</button>
+  <button id="deviceStatusBtn" class="btn" title="Показать статус устройства">
+    <span class="btn-icon" aria-hidden="true">
+      <!-- Clock / alarm icon (inline SVG) -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <path d="M12 7V12L15 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M20.59 6.41A9 9 0 1 0 6.41 20.59 9 9 0 0 0 20.59 6.41z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M7.88 3.39L6.46 1.97" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16.12 3.39L17.54 1.97" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="btn-label">Device Status</span>
+  </button>
+  <button id="editVehicleBtn" class="btn" title="Редактировать распределение устройств">Edit Vehicle</button>
+  <button id="editDeviceBtn" class="btn" title="Редактировать параметры устройств">Edit Device</button>
+  <button id="auditBtn" class="btn" title="Аудит изменений">Audit</button>
+  <button id="reportsBtn" class="btn" title="Отчеты">Reports</button>
+      <!-- status dot only (no username) -->
+      <svg id="loginStatusDot" class="status-dot status-offline" width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="Offline" title="Offline">
+        <circle cx="6" cy="6" r="5"></circle>
+      </svg>
+    </div>
+
+    <!-- Removed main Device Track heading and hidden ID display per request -->
+    <div id="currentIdDisplay" data-hidden></div>
+
+    <div id="filterPanel" class="floating-panel">
+      <div class="panel-row">
+        <strong id="vehicleMetaDisplay"></strong>
+        <button id="filterPanelToggle">◀</button>
+      </div>
+      <label
+        >Device ID
+        <div class="input-with-btn">
+          <input type="number" id="deviceId" value="" />
+          <button
+            id="toggleVehicleBtn"
+            class="btn btn-secondary btn-inline"
+            type="button"
+          >
+            ТС
+          </button>
+        </div>
+      </label>
+      <label
+        >Дата с
+        <input type="datetime-local" id="dateFrom" />
+      </label>
+      <div style="display:flex; align-items:center; gap:4px; margin-bottom:2px;">
+        <span style="white-space:nowrap;">Дата по</span>
+  <button id="copyDateFromToBtn" type="button" class="btn btn-secondary btn-inline" style="font-size:12px; padding:2px 6px; line-height:1; vertical-align:middle;">⇐</button>
+      </div>
+      <input type="datetime-local" id="dateTo" style="margin-bottom:8px;" />
+      <style>
+        /* make action buttons uniform height */
+        .actions .btn { height:28px; padding:6px 6px; box-sizing:border-box; }
+      </style>
+      <div class="actions actions-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; align-items:center;">
+        <div id="actionTopLeft" style="padding-right:5px; box-sizing:border-box;">
+          <button id="sendMileageReport" class="btn" style="width:100%">Mileage</button>
+        </div>
+        <div id="actionTopRight" style="padding-left:5px; box-sizing:border-box;">
+          <div style="display:flex; gap:6px; align-items:center; width:100%;">
+            <button id="sendDeviceTrack" class="btn" style="flex:1 1 auto">Track</button>
+            <button id="sendFuelReport" class="btn btn-secondary" title="Fuel Report">Fuel</button>
+          </div>
+        </div>
+
+        <div id="actionBottomLeft" style="padding-right:5px; box-sizing:border-box;">
+          <button id="sendDeviceTrackRaw" class="btn" style="width:100%">Track Raw</button>
+        </div>
+        <div id="actionBottomRight" style="padding-left:5px; box-sizing:border-box; display:flex; align-items:center;">
+          <div id="devLogWrapper" style="display:flex; gap:6px; align-items:center; width:100%;">
+            <button id="sendDeviceLog" class="btn btn-secondary" style="flex:1 1 auto">Dev Log</button>
+            <button id="splitDevLogToggle" type="button" class="btn btn-secondary" aria-pressed="false" title="Split">Split</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Перенесено: кнопка скрытия направления теперь под картой -->
+      <div class="line-width">
+        <span>Толщина</span>
+  <input type="range" id="lineWidthSlider" min="1" max="10" value="2" />
+  <span id="lineWidthValue">2</span>
+      </div>
+  <div id="status" class="panel-status">Connecting...</div>
+  <div id="responseTime" class="panel-status" style="font-size:12px;color:#333;">Last response: —</div>
+    </div>
+  <!-- Floating panel toggle (persistent / hover reveal) -->
+  <button id="panelFabToggle" class="panel-fab" aria-pressed="true" title="Показать/скрыть панель">◀</button>
+    <div id="manualRouteInfo"></div>
+    <div id="mapContainer">
+      <div id="map"></div>
+      <div id="resizeHandle"></div>
+    </div>
+
+    <div class="main-content-wrapper">
+      <div class="left-column">
+        <div class="device-extra-grid">
+          <div class="table-container">
+            <h2>Device Alarm</h2>
+            <div class="table-scroll">
+              <table id="deviceAlarmTable">
+                <thead id="deviceAlarmThead"></thead>
+                <tbody id="deviceAlarmTbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="table-container">
+            <h2>Device Log</h2>
+            <div class="table-scroll">
+              <table id="deviceLogTable">
+                <thead id="deviceLogThead"></thead>
+                <tbody id="deviceLogTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div
+          id="fullDeviceTrackReportContainer"
+          style="display: none; margin-bottom: 10px"
+        >
+          <h3 style="margin: 4px 0">
+            Отчёт по интервалам
+            <span style="font-size: 11px; font-weight: 400"
+              >(Type: 1=ignition=false & ismoves=true, 2=sat&lt;10, 3=оба)</span
+            >
+          </h3>
+          <div
+            class="fdt-report-controls"
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin: 4px 0 6px;
+              flex-wrap: wrap;
+            "
+          >
+            <label
+              style="
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              "
+              >Мин сек
+              <input
+                id="fullTrackMinDuration"
+                type="number"
+                min="0"
+                value="60"
+                style="width: 70px; padding: 2px 4px"
+              />
+            </label>
+            <label
+              style="
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              "
+              >Sat &lt;
+              <input
+                id="fullTrackSatThreshold"
+                type="number"
+                min="1"
+                value="10"
+                style="width: 60px; padding: 2px 4px"
+                title="Порог числа спутников (интервалы когда меньше)"
+              />
+            </label>
+            <label
+              style="
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              "
+              >Merge gap ≤
+              <input
+                id="fullTrackMergeGap"
+                type="number"
+                min="0"
+                value="30"
+                style="width: 70px; padding: 2px 4px"
+                title="Объединение интервалов с паузой не более указанного количества секунд"
+              />
+            </label>
+            <button
+              id="fullTrackApplyFilterBtn"
+              class="btn btn-outline btn-xs"
+              type="button"
+            >
+              Применить
+            </button>
+            <button
+              id="fullTrackClearFocusBtn"
+              class="btn btn-secondary btn-xs"
+              type="button"
+              title="Снять выделение"
+            >
+              Сброс выделения
+            </button>
+          </div>
+          <div class="table-scroll" style="max-height: 200px">
+            <table id="fullDeviceTrackReportTable">
+              <thead id="fullDeviceTrackReportThead"></thead>
+              <tbody id="fullDeviceTrackReportTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-container" style="flex: 1 1 100%">
+          <div class="table-header">
+            <h2>Full Device Track (setup) <span id="fullDeviceTrackCount" style="font-weight:normal; font-size:13px; margin-left:8px;">0 записей</span></h2>
+            <div class="header-btn-group">
+              <button
+                id="reloadFullTrackBtn"
+                class="btn btn-outline"
+                title="Повторить загрузку полного трека"
+              >
+                ↻
+              </button>
+            </div>
+          </div>
+          <div
+            class="table-scroll"
+            id="fullDeviceTrackScroll"
+            style="max-height: 400px"
+          >
+            <table id="fullDeviceTrackTable">
+              <thead id="fullDeviceTrackThead"></thead>
+              <tbody id="fullDeviceTrackTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="right-column">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Аномалии трека устройства</h2>
+          </div>
+          <div class="table-scroll track-scroll">
+            <table id="resultTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-container">
+          <h2>Start/Stop Sum Result</h2>
+          <div class="table-scroll sum-scroll">
+            <table id="startstopSumResultTable">
+              <thead></thead>
+              <tbody id="startstopSumResultTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <h2>Start/Stop Accumulation</h2>
+          <div class="table-scroll">
+            <table id="startstopAccumulationTable">
+              <thead></thead>
+              <tbody id="startstopAccumulationTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="boundsDebugContainer" class="debug-container" data-hidden>
+          <h3>Лог аномалий "Вне границ"</h3>
+          <pre id="boundsDebugOutput"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full Raw Device Track Table -->
+    <div class="main-content-wrapper" style="margin-top: 18px">
+      <!--------=======================--->
+    </div>
+
+    <div id="sqlModal" class="modal" data-hidden>
+      <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>SQL для удаления аномалий</h2>
+        <div class="panel-row panel-gap">
+          <button id="copySqlBtn" class="btn">Копировать</button>
+          <span id="copySqlStatus">Скопировано</span>
+        </div>
+        <pre id="sql-output"></pre>
+      </div>
+    </div>
+
+    <!-- Modular classic scripts (order matters) -->
+    <script src="globals.js"></script>
+    <script src="utils.js"></script>
+    <script src="memory.js"></script>
+    <script src="map.js"></script>
+    <script src="route.js"></script>
+    <script src="stops.js"></script>
+    <script src="mileage.js"></script>
+    <script src="anomalies.js"></script>
+    <script src="device_track.js"></script>
+    <script src="device_log.js"></script>
+    <!-- SheetJS (XLSX) for client-side XLSX export -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="ui.js"></script>
+    <script src="ws.js"></script>
+  <script src="audit.js"></script>
+  <script src="reports.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        initMap();
+        connect();
+        init();
+        initDeviceLog();
+        if (typeof initReports === 'function') initReports();
+      });
+    </script>
+    <div id="vehicleOverlay" class="vehicle-overlay">
+      <div id="vehicleOverlayContent" class="vehicle-overlay-content">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Список ТС (Vehicle Select Min)</h2>
+          <button id="closeVehicleOverlayBtn" class="btn btn-danger">
+            Закрыть
+          </button>
+          <button id="vehicleAddBtn" class="btn btn-primary" title="Добавить устройство" style="margin-left:8px;display:none;">Add Vehicle</button>
+          <!-- Device List global search (visible only in Device List mode) -->
+          <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
+            <input id="vehicleShowSearchInput" type="text" placeholder="Поиск по Device List..." style="display:none; padding:4px 6px;" />
+            <button id="vehicleShowResetBtn" class="btn btn-secondary" style="display:none; margin-left:6px;">Сброс</button>
+            <button id="exportVehicleXlsBtnShow" class="btn btn-outline" style="display:none; margin-left:6px;">Export xls</button>
+          </div>
+        </div>
+        <!-- NOTE: пользовательское поле, сохраняемое между вызовами оверлея -->
+        <div class="vehicle-overlay-note" style="margin:6px 0 8px; display:flex; gap:8px; align-items:center;">
+          <label style="font-size:13px; white-space:nowrap;">Note:</label>
+          <input id="vehicleOverlayNoteInput" type="text" placeholder="Введите заметку..." style="flex:1 1 auto; padding:4px 6px;" />
+        </div>
+
+        <div class="vehicle-overlay-toolbar">
+          <input
+            id="vehicleSearchInput"
+            type="text"
+            placeholder="Глобальный поиск..."
+            class="vehicle-search-input"
+          />
+          <button id="vehicleResetFilters" class="btn btn-secondary">
+            Сброс
+          </button>
+          <button id="exportVehicleXlsBtn" class="btn btn-outline" title="Export visible Device List to XLS" style="margin-left:8px;">Export xls</button>
+          <div id="vehicleColorFilters" class="color-filter-group">
+            <span class="color-filter-label"></span>
+            <button
+              type="button"
+              class="color-filter-btn cf-color-facacaff"
+              data-cat=">365"
+              title=">365 дн"
+            >
+              365
+            </button>
+            <button
+              type="button"
+              class="color-filter-btn cf-color-fce3d3ff"
+              data-cat=">180"
+              title=">180 дн"
+            >
+              180
+            </button>
+            <button
+              type="button"
+              class="color-filter-btn cf-color-ffecc7ff"
+              data-cat=">30"
+              title=">30 дн"
+            >
+              30
+            </button>
+            <button
+              type="button"
+              class="color-filter-btn cf-color-fff7ecff active"
+              data-cat=">5"
+              title=">5 дн"
+            >
+              5
+            </button>
+            <button
+              type="button"
+              class="color-filter-btn cf-color-ffffff active"
+              data-cat="0"
+              title="0 дн"
+            >
+              0
+            </button>
+          </div>
+        </div>
+        <div class="vehicle-overlay-body">
+          <table id="vehicleTable" class="vehicle-table">
+            <thead id="vehicleTableHead"></thead>
+            <tbody id="vehicleTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Device Status overlay (mirrors Vehicle overlay controls) -->
+    <div id="deviceStatusOverlay" class="vehicle-overlay" style="display:none;">
+      <div id="deviceStatusOverlayContent" class="vehicle-overlay-content">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Device Status</h2>
+          <button id="closeDeviceStatusOverlay" class="btn btn-danger">Закрыть</button>
+          <button id="deviceStatusAddBtn" class="btn btn-primary" title="Добавить запись" style="margin-left:8px;display:none;">Add</button>
+          <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
+            <input id="deviceStatusShowSearchInput" type="text" placeholder="Поиск по Device Status..." style="display:none; padding:4px 6px;" />
+            <button id="deviceStatusShowResetBtn" class="btn btn-secondary" style="display:none; margin-left:6px;">Сброс</button>
+            <button id="exportDeviceStatusXlsBtnShow" class="btn btn-outline" style="display:none; margin-left:6px;">Export xls</button>
+          </div>
+        </div>
+        <div class="vehicle-overlay-note" style="margin:6px 0 8px; display:flex; gap:8px; align-items:center;">
+          <label style="font-size:13px; white-space:nowrap;">Note:</label>
+          <input id="deviceStatusOverlayNoteInput" type="text" placeholder="Введите заметку..." style="flex:1 1 auto; padding:4px 6px;" />
+        </div>
+
+        <div class="vehicle-overlay-toolbar">
+          <input id="deviceStatusSearchInput" type="text" placeholder="Глобальный поиск..." class="vehicle-search-input" />
+          <button id="deviceStatusResetFilters" class="btn btn-secondary">Сброс</button>
+          <button id="exportDeviceStatusXlsBtn" class="btn btn-outline" title="Export visible to XLS" style="margin-left:8px;">Export xls</button>
+          <div id="deviceStatusColorFilters" class="color-filter-group">
+            <span class="color-filter-label"></span>
+            <button type="button" class="color-filter-btn cf-color-facacaff" data-cat=">365" title=">365 дн">365</button>
+            <button type="button" class="color-filter-btn cf-color-fce3d3ff" data-cat=">180" title=">180 дн">180</button>
+            <button type="button" class="color-filter-btn cf-color-ffecc7ff" data-cat=">30" title=">30 дн">30</button>
+            <button type="button" class="color-filter-btn cf-color-fff7ecff active" data-cat=">5" title=">5 дн">5</button>
+            <button type="button" class="color-filter-btn cf-color-ffffff active" data-cat="0" title="0 дн">0</button>
+          </div>
+        </div>
+
+        <div class="vehicle-overlay-body">
+          <table id="deviceStatusTable" class="vehicle-table">
+            <thead id="deviceStatusTableHead"></thead>
+            <tbody id="deviceStatusTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports overlay -->
+    <div id="reportsOverlay" class="vehicle-overlay" style="display:none;">
+      <div class="vehicle-overlay-content" style="max-width:700px;">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Отчеты</h2>
+          <button id="closeReportsOverlay" class="btn btn-danger">Закрыть</button>
+        </div>
+
+        <div style="padding:20px;">
+          <!-- Report Type Selection -->
+          <div style="margin-bottom:20px;">
+            <label style="display:block; margin-bottom:8px; font-weight:bold;">Тип отчета:</label>
+            <select id="reportTypeSelect" style="width:100%; padding:8px; font-size:14px;">
+              <option value="monthly-mileage">Месячный пробег по устройствам</option>
+              <option value="weekly-breakdown">Недельный пробег с разбивкой по дням</option>
+            </select>
+          </div>
+
+          <!-- Monthly Mileage Report Parameters -->
+          <div id="monthlyMileageParams">
+            <div style="margin-bottom:20px;">
+              <label style="display:block; margin-bottom:8px; font-weight:bold;">Устройства (ID через запятую, пробел, tab, ; или новую строку):</label>
+              <textarea id="reportDeviceIds" rows="4" style="width:100%; padding:8px; font-size:14px; resize:vertical;" placeholder="Например: 123, 456, 789 или на отдельных строках"></textarea>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <label style="display:block; margin-bottom:8px; font-weight:bold;">Месяц:</label>
+              <input id="reportMonth" type="month" style="width:100%; padding:8px; font-size:14px;" />
+            </div>
+          </div>
+
+          <!-- Generate Button -->
+          <div style="text-align:center; margin-top:30px;">
+            <button id="generateReportBtn" class="btn btn-primary" style="padding:10px 30px; font-size:16px;">Сформировать отчет</button>
+          </div>
+
+          <!-- Progress/Status -->
+          <div id="reportStatus" style="margin-top:20px; padding:10px; background:#f0f0f0; border-radius:4px; display:none;">
+            <div id="reportProgress" style="margin-bottom:8px; font-weight:bold;"></div>
+            <div id="reportProgressBar" style="height:20px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
+              <div id="reportProgressFill" style="height:100%; background:#4CAF50; width:0%; transition:width 0.3s;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Edit Device Overlay -->
+    <div id="deviceEditOverlay" class="vehicle-overlay" style="display:none;">
+      <div id="deviceEditOverlayContent" class="vehicle-overlay-content">
+        <div class="vehicle-overlay-header">
+          <h2 class="vehicle-overlay-title">Edit Device</h2>
+          <button id="closeDeviceEditOverlayBtn" class="btn btn-danger">Закрыть</button>
+          <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
+             <!-- Placeholder for potential export/extra buttons if needed -->
+          </div>
+        </div>
+        
+        <div class="vehicle-overlay-toolbar">
+          <input
+            id="deviceEditSearchInput"
+            type="text"
+            placeholder="Глобальный поиск..."
+            class="vehicle-search-input"
+          />
+          <button id="deviceEditResetFilters" class="btn btn-secondary">
+            Сброс
+          </button>
+        </div>
+        <div class="vehicle-overlay-body">
+          <table id="deviceEditTable" class="vehicle-table">
+            <thead id="deviceEditTableHead"></thead>
+            <tbody id="deviceEditTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
