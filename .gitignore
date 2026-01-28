@@ -1,0 +1,11 @@
+# Ignore local and build artifacts
+node_modules/
+dist/
+/.env
+
+# Ignore examples folder (kept out of repo)
+examples/
+
+# OS files
+.DS_Store
+Thumbs.db
