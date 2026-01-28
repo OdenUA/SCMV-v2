@@ -1,0 +1,184 @@
+{
+    "name": "Device Edit",
+    "type": "etbl",
+    "mid": 2,
+    "act": "init",
+    "usr": "zheleznov",
+    "pwd": "a!540986",
+    "uid": 360,
+    "lang": "en",
+    "dstport": 55150,
+    "dstaddr": "127.0.0.1",
+    "srvport": 4445,
+    "srvaddr": "127.0.0.1",
+    "res": [
+        {
+            "cols": [
+                {
+                    "f": "id",
+                    "t": 2,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "id"
+                },
+                {
+                    "f": "imei",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "imei"
+                },
+                {
+                    "f": "workstatus",
+                    "t": 3,
+                    "k": [
+                        {
+                            "key": 1,
+                            "val": null
+                        },
+                        {
+                            "key": 2,
+                            "val": "Нерабочий, попала влага."
+                        },
+                        {
+                            "key": 3,
+                            "val": "Ремонт"
+                        },
+                        {
+                            "key": 6,
+                            "val": "0.5А \\ 1А"
+                        },
+                        {
+                            "key": 7,
+                            "val": " 0.5 А "
+                        }
+                    ],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "workstatus"
+                },
+                {
+                    "f": "debug",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "debug"
+                },
+                {
+                    "f": "proto",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "proto"
+                },
+                {
+                    "f": "maxinactive",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "wait"
+                },
+                {
+                    "f": "periodicaltime",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "periodicaltime"
+                },
+                {
+                    "f": "betweentimeout",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "part"
+                },
+                {
+                    "f": "iccid",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "iccid"
+                },
+                {
+                    "f": "phone",
+                    "t": 3,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "phone"
+                },
+                {
+                    "f": "date",
+                    "t": 4,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "date"
+                },
+                {
+                    "d": "yes",
+                    "f": null,
+                    "t": 47
+                },
+                {
+                    "d": "yes",
+                    "f": null,
+                    "t": 41
+                },
+                {
+                    "d": "yes",
+                    "f": null,
+                    "t": 44
+                },
+                {
+                    "d": "yes",
+                    "f": null,
+                    "t": 48
+                },
+                {
+                    "f": "id",
+                    "t": 1,
+                    "k": [],
+                    "q": [],
+                    "m": null,
+                    "c": " ",
+                    "d": "id"
+                },
+                {
+                    "d": "yes",
+                    "f": null,
+                    "t": 40
+                },
+                {
+                    "d": "selecteddeviceid",
+                    "f": "id",
+                    "t": 27
+                }
+            ],
+            "n": "Device Edit",
+            "ern": 0,
+            "msg": "ok"
+        }
+    ],
+    "ern": 0,
+    "msg": "ok"
+}

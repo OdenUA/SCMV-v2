@@ -1,0 +1,506 @@
+send:{"name":"Startstop accumulation","type":"etbl","mid":5,"act":"filter","filter":[{"selectedpgdatefrom":["2026-01-13T00:00:00.000Z"]},{"selectedvihicleid":["1633"]},{"selectedpgdateto":["2026-01-13T23:59:00.000Z"]}],"usr":"zheleznov","pwd":"pwd","uid":360,"lang":"en"}
+Received: {
+    "name": "Startstop accumulation",
+    "type": "etbl",
+    "mid": 5,
+    "act": "filter",
+    "filter": [
+        {
+            "selectedpgdatefrom": [
+                "2026-01-13T00:00:00.000Z"
+            ]
+        },
+        {
+            "selectedvihicleid": [
+                "1633"
+            ]
+        },
+        {
+            "selectedpgdateto": [
+                "2026-01-13T23:59:00.000Z"
+            ]
+        }
+    ],
+    "usr": "zheleznov",
+    "pwd": "a!540986",
+    "uid": 360,
+    "lang": "en",
+    "dstport": 45390,
+    "dstaddr": "127.0.0.1",
+    "srvport": 4445,
+    "srvaddr": "127.0.0.1",
+    "res": [
+        {
+            "f": [
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T00:00:00",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T06:21:42",
+                    "period": null,
+                    "dest": "0.23",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T06:26:39",
+                    "period": null,
+                    "dest": "0.11",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T06:27:40",
+                    "period": "00:05:03",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T06:32:43",
+                    "period": null,
+                    "dest": "0.90",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T06:37:33",
+                    "period": "00:18:13",
+                    "dest": "0",
+                    "marker": 43
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T06:55:46",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 43
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T06:55:58",
+                    "period": "01:08:17",
+                    "dest": "0",
+                    "marker": 43
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:04:15",
+                    "period": null,
+                    "dest": "0.74",
+                    "marker": 43
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:09:41",
+                    "period": null,
+                    "dest": "0.13",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T08:10:30",
+                    "period": "00:09:33",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:20:03",
+                    "period": null,
+                    "dest": "0.13",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:21:14",
+                    "period": null,
+                    "dest": "19.03",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T08:38:51",
+                    "period": "00:09:17",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:48:08",
+                    "period": null,
+                    "dest": "1.69",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T08:50:47",
+                    "period": null,
+                    "dest": "72.87",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T09:45:48",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T09:46:02",
+                    "period": "01:25:46",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:11:48",
+                    "period": null,
+                    "dest": "0.80",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:13:41",
+                    "period": null,
+                    "dest": "0.98",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T11:16:55",
+                    "period": "00:20:13",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:37:08",
+                    "period": null,
+                    "dest": "0.04",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:37:15",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:37:27",
+                    "period": null,
+                    "dest": "0.28",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:39:17",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:39:32",
+                    "period": null,
+                    "dest": "0.34",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:40:28",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:40:33",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:40:46",
+                    "period": null,
+                    "dest": "0.43",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T11:42:22",
+                    "period": "00:09:13",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:51:35",
+                    "period": null,
+                    "dest": "0.03",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:52:24",
+                    "period": null,
+                    "dest": "0.02",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T11:52:30",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T11:53:00",
+                    "period": "00:26:44",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:19:44",
+                    "period": null,
+                    "dest": "0.41",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:21:54",
+                    "period": null,
+                    "dest": "0.16",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:22:33",
+                    "period": null,
+                    "dest": "0.28",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T12:23:34",
+                    "period": "00:16:41",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:40:15",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:40:35",
+                    "period": null,
+                    "dest": "0.06",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:41:03",
+                    "period": null,
+                    "dest": "0.98",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:43:59",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T12:44:12",
+                    "period": "00:10:00",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:54:12",
+                    "period": null,
+                    "dest": "0.03",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:55:56",
+                    "period": null,
+                    "dest": "0.06",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:56:45",
+                    "period": null,
+                    "dest": "0.60",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T12:57:59",
+                    "period": null,
+                    "dest": "1.65",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T13:01:11",
+                    "period": null,
+                    "dest": "0.03",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T13:02:42",
+                    "period": null,
+                    "dest": "0.73",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T13:05:12",
+                    "period": "00:05:03",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T13:10:15",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T13:11:49",
+                    "period": null,
+                    "dest": "1.83",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T13:19:27",
+                    "period": "00:38:52",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T13:58:19",
+                    "period": null,
+                    "dest": "2.71",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T14:04:34",
+                    "period": null,
+                    "dest": "0.01",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T14:04:41",
+                    "period": "00:07:11",
+                    "dest": "0",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 0,
+                    "rcls": "ashidden",
+                    "fdate": "2026-01-13T14:12:05",
+                    "period": null,
+                    "dest": "0.00",
+                    "marker": 0
+                },
+                {
+                    "stopnum": 1,
+                    "rcls": "asstopped",
+                    "fdate": "2026-01-13T14:12:12",
+                    "period": "00:33:58",
+                    "dest": "0",
+                    "marker": 0
+                }
+            ],
+            "ern": 0,
+            "msg": "ok"
+        }
+    ],
+    "ern": 0,
+    "msg": "ok"
+}
