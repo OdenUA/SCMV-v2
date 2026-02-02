@@ -54,6 +54,13 @@
     if (!window.__handleReportResponse) {
       window.__handleReportResponse = function(data) {
         if (reportInProgress && data && data.name === 'Startstop Sum Result') {
+          try {
+            console.log('reports: RECV Startstop Sum Result', { 
+              hasRes: !!(data.res && data.res[0]), 
+              hasFilter: !!(data.filter && data.filter.length), 
+              filterSample: (data.filter && data.filter.length) ? data.filter[0] : null 
+            });
+          } catch(_){ }
           handleMileageResponse(data);
           return true; // Mark as handled
         }
@@ -651,7 +658,7 @@
   function startPendingWatcher() {
     try {
       stopPendingWatcher();
-      var TIMEOUT_MS = 20000; // 20 seconds
+      var TIMEOUT_MS = 60000; // 60 seconds (increased from 20s to reduce timeouts on slow server)
       _pendingWatcherId = setInterval(function() {
         try {
           var now = Date.now();
@@ -674,7 +681,7 @@
               try { var completed = reportData.total - reportData.pending; showReportProgress(completed, reportData.total); console.debug('reports: progress (timeout)', { completed: completed, total: reportData.total, pending: reportData.pending }); } catch(e){}
               try { tryProcessQueue(); } catch(_){}
               // If no pending left, finalize
-              try { if (reportData.pending === 0) finalizeMileageReport(); } catch(e){}
+              try { if (reportData.pending === 0 && _requestQueue.length === 0) finalizeMileageReport(); } catch(e){}
             }
           });
           
