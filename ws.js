@@ -506,6 +506,10 @@ function connect() {
         }
         return;
       } else if (data.name === "Startstop Sum Result") {
+        // Forward to reports/cleanup handlers if they want to intercept this message
+        if (typeof window.__handleReportResponse === 'function') {
+           if (window.__handleReportResponse(data)) return; 
+        }
         populateTable(
           startstopSumResultTbody,
           startstopSumResultThead,
