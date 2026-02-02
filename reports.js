@@ -373,9 +373,22 @@
     // Extract mileage value
     var mileageValue = 0;
     try {
-      if (data.res && data.res[0] && data.res[0].f && data.res[0].f[0]) {
-        var destValue = data.res[0].f[0].dest;
-        if (destValue) {
+      if (data.res && data.res[0] && data.res[0].f) {
+        var rows = data.res[0].f;
+        var targetRow = null;
+
+        // Safety: verify vehicleid matches request
+        for(var i=0; i<rows.length; i++){
+          if(rows[i] && String(rows[i].vehicleid) === String(deviceId)){
+            targetRow = rows[i];
+            break;
+          }
+        }
+        // Fallback: if only 1 row returned, assume it is ours even if ID missing
+        if(!targetRow && rows.length === 1) targetRow = rows[0];
+
+        if (targetRow && targetRow.dest) {
+          var destValue = targetRow.dest;
           // destValue is like "12384,68" (comma as decimal separator)
           // Also handle spaces as thousands separators
           var normalized = String(destValue).replace(/\s/g, '').replace(',', '.');
