@@ -257,11 +257,11 @@
       reportData.pending++;
       sendRequest(request);
     } catch (e) {
-      try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
-      tryProcessQueue();
-    }
-  }
-
+      console.warn('reports: doSendMileageRequest failed', e);
+      if (typeof requestKey !== 'undefined' && pendingRequests[requestKey]) {
+        delete pendingRequests[requestKey];
+        if (reportData && reportData.pending > 0) reportData.pending--;
+      }
   // Handle response from Startstop Sum Result
   function handleMileageResponse(data) {
   // handleMileageResponse incoming (silent)
@@ -366,7 +366,8 @@
         var destValue = data.res[0].f[0].dest;
         if (destValue) {
           // destValue is like "12384,68" (comma as decimal separator)
-          var normalized = String(destValue).replace(',', '.');
+          // Also handle spaces as thousands separators
+          var normalized = String(destValue).replace(/\s/g, '').replace(',', '.');
           mileageValue = parseFloat(normalized);
           if (isNaN(mileageValue)) {
             mileageValue = 0;
@@ -652,6 +653,13 @@
               try { if (reportData.pending === 0) finalizeMileageReport(); } catch(e){}
             }
           });
+          
+          // Safety check: if queue is empty and request map is empty, but pending > 0, we are in zombie state.
+          if (_requestQueue.length === 0 && Object.keys(pendingRequests).length === 0 && reportData && reportData.pending > 0) {
+            console.warn('reports: fixing zombie pending count (was ' + reportData.pending + ')');
+            reportData.pending = 0;
+            finalizeMileageReport();
+          }
         } catch(e) { console.warn('reports: pending watcher error', e); }
       }, 5000);
     } catch(e) { console.warn('reports: startPendingWatcher failed', e); }

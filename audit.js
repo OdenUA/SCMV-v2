@@ -91,9 +91,27 @@
 
   // Render combined audit results into an HTML string and open in new tab
   function renderAuditWindow(results){
+    // 1. Extract User Map
+    var userMap = {};
+    var auditPackets = [];
+
+    results.forEach(function(pkt){
+        if (pkt && pkt.name === 'User Admin Edit') {
+            try {
+                if (pkt.res && pkt.res[0] && Array.isArray(pkt.res[0].f)) {
+                    pkt.res[0].f.forEach(function(u) {
+                        if (u.uid) userMap[String(u.uid)] = u.fname || u.usr || ('User ' + u.uid);
+                    });
+                }
+            } catch (e) {}
+        } else {
+            auditPackets.push(pkt);
+        }
+    });
+
     // results: array of packets (responses) containing res[0].f
     var rows = [];
-    results.forEach(function(pkt){
+    auditPackets.forEach(function(pkt){
       try{
         if(!pkt || !pkt.res || !pkt.res[0] || !Array.isArray(pkt.res[0].f)) return;
         pkt.res[0].f.forEach(function(r){ rows.push(r); });
@@ -121,9 +139,10 @@
       '</div>',
       '<table id="auditTable"><thead><tr>',
       '<th style="width:50px;">ID</th>',
+      '<th style="width:60px;">Record ID</th>',
       '<th style="width:80px;">Table</th>',
       '<th style="width:140px;">Date</th>',
-      '<th style="width:60px;">User</th>',
+      '<th style="width:120px;">User</th>',
       '<th style="width:60px;">Action</th>',
       '<th>Changes</th>',
       '</tr></thead><tbody>'
@@ -131,21 +150,38 @@
 
     rows.forEach(function(r){
       var id = r.id !== undefined ? String(r.id) : '';
+      var orig = r.auditorig || '';
+      var neu = r.auditnewd || '';
+      
+      // Try to find Record ID from auditorig -> id
+      var recId = '';
+      var parsed = parseAuditJson(orig);
+      if(parsed && parsed.id !== undefined) recId = parsed.id;
+      else {
+          recId = (r.recid !== undefined) ? r.recid : 
+                  (r.objid !== undefined) ? r.objid : 
+                  (r.rowid !== undefined) ? r.rowid : 
+                  (r.did !== undefined) ? r.did : 
+                  (r.val !== undefined) ? r.val : '';
+      }
+      recId = String(recId);
+
       var tbl = r.tbl || '';
       var sdate = r.sdate ? (window.formatAnomalyTime ? window.formatAnomalyTime(r.sdate) : r.sdate) : (r.sdate || '');
       var uid = r.uid !== undefined ? String(r.uid) : '';
+      var userName = userMap[uid] || uid; // Use name if available
+      
       var act = r.act || '';
-      var orig = r.auditorig || '';
-      var neu = r.auditnewd || '';
       
       // Calculate changes
       var changesHtml = formatAuditChanges(orig, neu);
 
       html.push('<tr>');
       html.push('<td>'+escapeHtml(id)+'</td>');
+      html.push('<td>'+escapeHtml(recId)+'</td>');
       html.push('<td>'+escapeHtml(tbl)+'</td>');
       html.push('<td>'+escapeHtml(sdate)+'</td>');
-      html.push('<td>'+escapeHtml(uid)+'</td>');
+      html.push('<td>'+escapeHtml(userName)+'</td>');
       html.push('<td>'+escapeHtml(act)+'</td>');
       html.push('<td class="change-list">'+changesHtml+'</td>');
       html.push('</tr>');
@@ -159,19 +195,19 @@
           try{
             var rows = [];
             // headers
-            var headers = ["ID", "Table", "Date", "User", "Action", "Changes"];
+            var headers = ["ID", "Record ID", "Table", "Date", "User", "Action", "Changes"];
             rows.push(headers.join(","));
             
             var trs = document.querySelectorAll("#auditTable tbody tr");
             trs.forEach(function(tr){
               var cells = [];
               // Standard cells
-              for(var i=0; i<5; i++) {
+              for(var i=0; i<6; i++) {
                  var text = tr.children[i].textContent || "";
                  cells.push('"' + text.replace(/"/g,'""') + '"');
               }
               // Changes cell: extract text properly
-              var changeCell = tr.children[5];
+              var changeCell = tr.children[6];
               var changeText = changeCell.innerText || changeCell.textContent || "";
               changeText = changeText.replace(/\\n/g, " | ").replace(/\\s+/g, ' ').trim();
               cells.push('"' + changeText.replace(/"/g,'""') + '"');
@@ -205,7 +241,7 @@
   window.__handleAuditResponse = function(data){
     try{
       if(!window.__auditPending) return false;
-      if(!data || data.name !== 'Audit') return false;
+      if(!data || (data.name !== 'Audit' && data.name !== 'User Admin Edit')) return false;
       window.__auditPending.received.push(data);
       if(window.__auditPending.received.length >= window.__auditPending.expected){
         var recs = window.__auditPending.received.map(function(p){ return p; });
@@ -221,14 +257,28 @@
   // Main send function
   function requestAudit(){
     if(!window.authLoggedIn){ alert('Please login first'); return; }
-    window.__auditPending = { expected: 2, received: [], _cb: function(recs){ renderAuditWindow(recs); }, _timer: null };
+    window.__auditPending = { expected: 3, received: [], _cb: function(recs){ renderAuditWindow(recs); }, _timer: null };
     window.__auditPending._timer = setTimeout(function(){ if(window.__auditPending){ var cb = window.__auditPending._cb; var recs = window.__auditPending.received.slice(); window.__auditPending = null; if(typeof cb==='function') cb(recs); } }, 6000);
     try{
+      var reqUser = {
+        name: 'User Admin Edit',
+        type: 'etbl',
+        mid: 2,
+        act: 'setup',
+        filter: [],
+        nowait: true,
+        waitfor: [],
+        usr: window.authUser,
+        pwd: window.authPwd,
+        uid: window.authUid,
+        lang: 'en'
+      };
       var req1 = buildAuditReq('vehicle');
       var req2 = buildAuditReq('deviceconf');
       if(window.sendRequest) {
-          window.sendRequest(req1);
-          setTimeout(function(){ window.sendRequest(req2); }, 150);
+          window.sendRequest(reqUser);
+          setTimeout(function(){ window.sendRequest(req1); }, 100);
+          setTimeout(function(){ window.sendRequest(req2); }, 200);
       } else {
           console.error("sendRequest is not defined");
       }

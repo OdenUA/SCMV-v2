@@ -82,7 +82,7 @@ function connect() {
   // Fuel report response handler
   try { if(window.__handleFuelReportResponse && window.__handleFuelReportResponse(data)) { return; } } catch(e){ console.warn('Fuel report handler error', e); }
   // Audit response handler (audit.js will register this)
-  try { if(window.__handleAuditResponse && data && data.name === 'Audit' && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
+  try { if(window.__handleAuditResponse && data && (data.name === 'Audit' || data.name === 'User Admin Edit') && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
   // Report response handler (reports.js will register this)
   try { if(window.__handleReportResponse && window.__handleReportResponse(data)) { return; } } catch(e){ console.warn('Report handler error', e); }
     if (data.name === "login" && data.res && data.res[0]) {

@@ -215,7 +215,9 @@
     if (data.res && data.res[0] && data.res[0].f && data.res[0].f[0]) {
       var val = data.res[0].f[0].dest; 
       if (val) {
-        mileage = parseFloat(String(val).replace(',', '.'));
+        // Fix for potential spaces in thousands (e.g. "50 000,00" -> "50000.00")
+        var normalized = String(val).replace(/\s/g, '').replace(',', '.');
+        mileage = parseFloat(normalized);
       }
     }
 
