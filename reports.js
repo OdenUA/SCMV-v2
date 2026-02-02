@@ -267,7 +267,11 @@
 
   // Handle response from Startstop Sum Result
   function handleMileageResponse(data) {
-  // handleMileageResponse incoming (silent)
+    if (!data) return;
+    
+    // Log for debugging
+    // console.log('reports: handling response', data);
+    
     // Try to match response to pending request
     // Extract device ID and date from response filter
     var deviceId = null;
@@ -280,6 +284,10 @@
           var f = data.filter[i];
           if (f.selectedvihicleid && Array.isArray(f.selectedvihicleid)) {
             deviceId = f.selectedvihicleid[0];
+          }
+          // Also try lowercase "vehicleid" sometimes used
+          if (!deviceId && f.selectedvehicleid && Array.isArray(f.selectedvehicleid)) {
+            deviceId = f.selectedvehicleid[0];
           }
           if (f.selectedpgdatefrom && Array.isArray(f.selectedpgdatefrom)) {
             dateFrom = f.selectedpgdatefrom[0];
