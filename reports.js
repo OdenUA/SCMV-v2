@@ -2,6 +2,8 @@
 
 (function() {
   'use strict';
+  
+  console.log("reports: module loaded - v2.1 (Fix-RobustFilter)");
 
   // Global variables for report generation
   var reportInProgress = false;
