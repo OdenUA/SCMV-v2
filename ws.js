@@ -506,6 +506,8 @@ function connect() {
         }
         return;
       } else if (data.name === "Startstop Sum Result") {
+        // Log debug
+        try { console.log('ws.js: Startstop Sum Result recv', { hasRes: !!(data.res && data.res[0]), responseDataLen: responseData ? responseData.length : 0 }); } catch(_){}
         // Forward to reports/cleanup handlers if they want to intercept this message
         if (typeof window.__handleReportResponse === 'function') {
            if (window.__handleReportResponse(data)) return; 
