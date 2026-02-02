@@ -52,23 +52,37 @@
       });
     }
 
-    // Register handler for Startstop Sum Result responses
-    if (!window.__handleReportResponse) {
-      window.__handleReportResponse = function(data) {
-        if (reportInProgress && data && data.name === 'Startstop Sum Result') {
+    // Register handler for Startstop Sum Result responses (FORCE override safely)
+    // If anomalies_cleanup has already wrapped it, we need to respect that chain,
+    // BUT we also need to ensure WE are the primary handler for 'Startstop Sum Result' 
+    // when reportInProgress is true.
+    
+    // Simplest approach: Replace the handler but keep reference to old (if any)
+    var _oldHandler = window.__handleReportResponse;
+    window.__handleReportResponse = function(data) {
+      // Debug logging for ALL calls to verify connectivity
+      if (data && data.name === 'Startstop Sum Result') {
+         try { console.log('reports.js: __handleReportResponse called', { reportInProgress: reportInProgress, inData: !!data }); } catch(_){}
+      }
+
+      if (reportInProgress && data && data.name === 'Startstop Sum Result') {
           try {
             console.log('reports: RECV Startstop Sum Result', { 
               hasRes: !!(data.res && data.res[0]), 
               hasFilter: !!(data.filter && data.filter.length), 
-              filterSample: (data.filter && data.filter.length) ? data.filter[0] : null 
+              filterSample: (data.filter && data.filter.length) ? data.filter[0] : null
             });
           } catch(_){ }
           handleMileageResponse(data);
           return true; // Mark as handled
-        }
-        return false;
-      };
-    }
+      }
+      
+      // Pass to others if not handled by us
+      if (_oldHandler && typeof _oldHandler === 'function') {
+        return _oldHandler(data);
+      }
+      return false;
+    };
   };
 
   // Parse device IDs from textarea (comma, space, tab, semicolon, newline separated)
