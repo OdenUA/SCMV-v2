@@ -262,6 +262,9 @@
         delete pendingRequests[requestKey];
         if (reportData && reportData.pending > 0) reportData.pending--;
       }
+    } // end catch
+  } // end doSendMileageRequest
+
   // Handle response from Startstop Sum Result
   function handleMileageResponse(data) {
   // handleMileageResponse incoming (silent)
