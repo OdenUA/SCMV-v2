@@ -490,6 +490,11 @@ function connect() {
         return;
       }
       if (data.name === "Startstop accumulation") {
+        // Forward to reports/cleanup handlers if they want to intercept this message
+        if (typeof window.__handleReportResponse === 'function') {
+           if (window.__handleReportResponse(data)) return; 
+        }
+
         if (Array.isArray(responseData)) {
           if(!window._suppressRawTrackStops){
             processStartstopAccumulationServerData(responseData);

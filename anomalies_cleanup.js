@@ -155,10 +155,13 @@
     var pad = function(n) { return String(n).padStart(2, '0'); };
     var dateFrom = dateInfo.year + '-' + pad(dateInfo.month) + '-' + pad(dateInfo.day) + ' 00:00:00';
     var dateTo = dateInfo.year + '-' + pad(dateInfo.month) + '-' + pad(dateInfo.day) + ' 23:59:59';
+    
+    // Switch to Startstop accumulation (MID 5) for better reliability 
+    // with devices that don't return sums in MID 6.
     var req = {
-      name: 'Startstop Sum Result',
+      name: 'Startstop accumulation',
       type: 'etbl',
-      mid: 6,
+      mid: 5,
       act: 'filter',
       filter: [
         { selecteduid: [authUid] },
@@ -172,12 +175,11 @@
       lang: 'en'
     };
     cleanupData.pendingMileage++;
-    // console.log('[AC] Request Mileage:', deviceId, dateFrom);
     sendRequest(req);
   }
 
   function handleCleanupMileageResponse(data) {
-    if (!data || data.name !== 'Startstop Sum Result') return false;
+    if (!data || (data.name !== 'Startstop Sum Result' && data.name !== 'Startstop accumulation')) return false;
     
     // Extract ID/Date from filter to avoid mixups
     var deviceId = null, dateFrom = null;
@@ -216,9 +218,8 @@
       if (data.res && data.res[0] && data.res[0].f) {
         var rows = data.res[0].f;
         var matchedCount = 0;
-        var sumSegmentDest = 0;
-        var maxDest = 0;
-        var hasSegmentDest = false;
+        var totalSum = 0;
+        var rowsWithId = 0;
 
         // Helper to detect ID field
         var getRowId = function(r){
@@ -239,32 +240,39 @@
           return isNaN(n) ? 0 : n;
         };
 
+        // Check how many rows have IDs
+        for(var i=0; i<rows.length; i++) {
+          if(getRowId(rows[i]) !== null) rowsWithId++;
+        }
+
         // Iterate and calculate
         for(var i=0; i<rows.length; i++){
           var rid = getRowId(rows[i]);
-          if(rid !== null && String(rid) === String(deviceId)){
+          var isMatch = false;
+
+          // Harvest name for global mapping in case it's missing from setup
+          if (rows[i].number && String(rows[i].number) !== String(deviceId)) {
+            if (!window._vehicleNameMap) window._vehicleNameMap = {};
+            window._vehicleNameMap[deviceId] = rows[i].number;
+          }
+
+          if (rid !== null) {
+            if (String(rid) === String(deviceId)) isMatch = true;
+          } else {
+            // Match if no rows have IDs or it's the only row
+            if (rowsWithId === 0 || rows.length === 1) isMatch = true;
+          }
+
+          if (isMatch) {
             matchedCount++;
-            if (rows[i].segment_dest !== undefined) {
-              sumSegmentDest += parseVal(rows[i].segment_dest);
-              hasSegmentDest = true;
-            }
-            if (rows[i].dest !== undefined) {
-              maxDest = Math.max(maxDest, parseVal(rows[i].dest));
-            }
+            var val = 0;
+            if (rows[i].segment_dest !== undefined) val = parseVal(rows[i].segment_dest);
+            else if (rows[i].dest !== undefined) val = parseVal(rows[i].dest);
+            totalSum += val;
           }
         }
 
-        // Fallback
-        if(matchedCount === 0 && rows.length === 1) {
-          if (rows[0].segment_dest !== undefined) {
-            sumSegmentDest = parseVal(rows[0].segment_dest);
-            hasSegmentDest = true;
-          }
-          maxDest = parseVal(rows[0].dest);
-          matchedCount = 1;
-        }
-
-        mileage = hasSegmentDest ? sumSegmentDest : maxDest;
+        mileage = totalSum;
       }
     } catch(e) {
       console.warn('[AC] Error parsing mileage:', e);
