@@ -398,27 +398,60 @@
     try {
       if (data.res && data.res[0] && data.res[0].f) {
         var rows = data.res[0].f;
-        var targetRow = null;
+        var matchedCount = 0;
+        var sumSegmentDest = 0;
+        var maxDest = 0;
+        var hasSegmentDest = false;
 
-        // Safety: verify vehicleid matches request
+        // Helper to detect ID field
+        var getRowId = function(r){
+          if(!r) return null;
+          if(r.vehicleid !== undefined) return r.vehicleid;
+          if(r.vihicleid !== undefined) return r.vihicleid;
+          if(r.id !== undefined) return r.id;
+          if(r.vid !== undefined) return r.vid;
+          if(r.deviceid !== undefined) return r.deviceid;
+          return null;
+        };
+
+        // Helper to parse numeric value from possible comma-string
+        var parseVal = function(val) {
+          if (val === undefined || val === null) return 0;
+          var normalized = String(val).replace(/\s/g, '').replace(',', '.');
+          var n = parseFloat(normalized);
+          return isNaN(n) ? 0 : n;
+        };
+
+        // Iterate all rows for this device
         for(var i=0; i<rows.length; i++){
-          if(rows[i] && String(rows[i].vehicleid) === String(deviceId)){
-            targetRow = rows[i];
-            break;
+          var rid = getRowId(rows[i]);
+          if(rid !== null && String(rid) === String(deviceId)){
+            matchedCount++;
+            if (rows[i].segment_dest !== undefined) {
+              sumSegmentDest += parseVal(rows[i].segment_dest);
+              hasSegmentDest = true;
+            }
+            if (rows[i].dest !== undefined) {
+              maxDest = Math.max(maxDest, parseVal(rows[i].dest));
+            }
           }
         }
-        // Fallback: if only 1 row returned, assume it is ours even if ID missing
-        if(!targetRow && rows.length === 1) targetRow = rows[0];
 
-        if (targetRow && targetRow.dest) {
-          var destValue = targetRow.dest;
-          // destValue is like "12384,68" (comma as decimal separator)
-          // Also handle spaces as thousands separators
-          var normalized = String(destValue).replace(/\s/g, '').replace(',', '.');
-          mileageValue = parseFloat(normalized);
-          if (isNaN(mileageValue)) {
-            mileageValue = 0;
+        // Fallback: if no ID match but only 1 row returned, assume it's ours
+        if(matchedCount === 0 && rows.length === 1) {
+          if (rows[0].segment_dest !== undefined) {
+            sumSegmentDest = parseVal(rows[0].segment_dest);
+            hasSegmentDest = true;
           }
+          maxDest = parseVal(rows[0].dest);
+          matchedCount = 1;
+        }
+
+        mileageValue = hasSegmentDest ? sumSegmentDest : maxDest;
+
+        if (matchedCount === 0 && rows && rows.length > 0) {
+           // Response has rows but none matched the ID
+           try { console.debug('reports: response has ' + rows.length + ' rows but none match ID ' + deviceId, { firstRow: rows[0], filter: data.filter }); } catch(_){}
         }
       }
     } catch (e) {

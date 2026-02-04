@@ -212,13 +212,62 @@
     
     // Parse
     var mileage = 0;
-    if (data.res && data.res[0] && data.res[0].f && data.res[0].f[0]) {
-      var val = data.res[0].f[0].dest; 
-      if (val) {
-        // Fix for potential spaces in thousands (e.g. "50 000,00" -> "50000.00")
-        var normalized = String(val).replace(/\s/g, '').replace(',', '.');
-        mileage = parseFloat(normalized);
+    try {
+      if (data.res && data.res[0] && data.res[0].f) {
+        var rows = data.res[0].f;
+        var matchedCount = 0;
+        var sumSegmentDest = 0;
+        var maxDest = 0;
+        var hasSegmentDest = false;
+
+        // Helper to detect ID field
+        var getRowId = function(r){
+          if(!r) return null;
+          if(r.vehicleid !== undefined) return r.vehicleid;
+          if(r.vihicleid !== undefined) return r.vihicleid;
+          if(r.id !== undefined) return r.id;
+          if(r.vid !== undefined) return r.vid;
+          if(r.deviceid !== undefined) return r.deviceid;
+          return null;
+        };
+
+        // Helper to parse numeric value
+        var parseVal = function(val) {
+          if (val === undefined || val === null) return 0;
+          var normalized = String(val).replace(/\s/g, '').replace(',', '.');
+          var n = parseFloat(normalized);
+          return isNaN(n) ? 0 : n;
+        };
+
+        // Iterate and calculate
+        for(var i=0; i<rows.length; i++){
+          var rid = getRowId(rows[i]);
+          if(rid !== null && String(rid) === String(deviceId)){
+            matchedCount++;
+            if (rows[i].segment_dest !== undefined) {
+              sumSegmentDest += parseVal(rows[i].segment_dest);
+              hasSegmentDest = true;
+            }
+            if (rows[i].dest !== undefined) {
+              maxDest = Math.max(maxDest, parseVal(rows[i].dest));
+            }
+          }
+        }
+
+        // Fallback
+        if(matchedCount === 0 && rows.length === 1) {
+          if (rows[0].segment_dest !== undefined) {
+            sumSegmentDest = parseVal(rows[0].segment_dest);
+            hasSegmentDest = true;
+          }
+          maxDest = parseVal(rows[0].dest);
+          matchedCount = 1;
+        }
+
+        mileage = hasSegmentDest ? sumSegmentDest : maxDest;
       }
+    } catch(e) {
+      console.warn('[AC] Error parsing mileage:', e);
     }
 
     if (mileage > 3000) {
