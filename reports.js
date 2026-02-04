@@ -3,7 +3,7 @@
 (function() {
   'use strict';
   
-  console.log("reports: module loaded - v2.1 (Fix-RobustFilter)");
+  // reports module loaded
 
   // Global variables for report generation
   var reportInProgress = false;
@@ -61,17 +61,13 @@
     var _oldHandler = window.__handleReportResponse;
     window.__handleReportResponse = function(data) {
       // Debug logging for ALL calls to verify connectivity
-      if (data && data.name === 'Startstop Sum Result') {
-         try { console.log('reports.js: __handleReportResponse called', { reportInProgress: reportInProgress, inData: !!data }); } catch(_){}
+      if (data && (data.name === 'Startstop Sum Result' || data.name === 'Startstop accumulation')) {
+        // response received (logging suppressed)
       }
 
-      if (reportInProgress && data && data.name === 'Startstop Sum Result') {
+      if (reportInProgress && data && (data.name === 'Startstop Sum Result' || data.name === 'Startstop accumulation')) {
           try {
-            console.log('reports: RECV Startstop Sum Result', { 
-              hasRes: !!(data.res && data.res[0]), 
-              hasFilter: !!(data.filter && data.filter.length), 
-              filterSample: (data.filter && data.filter.length) ? data.filter[0] : null
-            });
+            // received relevant packet (logging suppressed)
           } catch(_){ }
           handleMileageResponse(data);
           return true; // Mark as handled
@@ -190,6 +186,9 @@
     // Generate dates for the month
     var dates = generateMonthDates(year, month);
 
+    // Ensure we have fresh Vehicle Show data to resolve names
+    ensureVehicleData(deviceIds);
+
     // Initialize report data structure
     reportData = {
       deviceIds: deviceIds,
@@ -247,9 +246,9 @@
       var dateTo = formatDateForSql(dateInfo.year, dateInfo.month, dateInfo.day, 23, 59, 59);
 
       var request = {
-        name: 'Startstop Sum Result',
+        name: 'Startstop accumulation',
         type: 'etbl',
-        mid: 6,
+        mid: 5,
         act: 'filter',
         filter: [
           { selecteduid: [authUid] },
@@ -378,8 +377,7 @@
       return;
     }
 
-    // Matched a pending request
-    try { console.debug('reports: matched pending request', { requestKey: requestKey }); } catch(e){}
+    // Matched a pending request (debug suppressed)
 
   // Remove from pending
   delete pendingRequests[requestKey];
@@ -387,8 +385,7 @@
   try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
   try { tryProcessQueue(); } catch(_){}
 
-  // Debug: show remaining pending count
-  try { console.debug('reports: completed request', { requestKey: requestKey, remainingPending: Object.keys(pendingRequests).length }); } catch(e){}
+  // Remaining pending count (debug suppressed)
 
     var dateKey = metadata.dateKey;
     deviceId = metadata.deviceId;
@@ -399,9 +396,8 @@
       if (data.res && data.res[0] && data.res[0].f) {
         var rows = data.res[0].f;
         var matchedCount = 0;
-        var sumSegmentDest = 0;
-        var maxDest = 0;
-        var hasSegmentDest = false;
+        var totalSum = 0;
+        var rowsWithId = 0;
 
         // Helper to detect ID field
         var getRowId = function(r){
@@ -422,37 +418,45 @@
           return isNaN(n) ? 0 : n;
         };
 
+        // First, check how many rows actually have an ID field
+        for(var i=0; i<rows.length; i++) {
+          if(getRowId(rows[i]) !== null) rowsWithId++;
+        }
+
         // Iterate all rows for this device
         for(var i=0; i<rows.length; i++){
           var rid = getRowId(rows[i]);
-          if(rid !== null && String(rid) === String(deviceId)){
+          var isMatch = false;
+
+          // If row has a human-readable 'number' (name), harvest it for display
+          if (rows[i].number && String(rows[i].number) !== String(deviceId)) {
+            if (!window._vehicleNameMap) window._vehicleNameMap = {};
+            window._vehicleNameMap[deviceId] = rows[i].number;
+          }
+
+          if (rid !== null) {
+            if (String(rid) === String(deviceId)) isMatch = true;
+          } else {
+            // Row has no ID field. 
+            // If the whole response has no IDs (or only 1 row), assume it belongs to the requested device.
+            if (rowsWithId === 0 || rows.length === 1) isMatch = true;
+          }
+
+          if (isMatch) {
             matchedCount++;
-            if (rows[i].segment_dest !== undefined) {
-              sumSegmentDest += parseVal(rows[i].segment_dest);
-              hasSegmentDest = true;
-            }
-            if (rows[i].dest !== undefined) {
-              maxDest = Math.max(maxDest, parseVal(rows[i].dest));
-            }
+            // Prefer segment_dest if available, otherwise use dest
+            var val = 0;
+            if (rows[i].segment_dest !== undefined) val = parseVal(rows[i].segment_dest);
+            else if (rows[i].dest !== undefined) val = parseVal(rows[i].dest);
+            totalSum += val;
           }
         }
 
-        // Fallback: if no ID match but only 1 row returned, assume it's ours
-        if(matchedCount === 0 && rows.length === 1) {
-          if (rows[0].segment_dest !== undefined) {
-            sumSegmentDest = parseVal(rows[0].segment_dest);
-            hasSegmentDest = true;
+        mileageValue = totalSum;
+
+          if (matchedCount === 0 && rows && rows.length > 0) {
+            // Response has rows but none matched the ID (debug suppressed)
           }
-          maxDest = parseVal(rows[0].dest);
-          matchedCount = 1;
-        }
-
-        mileageValue = hasSegmentDest ? sumSegmentDest : maxDest;
-
-        if (matchedCount === 0 && rows && rows.length > 0) {
-           // Response has rows but none matched the ID
-           try { console.debug('reports: response has ' + rows.length + ' rows but none match ID ' + deviceId, { firstRow: rows[0], filter: data.filter }); } catch(_){}
-        }
       }
     } catch (e) {
       console.warn('Error parsing mileage:', e);
@@ -469,7 +473,7 @@
   var completed = reportData.total - reportData.pending;
   showReportProgress(completed, reportData.total);
 
-  try { console.debug('reports: progress', { completed: completed, total: reportData.total, pending: reportData.pending }); } catch(e){}
+  // Progress update (debug suppressed)
 
     // Check if all requests completed
     if (reportData.pending === 0) {
@@ -540,6 +544,9 @@
     // Split month into weeks
     var weeks = splitIntoWeeks(dates);
 
+    // Ensure we have fresh Vehicle Show data to resolve names
+    ensureVehicleData(deviceIds);
+
     // Initialize report data structure
     reportData = {
       deviceIds: deviceIds,
@@ -572,6 +579,53 @@
       for (var dt = 0; dt < dates.length; dt++) {
         sendMileageRequest(deviceIds[d], dates[dt]);
       }
+    }
+  }
+
+  // Prefetch and cache vehicle names by device ID
+  function ensureVehicleData(deviceIds) {
+    if (!Array.isArray(deviceIds) || deviceIds.length === 0) return;
+
+    var sources = [
+      window.vehicleShowData,
+      window.vehicleSelectMinData,
+      window.deviceEditData,
+      window._vehicleShowPending
+    ];
+
+    // Fill local cache from any already-loaded sources
+    try {
+      if (!window._vehicleNameMap) window._vehicleNameMap = {};
+      for (var s = 0; s < sources.length; s++) {
+        var list = sources[s];
+        if (!list || !Array.isArray(list)) continue;
+        for (var i = 0; i < list.length; i++) {
+          var r = list[i];
+          if (!r) continue;
+          var idFields = ['deviceid', 'id', 'devid', 'vehicleid', 'vihicleid', 'vid', 'ID'];
+          for (var j = 0; j < idFields.length; j++) {
+            var val = r[idFields[j]];
+            if (val === undefined || val === null) continue;
+            var key = String(val);
+            if (!window._vehicleNameMap[key] && r.number) {
+              window._vehicleNameMap[key] = r.number;
+            }
+          }
+        }
+      }
+    } catch(e) { try{ console.warn('ensureVehicleData: cache fill failed', e); }catch(_){}}
+
+    // If we still do not have any source data, request Vehicle Show once
+    var hasData = false;
+    for (var k = 0; k < sources.length; k++) {
+      if (Array.isArray(sources[k]) && sources[k].length > 0) { hasData = true; break; }
+    }
+
+    if (!hasData && typeof requestVehicleShow === 'function' && !window._vehicleShowFetchRequested) {
+      window._vehicleShowFetchRequested = true;
+      try { requestVehicleShow(); } catch(e) { console.warn('reports: requestVehicleShow failed', e); }
+      // auto-clear the flag after a short delay to allow re-requests later if needed
+      setTimeout(function(){ try{ delete window._vehicleShowFetchRequested; }catch(_){ } }, 5000);
     }
   }
 
@@ -639,36 +693,63 @@
     };
   }
 
-  // Get vehicle info from vehicleSelectMinData or vehicleShowData
+  // Get vehicle info from available data sources
   function getVehicleInfo(deviceId) {
-    var vehicleData = window.vehicleShowData || window.vehicleSelectMinData;
+    if (!deviceId) return { number: '', vehicle: '', name: '' };
     
-    if (!vehicleData || !Array.isArray(vehicleData)) {
-      return {
-        number: '',
-        vehicle: '',
-        name: ''
-      };
+    // Search in priority order: Show Data, Min Data, Edit Data, Pending
+    var sources = [
+      window.vehicleShowData,
+      window.vehicleSelectMinData,
+      window.deviceEditData,
+      window._vehicleShowPending
+    ];
+    
+    var row = null;
+    for (var i = 0; i < sources.length; i++) {
+      var list = sources[i];
+      if (!list || !Array.isArray(list)) continue;
+      
+      row = list.find(function(r) {
+        if (!r) return false;
+        // Check common ID fields
+        var idFields = ['deviceid', 'id', 'devid', 'vehicleid', 'vihicleid', 'vid', 'ID'];
+        for (var j = 0; j < idFields.length; j++) {
+          var val = r[idFields[j]];
+          if (val !== undefined && val !== null && String(val) === String(deviceId)) return true;
+        }
+        return false;
+      });
+      
+      if (row) break;
     }
-    
-    var row = vehicleData.find(function(r) {
-      if (!r) return false;
-      var id = r.id !== undefined ? r.id : r.vehicleid;
-      return String(id) === String(deviceId);
-    });
     
     if (!row) {
-      return {
-        number: '',
-        vehicle: '',
-        name: ''
-      };
+      // If not found in arrays, try the name map cache
+      if (window._vehicleNameMap && window._vehicleNameMap[deviceId]) {
+        return {
+          number: window._vehicleNameMap[deviceId],
+          vehicle: '',
+          name: window._vehicleNameMap[deviceId]
+        };
+      }
+      return { number: String(deviceId), vehicle: '', name: '' };
     }
     
+    // Strictly use 'number' field for the display name as requested
+    var number = row.number || String(deviceId);
+    var vehicle = row.model || row.brand || '';
+    var name = row.name || row.driver || row.number || '';
+
+    try {
+      if (!window._vehicleNameMap) window._vehicleNameMap = {};
+      if (!window._vehicleNameMap[deviceId]) window._vehicleNameMap[deviceId] = number;
+    } catch(_){ }
+    
     return {
-      number: row.number || row.vehicle || '',
-      vehicle: row.vehicle || row.name || '',
-      name: row.name || row.drivername || row.driver || ''
+      number: number,
+      vehicle: vehicle,
+      name: name
     };
   }
 
@@ -727,7 +808,7 @@
               // mark the send slot as free and continue queue
               try { _activeSends = Math.max(0, _activeSends - 1); } catch(_){}
               try { reportData.pending = Math.max(0, (reportData.pending || 1) - 1); } catch(e){}
-              try { var completed = reportData.total - reportData.pending; showReportProgress(completed, reportData.total); console.debug('reports: progress (timeout)', { completed: completed, total: reportData.total, pending: reportData.pending }); } catch(e){}
+              try { var completed = reportData.total - reportData.pending; showReportProgress(completed, reportData.total); } catch(e){}
               try { tryProcessQueue(); } catch(_){}
               // If no pending left, finalize
               try { if (reportData.pending === 0 && _requestQueue.length === 0) finalizeMileageReport(); } catch(e){}
