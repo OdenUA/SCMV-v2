@@ -692,6 +692,7 @@ function drawRawDeviceTrack(points){
         // also clear Start/Stop tables
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
+        try{ if(startstopSumThead) startstopSumThead.innerHTML=''; if(startstopSumTbody) startstopSumTbody.innerHTML=''; }catch(_){ }
         return;
       }
 
@@ -704,6 +705,7 @@ function drawRawDeviceTrack(points){
         // clear Start/Stop tables on date change as well
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
+        try{ if(startstopSumThead) startstopSumThead.innerHTML=''; if(startstopSumTbody) startstopSumTbody.innerHTML=''; }catch(_){ }
         return;
       }
 

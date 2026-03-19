@@ -68,7 +68,7 @@ function connect() {
         else if(data.name === 'Vehicle Track') showResponseElapsed('Vehicle Track');
         else if(data.name === 'Device Alarm') showResponseElapsed('Device Alarm');
         else if(data.name === 'Device Log') showResponseElapsed('Device Log');
-        else if(data.name === 'Startstop accumulation' || data.name === 'Startstop Sum Result') showResponseElapsed('Mileage Report');
+        else if(data.name === 'Startstop accumulation' || data.name === 'Startstop Sum Result' || data.name === 'Startstop Sum') showResponseElapsed('Mileage Report');
         // Full Device Track setup responses come under 'Device Track' as well (handled elsewhere)
       }
     } catch(e){}
@@ -179,6 +179,7 @@ function connect() {
           vehicleShowData = packet.f.slice();
           vehicleShowData.forEach(function (r, i) { if (r && r.__origIndex === undefined) r.__origIndex = i; });
           tryApplyFleetMapping();
+          if (typeof mergeImeiToVehicleEdit === 'function') mergeImeiToVehicleEdit();
           // clear loading skeleton if present
           try { if(window._vehicleShowLoading) delete window._vehicleShowLoading; } catch(_){}
         } else if (data.name === 'Vehicle Show') {
@@ -198,6 +199,8 @@ function connect() {
           } else {
             // we're currently editing — stash device-list payload so it can be applied later if needed
             try { window._vehicleShowPending = packet.f.slice(); } catch(_){}
+            // Trigger merge IMEI so that the edit view gets the imei updated
+            try { if (typeof mergeImeiToVehicleEdit === 'function') mergeImeiToVehicleEdit(); } catch(_){}
           }
         } else {
           vehicleSelectMinData = packet.f.slice();
@@ -526,6 +529,18 @@ function connect() {
         populateTable(
           startstopSumResultTbody,
           startstopSumResultThead,
+          responseData
+        );
+        return;
+      } else if (data.name === "Startstop Sum") {
+        try { console.log('ws.js: Startstop Sum recv', { hasRes: !!(data.res && data.res[0]), responseDataLen: responseData ? responseData.length : 0 }); } catch(_){}
+        
+        if (typeof window.__handleReportResponse === 'function') {
+           if (window.__handleReportResponse(data)) return; 
+        }
+        populateTable(
+          startstopSumTbody,
+          startstopSumThead,
           responseData
         );
         return;

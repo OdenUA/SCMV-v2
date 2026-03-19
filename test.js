@@ -215,10 +215,24 @@ function processDeviceTrack(points) {
 function initMap() {
     if (map) return;
     map = L.map('map').setView([48, 30], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
-    }).addTo(map);
+    });
+    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    });
+
+    osmLayer.addTo(map);
+
+    const baseMaps = {
+        "OSM (Старая)": osmLayer,
+        "CartoDB (Новая)": cartoLayer
+    };
+    L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map);
+
     featureGroup = L.featureGroup().addTo(map);
 }
 

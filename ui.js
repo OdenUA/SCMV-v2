@@ -632,6 +632,47 @@ window.mergeVehicleDetails = function() {
   } catch(e) { console.warn('mergeVehicleDetails failed', e); }
 };
 
+// Function to merge IMEI back into Vehicle Show Data (for Edit Vehicle view)
+window.mergeImeiToVehicleEdit = function() {
+  try {
+    if (!vehicleShowData || !vehicleShowData.length) return;
+    
+    // Attempt to find a source that has the imei field.
+    // _vehicleShowPending might contain freshly grabbed Vehicle Show data that was stashed,
+    // otherwise fallback to vehicleSelectMinData which keeps it cached.
+    var sourceData = null;
+    if (window._vehicleShowPending && window._vehicleShowPending.length) {
+      sourceData = window._vehicleShowPending;
+    } else if (vehicleSelectMinData && vehicleSelectMinData.length) {
+      sourceData = vehicleSelectMinData;
+    }
+
+    var map = {};
+    if (sourceData) {
+      sourceData.forEach(function(r){ if(r.id) map[r.id] = r; });
+    }
+    
+    var changed = false;
+    vehicleShowData.forEach(function(r){
+      if(r.imei === undefined && r.IMEI === undefined) { r.imei = ''; changed = true; }
+      if(sourceData && r.id && map[r.id]) {
+        var s = map[r.id];
+        var sImei = s.imei !== undefined ? s.imei : s.IMEI;
+        if(sImei !== undefined && sImei !== '' && r.imei !== sImei && r.IMEI !== sImei) {
+          r.imei = sImei;
+          changed = true;
+        }
+      }
+    });
+
+    // Re-render if it resulted in changes and we are looking at it
+    if (changed && typeof renderVehicleTable === 'function' && vehicleOverlayMode === 'show') {
+      // Small timeout to prevent infinite loop or interrupting websocket message flow
+      setTimeout(function(){ try { renderVehicleTable(); } catch(e){} }, 10);
+    }
+  } catch(e) { console.warn('mergeImeiToVehicleEdit failed', e); }
+};
+
 function updateDeviceTrackHeader() {
   // Now displays fleet | number | model in side panel header
   if (!vehicleMetaDisplay) return;
@@ -703,6 +744,7 @@ function renderVehicleTable() {
     try {
       var hlc = String(h).toLowerCase();
       if (hlc === 'контроль' || hlc === 'control') displayLabel = 'Питание';
+      if (hlc === 'imei') displayLabel = 'IMEI';
     } catch (e) {}
     th.textContent = displayLabel;
     th.style.cursor = "pointer";
@@ -1936,6 +1978,10 @@ function renderDeviceStatusTable(){
       try {
         updateStatus('Отправка Vehicle Edit Distribution...', 'blue', 2000);
         sendRequest(req);
+        
+        // Ensure we fetch Vehicle Show too, so we can merge IMEI into the edit table
+        var reqShow = { name: "Vehicle Show", type: "etbl", mid: 2, act: "setup", filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: "en" };
+        setTimeout(function(){ try{ sendRequest(reqShow); }catch(_){ } }, 50);
       } catch (e) { console.warn('send Vehicle Edit Distribution failed', e); }
       // Immediately switch overlay to edit mode and clear any Device List content
       try {
@@ -2019,6 +2065,8 @@ function toggleVehicleOverlay() {
               updateStatus('\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 Vehicle Edit Distribution...', 'blue', 1500);
               var req = { name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: authUser, pwd: authPwd, uid: authUid, lang: 'ru' };
               try { sendRequest(req); } catch(e){ console.warn('sendRequest Vehicle Edit Distribution failed', e); }
+              // Also grab Vehicle Show to have IMEI available for merging into the edit table
+              setTimeout(function(){ var rShow={name:'Vehicle Show',type:'etbl',mid:2,act:'setup',filter:[],nowait:true,waitfor:[],usr:authUser,pwd:authPwd,uid:authUid,lang:'ru'}; try{sendRequest(rShow);}catch(_){} }, 50);
             } catch(e){ console.warn('request Vehicle Edit Distribution on overlay open failed', e); }
           } else {
             try { requestVehicleShow && requestVehicleShow(); } catch(e){ console.warn('requestVehicleShow failed', e); }
@@ -2064,8 +2112,25 @@ function sendAdditionalRequests(dateFrom, dateTo, deviceId) {
     uid: authUid,
     lang: "en",
   };
+  var requestStartstopSum = {
+    name: "Startstop Sum",
+    type: "etbl",
+    mid: 5,
+    act: "filter",
+    filter: [
+      { selecteduid: [authUid] },
+      { selectedvihicleid: [deviceId] },
+      { selectedpgdateto: [dateTo] },
+      { selectedpgdatefrom: [dateFrom] }
+    ],
+    usr: authUser,
+    pwd: authPwd,
+    uid: authUid,
+    lang: "en",
+  };
   sendRequest(requestAccumulation);
   sendRequest(requestSum);
+  sendRequest(requestStartstopSum);
 }
 
 // Fuel Report Response Handler

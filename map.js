@@ -4,7 +4,18 @@ var endIcon = L.divIcon({className:'custom-div-icon', html:"<div style='backgrou
 function initMap(){
   if (map) return;
   map = L.map('map').setView([49.33,28.35],7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  
+  var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'});
+  var cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'});
+  
+  osmLayer.addTo(map); // default
+
+  var baseMaps = {
+      "OSM (Старая)": osmLayer,
+      "CartoDB (Новая)": cartoLayer
+  };
+  L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map);
+
   trackLayerGroup = L.layerGroup().addTo(map);
   parkingLayerGroup = L.layerGroup().addTo(map); // Initialize and add to map
 

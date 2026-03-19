@@ -17,8 +17,10 @@ var tableBody = document.querySelector('#resultTable tbody');
 var currentIdDisplay = document.getElementById('currentIdDisplay');
 var startstopAccumulationTbody = document.getElementById('startstopAccumulationTbody');
 var startstopSumResultTbody = document.getElementById('startstopSumResultTbody');
+var startstopSumTbody = document.getElementById('startstopSumTbody');
 var startstopAccumulationThead = document.querySelector('#startstopAccumulationTable thead');
 var startstopSumResultThead = document.querySelector('#startstopSumResultTable thead');
+var startstopSumThead = document.querySelector('#startstopSumTable thead');
 // generateSqlBtn removed (button moved/removed from Device Track Details)
 var sqlModal = document.getElementById('sqlModal');
 var closeModalBtn = document.querySelector('.close-button');
