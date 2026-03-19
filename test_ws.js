@@ -1,86 +1,94 @@
-// test_ws.js - Raw WebSocket request tester migrated from main page functionality
-(function(){
-  const wsUrl = "wss://scmv.vpngps.com:4445";
-  const statusDiv = document.getElementById('status');
-  const rawRequestInput = document.getElementById('rawRequestInput');
-  const rawRequestSendBtn = document.getElementById('rawRequestSend');
-  const rawRequestClearBtn = document.getElementById('rawRequestClear');
-  const rawResponseLog = document.getElementById('rawResponseLog');
+// Minimal Node.js WebSocket tester for the current auth flow.
+// Usage:
+//   npm install ws
+//   $env:USER_NAME='zheleznov'; $env:USER_PASSWORD='secret'; node test_ws.js
+//   $env:COOKIE='m=...; map=...; n=0; relogin=no'; node test_ws.js
 
-  let socket;
+const WebSocket = require('ws');
 
-  function appendRawLog(text, direction){
-    if (!rawResponseLog) return;
-    const ts = new Date().toISOString().slice(11,19);
-    const line = document.createElement('div');
-    line.textContent = `[${ts}] ${text}`;
-    line.style.padding = '2px 0';
-    line.style.color = direction === 'out' ? '#6ee7b7' : '#93c5fd';
-    rawResponseLog.appendChild(line);
-    rawResponseLog.scrollTop = rawResponseLog.scrollHeight;
-  }
+const URL = process.env.URL || 'wss://scmv.vpngps.com:4445';
+const ORIGIN = process.env.ORIGIN || 'https://scmv.vpngps.com';
+const USER_NAME = process.env.USER_NAME || 'qqq';
+const USER_PASSWORD = process.env.USER_PASSWORD || 'qqq';
+const USER_UID = Number(process.env.USER_UID || 0) || 0;
+const COOKIE_M = process.env.COOKIE_M || '';
+const COOKIE_MAP = process.env.COOKIE_MAP || 'http%3A//%7Bs%7D.tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png';
+const COOKIE_N = process.env.COOKIE_N || '0';
+const COOKIE_RELOGIN = process.env.COOKIE_RELOGIN || 'no';
+const COOKIE = process.env.COOKIE || (COOKIE_M ? `m=${COOKIE_M}; map=${COOKIE_MAP}; n=${COOKIE_N}; relogin=${COOKIE_RELOGIN}` : '');
+const REQUEST_NAME = process.env.REQUEST_NAME || 'Vehicle Select Min';
+const REQUEST_DELAY_MS = Number(process.env.REQUEST_DELAY_MS || 250);
+const CLOSE_AFTER_MS = Number(process.env.CLOSE_AFTER_MS || 12000);
 
-  function connect(){
-    socket = new WebSocket(wsUrl);
-    socket.onopen = () => {
-      statusDiv.textContent = 'Connected';
-      statusDiv.style.color = 'green';
-    };
-    socket.onmessage = (event) => {
-      appendRawLog('⬅ ' + event.data, 'in');
-    };
-    socket.onerror = (err) => {
-      statusDiv.textContent = 'Error';
-      statusDiv.style.color = 'red';
-      appendRawLog('⚠ Socket error: ' + err.message, 'in');
-    };
-    socket.onclose = () => {
-      statusDiv.textContent = 'Closed. Reconnecting...';
-      statusDiv.style.color = 'orange';
-      setTimeout(connect, 5000);
-    };
-  }
+function maskCookie(header) {
+  if (!header) return '(none)';
+  return String(header).split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
+    const eq = part.indexOf('=');
+    return eq === -1 ? part : `${part.slice(0, eq)}=***`;
+  }).join('; ');
+}
 
-  function sendRawRequest(){
-    if (!rawRequestInput) return;
-    let value = rawRequestInput.value.trim();
-    if (!value){
-      appendRawLog('⚠ Пустой ввод', 'in');
-      return;
+const headers = { Origin: ORIGIN };
+if (COOKIE) headers.Cookie = COOKIE;
+
+const ws = new WebSocket(URL, { headers });
+let sessionUid = USER_UID;
+let requestSent = false;
+
+function sendSelectMinRequests(uid) {
+  const initReq = JSON.stringify({ name: 'Vehicle Select Min', type: 'etbl', mid: 4, act: 'init', usr: USER_NAME, pwd: USER_PASSWORD, uid, lang: 'en' });
+  const setupReq = JSON.stringify({ name: 'Vehicle Select Min', type: 'etbl', mid: 4, act: 'setup', filter: [{ selecteduid: [uid] }], nowait: true, waitfor: [], usr: USER_NAME, pwd: USER_PASSWORD, uid, lang: 'en' });
+  ws.send(initReq);
+  setTimeout(() => { if (ws.readyState === WebSocket.OPEN) ws.send(setupReq); }, REQUEST_DELAY_MS);
+}
+
+function sendVehicleShow(uid) {
+  const req = JSON.stringify({ name: 'Vehicle Show', type: 'etbl', mid: 2, act: 'setup', filter: [], nowait: true, waitfor: [], usr: USER_NAME, pwd: USER_PASSWORD, uid, lang: 'en' });
+  ws.send(req);
+}
+
+console.log('URL=', URL);
+console.log('Origin=', ORIGIN);
+console.log('Cookie=', maskCookie(COOKIE));
+console.log('Request=', REQUEST_NAME);
+
+ws.on('upgrade', (response) => {
+  console.log('upgrade headers=', JSON.stringify(response.headers || {}));
+});
+
+ws.on('open', () => {
+  console.log('open');
+  const loginReq = JSON.stringify({ name: 'login', type: 'login', mid: 0, act: 'setup', usr: USER_NAME, pwd: USER_PASSWORD, uid: 0, lang: 'en' });
+  ws.send(loginReq);
+});
+
+ws.on('message', (message) => {
+  const text = message.toString();
+  console.log(text);
+  if (requestSent) return;
+  try {
+    const data = JSON.parse(text);
+    if (data && data.name === 'login' && data.res && data.res[0] && data.res[0].uid) {
+      sessionUid = Number(data.res[0].uid) || sessionUid;
+      requestSent = true;
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        if (REQUEST_NAME === 'Vehicle Show') sendVehicleShow(sessionUid);
+        else sendSelectMinRequests(sessionUid);
+      }, REQUEST_DELAY_MS);
     }
-    if (value.startsWith('send:')) value = value.slice(5);
-    let obj;
-    try { obj = JSON.parse(value); } catch(e){
-      appendRawLog('⚠ Ошибка парсинга JSON: '+e.message, 'in');
-      return;
-    }
-    if (!socket || socket.readyState !== WebSocket.OPEN){
-      appendRawLog('⚠ WebSocket не подключен', 'in');
-      return;
-    }
-    const payload = JSON.stringify(obj);
-    socket.send(payload);
-    appendRawLog('➡ ' + payload, 'out');
-  }
+  } catch (_) {}
+});
 
-  if (rawRequestSendBtn){
-    rawRequestSendBtn.addEventListener('click', sendRawRequest);
-  }
-  if (rawRequestClearBtn){
-    rawRequestClearBtn.addEventListener('click', ()=>{
-      if (rawResponseLog) rawResponseLog.innerHTML = '(лог пуст)';
-    });
-  }
-  if (rawRequestInput){
-    rawRequestInput.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter'){
-        if (!e.shiftKey){
-          e.preventDefault();
-          sendRawRequest();
-        }
-      }
-    });
-  }
+ws.on('error', (error) => { console.error('ERR', error && error.message ? error.message : error); });
+ws.on('close', (code, reasonBuffer) => {
+  const reason = reasonBuffer ? reasonBuffer.toString('utf8') : '';
+  console.log('closed', code, reason);
+  process.exit(0);
+});
 
-  connect();
-})();
+setTimeout(() => {
+  try {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+  } catch (_) {}
+}, CLOSE_AFTER_MS);

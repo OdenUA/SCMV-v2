@@ -1,37 +1,220 @@
-const wsUrl = "wss://scmv.vpngps.com:4445";
+const wsUrl = (function resolveWsUrl() {
+    if (window.location && /^https?:$/i.test(window.location.protocol) && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return proto + '//' + window.location.host + '/ws';
+    }
+    return 'wss://scmv.vpngps.com:4445';
+})();
 
 const statusDiv = document.getElementById('status');
-const sendMileageReportBtn = document.getElementById('sendMileageReport');
-const sendDeviceTrackBtn = document.getElementById('sendDeviceTrack');
+const wsUrlLabel = document.getElementById('wsUrlLabel');
+const sessionUidLabel = document.getElementById('sessionUidLabel');
+const lastPacketLabel = document.getElementById('lastPacketLabel');
+const authSummary = document.getElementById('authSummary');
 const responsePayloadPre = document.getElementById('responsePayload');
+const copyResponseBtn = document.getElementById('copyResponseBtn');
 const dateFromInput = document.getElementById('dateFrom');
 const dateToInput = document.getElementById('dateTo');
 const vehicleIdInput = document.getElementById('vehicleId');
-
-let socket;
-let map;
-let featureGroup;
-// Raw tester elements
+const loginUserInput = document.getElementById('loginUserInput');
+const loginPasswordInput = document.getElementById('loginPasswordInput');
+const authUidInput = document.getElementById('authUidInput');
+const sendLoginBtn = document.getElementById('sendLoginBtn');
+const clearSessionBtn = document.getElementById('clearSessionBtn');
+const fillLoginPresetBtn = document.getElementById('fillLoginPresetBtn');
+const sendVehicleSelectMinBtn = document.getElementById('sendVehicleSelectMin');
+const sendVehicleShowBtn = document.getElementById('sendVehicleShow');
+const sendMileageReportBtn = document.getElementById('sendMileageReport');
+const sendDeviceTrackBtn = document.getElementById('sendDeviceTrack');
 const rawRequestInput = document.getElementById('rawRequestInput');
 const rawRequestSendBtn = document.getElementById('rawRequestSend');
 const rawRequestClearBtn = document.getElementById('rawRequestClear');
 const rawResponseLog = document.getElementById('rawResponseLog');
+const presetDesktopBtn = document.getElementById('presetDesktopBtn');
+const presetSelectMinBtn = document.getElementById('presetSelectMinBtn');
+const presetDeviceTrackBtn = document.getElementById('presetDeviceTrackBtn');
 
-function appendRawLog(text, direction){
+let socket = null;
+let map = null;
+let featureGroup = null;
+let reconnectTimer = null;
+let authState = {
+    user: loginUserInput ? loginUserInput.value.trim() : '',
+    password: loginPasswordInput ? loginPasswordInput.value : '',
+    uid: null,
+    loggedIn: false,
+    loginInProgress: false,
+    lastPacket: '-'
+};
+
+function setStatus(text, kind) {
+    if (!statusDiv) return;
+    statusDiv.textContent = text;
+    statusDiv.classList.remove('is-pending', 'is-ok', 'is-bad');
+    statusDiv.classList.add(kind || 'is-pending');
+}
+
+function syncAuthInputs() {
+    authState.user = loginUserInput ? loginUserInput.value.trim() : authState.user;
+    authState.password = loginPasswordInput ? loginPasswordInput.value : authState.password;
+}
+
+function updateSessionUi() {
+    if (wsUrlLabel) wsUrlLabel.textContent = wsUrl;
+    if (sessionUidLabel) sessionUidLabel.textContent = authState.uid != null ? String(authState.uid) : '-';
+    if (lastPacketLabel) lastPacketLabel.textContent = authState.lastPacket || '-';
+    if (authUidInput) authUidInput.value = authState.uid != null ? String(authState.uid) : '';
+    if (authSummary) {
+        if (authState.loggedIn) {
+            authSummary.textContent = 'Авторизовано: ' + authState.user + ' / uid=' + authState.uid;
+        } else if (authState.loginInProgress) {
+            authSummary.textContent = 'Выполняется login...';
+        } else {
+            authSummary.textContent = 'Сессия не авторизована.';
+        }
+    }
+}
+
+function appendRawLog(text, direction) {
     if (!rawResponseLog) return;
-    const ts = new Date().toISOString().slice(11,19);
+    const ts = new Date().toISOString().slice(11, 19);
     const line = document.createElement('div');
-    line.textContent = `[${ts}] ${text}`;
+    line.textContent = '[' + ts + '] ' + text;
     line.style.padding = '2px 0';
-    line.style.color = direction === 'out' ? '#6ee7b7' : '#93c5fd';
+    line.style.color = direction === 'out' ? '#6ee7b7' : (direction === 'warn' ? '#fbbf24' : '#93c5fd');
     rawResponseLog.appendChild(line);
     rawResponseLog.scrollTop = rawResponseLog.scrollHeight;
 }
 
-// --- Map Initialization ---
+function buildLoginRequest() {
+    syncAuthInputs();
+    return {
+        name: 'login',
+        type: 'login',
+        mid: 0,
+        act: 'setup',
+        usr: authState.user,
+        pwd: authState.password,
+        uid: 0,
+        lang: 'en'
+    };
+}
+
+function getDateRange() {
+    return {
+        dateTo: new Date(dateToInput.value).toISOString(),
+        dateFrom: new Date(dateFromInput.value).toISOString()
+    };
+}
+
+function resolveAuth() {
+    syncAuthInputs();
+    return {
+        usr: authState.user,
+        pwd: authState.password,
+        uid: authState.uid
+    };
+}
+
+function ensureLoggedInOrWarn() {
+    const auth = resolveAuth();
+    if (!auth.usr || !auth.pwd) {
+        alert('Укажите логин и пароль.');
+        return null;
+    }
+    if (!authState.loggedIn || auth.uid == null) {
+        alert('Сначала выполните login в текущем WebSocket-соединении.');
+        return null;
+    }
+    return auth;
+}
+
+function ensureSocketOpen() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        alert('WebSocket не подключен.');
+        return false;
+    }
+    return true;
+}
+
+function sendRequest(requestObject) {
+    if (!ensureSocketOpen()) return false;
+    const payload = JSON.stringify(requestObject);
+    socket.send(payload);
+    appendRawLog('➡ ' + payload, 'out');
+    setStatus('Запрос отправлен. Ожидание ответа...', 'is-pending');
+    if (responsePayloadPre) responsePayloadPre.textContent = '{}';
+    return true;
+}
+
+async function copyLatestResponse() {
+    const text = responsePayloadPre ? String(responsePayloadPre.textContent || '').trim() : '';
+    if (!text) {
+        appendRawLog('⚠ Нет ответа для копирования', 'warn');
+        return;
+    }
+
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const range = document.createRange();
+            range.selectNodeContents(responsePayloadPre);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.execCommand('copy');
+            selection.removeAllRanges();
+        }
+        appendRawLog('📋 Последний ответ скопирован в буфер', 'out');
+        setStatus('Последний ответ скопирован.', 'is-ok');
+    } catch (error) {
+        appendRawLog('⚠ Не удалось скопировать ответ: ' + error.message, 'warn');
+        setStatus('Не удалось скопировать ответ.', 'is-bad');
+    }
+}
+
+function processMileageReport(segments) {
+    let allCoords = [];
+    let parkingCounter = 0;
+    segments.forEach((segment) => {
+        if (!segment.coordinates || segment.coordinates.length === 0) return;
+        allCoords = allCoords.concat(segment.coordinates);
+        if (segment.ismoved === false && segment.period) {
+            const timeParts = String(segment.period).split(':').map(Number);
+            const totalMinutes = (timeParts[0] || 0) * 60 + (timeParts[1] || 0);
+            if (totalMinutes > 5) {
+                parkingCounter += 1;
+                const parkingCoord = segment.coordinates[0];
+                const parkingIcon = L.divIcon({
+                    className: 'parking-marker',
+                    html: '<b>' + parkingCounter + '</b>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                L.marker(parkingCoord, { icon: parkingIcon })
+                    .addTo(featureGroup)
+                    .bindPopup('<b>Стоянка №' + parkingCounter + '</b><br>Длительность: ' + segment.period + '<br>Начало: ' + segment.fdate);
+            }
+        }
+    });
+
+    if (allCoords.length > 0) {
+        const polyline = L.polyline(allCoords, { color: '#d64933', weight: 4 }).addTo(featureGroup);
+        map.fitBounds(polyline.getBounds(), { padding: [24, 24] });
+    }
+}
+
+function processDeviceTrack(points) {
+    if (!points || points.length === 0) return;
+    const latLngs = points.map((point) => [point.latitude, point.longitude]);
+    const polyline = L.polyline(latLngs, { color: '#2578a9', weight: 4 }).addTo(featureGroup);
+    map.fitBounds(polyline.getBounds(), { padding: [24, 24] });
+}
+
 function initMap() {
     if (map) return;
-    map = L.map('map').setView([48, 30], 6); // Centered on Ukraine
+    map = L.map('map').setView([48, 30], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
@@ -39,123 +222,6 @@ function initMap() {
     featureGroup = L.featureGroup().addTo(map);
 }
 
-// --- WebSocket Connection ---
-function connect() {
-    console.log("Attempting to connect to WebSocket...");
-    if (statusDiv) {
-        statusDiv.textContent = "Connecting...";
-        statusDiv.style.color = "orange";
-    }
-
-    socket = new WebSocket(wsUrl);
-
-    socket.onopen = function() {
-        console.log("WebSocket connection established.");
-        if (statusDiv) {
-            statusDiv.textContent = "Connection established.";
-            statusDiv.style.color = "green";
-        }
-    };
-
-    socket.onmessage = function(event) {
-        console.log("Raw data received from server:", event.data);
-        if (statusDiv) {
-            statusDiv.textContent = "Data received.";
-            statusDiv.style.color = "blue";
-        }
-        appendRawLog('⬅ ' + event.data, 'in');
-        
-        const data = JSON.parse(event.data);
-        
-        // Display raw JSON
-        if (responsePayloadPre) {
-            responsePayloadPre.textContent = JSON.stringify(data, null, 4);
-        }
-
-        // Clear previous map layers
-        featureGroup.clearLayers();
-
-        // Process data for map
-        if (data.res && data.res[0] && data.res[0].f) {
-            if (data.name === "Mileage Report") {
-                processMileageReport(data.res[0].f);
-            } else if (data.name === "Device Track") {
-                processDeviceTrack(data.res[0].f);
-            }
-        } else {
-            console.log("No drawable data in response.");
-        }
-    };
-
-    socket.onclose = function(event) {
-        if (event.wasClean) {
-            console.log(`WebSocket connection closed cleanly, code=${event.code} reason=${event.reason}`);
-            statusDiv.textContent = `Connection closed cleanly.`;
-        } else {
-            console.error('WebSocket connection died.');
-            statusDiv.textContent = 'Connection died. Trying to reconnect...';
-        }
-        statusDiv.style.color = "red";
-        setTimeout(connect, 5000);
-    };
-
-    socket.onerror = function(error) {
-        console.error(`WebSocket Error:`, error);
-        statusDiv.textContent = `Error: ${error.message || 'Could not connect.'}`;
-        statusDiv.style.color = "red";
-    };
-}
-
-// --- Data Processors for Map ---
-function processMileageReport(segments) {
-    let allCoords = [];
-    let parkingCounter = 0;
-    segments.forEach(segment => {
-        if (segment.coordinates && segment.coordinates.length > 0) {
-            const segmentCoords = segment.coordinates;
-            allCoords = allCoords.concat(segmentCoords);
-
-            // Check if the segment is a parking/stop and its duration is more than 5 minutes
-            if (segment.ismoved === false && segment.period) {
-                const timeParts = segment.period.split(':').map(Number);
-                const totalMinutes = timeParts[0] * 60 + timeParts[1];
-
-                if (totalMinutes > 5) {
-                    parkingCounter++;
-                    const parkingCoord = segmentCoords[0];
-                    
-                    const parkingIcon = L.divIcon({
-                        className: 'parking-marker',
-                        html: `<b>${parkingCounter}</b>`,
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    });
-
-                    L.marker(parkingCoord, { icon: parkingIcon })
-                      .addTo(featureGroup)
-                      .bindPopup(`<b>Стоянка №${parkingCounter}</b><br>Длительность: ${segment.period}<br>Начало: ${segment.fdate}`);
-                }
-            }
-        }
-    });
-
-    if (allCoords.length > 0) {
-        const polyline = L.polyline(allCoords, { color: 'red' }).addTo(featureGroup);
-        map.fitBounds(polyline.getBounds());
-    }
-}
-
-function processDeviceTrack(points) {
-    if (points.length === 0) return;
-    
-    // Leaflet uses [lat, lng], server sends correct order here.
-    const latLngs = points.map(p => [p.latitude, p.longitude]);
-    
-    const polyline = L.polyline(latLngs, { color: 'blue' }).addTo(featureGroup);
-    map.fitBounds(polyline.getBounds());
-}
-
-// --- Input Defaults ---
 function setDefaultInputs() {
     const now = new Date();
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -163,113 +229,290 @@ function setDefaultInputs() {
 
     const toLocalISOString = (date) => {
         const tzoffset = (new Date()).getTimezoneOffset() * 60000;
-        const localISOTime = new Date(date - tzoffset).toISOString().slice(0, 16);
-        return localISOTime;
+        return new Date(date - tzoffset).toISOString().slice(0, 16);
     };
 
-    dateToInput.value = toLocalISOString(todayEnd);
-    dateFromInput.value = toLocalISOString(todayStart);
-    // vehicleIdInput.value is already set in HTML
+    if (dateToInput) dateToInput.value = toLocalISOString(todayEnd);
+    if (dateFromInput) dateFromInput.value = toLocalISOString(todayStart);
 }
 
-// --- Event Listeners ---
-function sendRequest(requestObject) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-        alert("WebSocket is not connected.");
+function connect() {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    setStatus('Подключение к WebSocket...', 'is-pending');
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = function () {
+        setStatus('Соединение установлено.', 'is-ok');
+        appendRawLog('WS open: ' + wsUrl, 'in');
+    };
+
+    socket.onmessage = function (event) {
+        appendRawLog('⬅ ' + event.data, 'in');
+        let data = null;
+        try {
+            data = JSON.parse(event.data);
+        } catch (error) {
+            setStatus('Получен непарсируемый ответ.', 'is-bad');
+            return;
+        }
+
+        authState.lastPacket = data && data.name ? String(data.name) : '(unknown)';
+        updateSessionUi();
+        setStatus('Ответ получен.', 'is-ok');
+
+        if (responsePayloadPre) {
+            responsePayloadPre.textContent = JSON.stringify(data, null, 4);
+        }
+
+        if (data && data.name === 'login') {
+            const packet = data.res && data.res[0] ? data.res[0] : null;
+            if (packet && packet.uid) {
+                authState.uid = Number(packet.uid) || null;
+                authState.loggedIn = true;
+                authState.loginInProgress = false;
+                setStatus('Login выполнен.', 'is-ok');
+            } else {
+                authState.uid = null;
+                authState.loggedIn = false;
+                authState.loginInProgress = false;
+                setStatus('Login отклонён.', 'is-bad');
+            }
+            updateSessionUi();
+        }
+
+        if (featureGroup) featureGroup.clearLayers();
+        if (data.res && data.res[0] && data.res[0].f) {
+            if (data.name === 'Mileage Report') processMileageReport(data.res[0].f);
+            if (data.name === 'Device Track') processDeviceTrack(data.res[0].f);
+        }
+    };
+
+    socket.onclose = function (event) {
+        authState.loginInProgress = false;
+        authState.loggedIn = false;
+        authState.uid = null;
+        updateSessionUi();
+        appendRawLog('WS close: code=' + event.code + ' reason=' + (event.reason || ''), 'warn');
+        setStatus('Соединение закрыто. Повторное подключение...', 'is-bad');
+        reconnectTimer = setTimeout(connect, 5000);
+    };
+
+    socket.onerror = function () {
+        setStatus('Ошибка WebSocket.', 'is-bad');
+    };
+}
+
+function sendLogin() {
+    syncAuthInputs();
+    if (!authState.user || !authState.password) {
+        alert('Укажите логин и пароль.');
         return;
     }
-    const payload = JSON.stringify(requestObject);
-    console.log("Sending payload:", payload);
-    socket.send(payload);
-    statusDiv.textContent = "Request sent. Waiting for response...";
-    statusDiv.style.color = "blue";
-    responsePayloadPre.textContent = ''; // Clear previous response
+    if (!ensureSocketOpen()) return;
+    authState.uid = null;
+    authState.loggedIn = false;
+    authState.loginInProgress = true;
+    updateSessionUi();
+    sendRequest(buildLoginRequest());
 }
 
-// --- Raw Tester ---
-function sendRawCustom(){
+function populateRawRequest(kind) {
+    const auth = resolveAuth();
+    const range = getDateRange();
+    const vehicleId = vehicleIdInput ? String(vehicleIdInput.value || '') : '';
+    let payload = null;
+
+    if (kind === 'login') {
+        payload = buildLoginRequest();
+    } else if (kind === 'desktop') {
+        payload = {
+            name: 'desktop',
+            type: 'desktop',
+            mid: 1,
+            act: 'init',
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid || 0,
+            lang: 'en'
+        };
+    } else if (kind === 'select-min') {
+        payload = {
+            name: 'Vehicle Select Min',
+            type: 'etbl',
+            mid: 4,
+            act: 'setup',
+            filter: [{ selecteduid: [auth.uid || 0] }],
+            nowait: true,
+            waitfor: [],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid || 0,
+            lang: 'en'
+        };
+    } else if (kind === 'device-track') {
+        payload = {
+            name: 'Device Track',
+            type: 'etbl',
+            mid: 6,
+            act: 'filter',
+            filter: [
+                { selectedpgdateto: [range.dateTo] },
+                { selectedpgdatefrom: [range.dateFrom] },
+                { selecteddeviceid: [vehicleId] }
+            ],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid || 0,
+            lang: 'en'
+        };
+    }
+
+    if (rawRequestInput && payload) {
+        rawRequestInput.value = JSON.stringify(payload, null, 2);
+    }
+}
+
+function sendRawCustom() {
     if (!rawRequestInput) return;
     let value = rawRequestInput.value.trim();
-    if (!value){
-        appendRawLog('⚠ Пустой ввод', 'in');
+    if (!value) {
+        appendRawLog('⚠ Пустой ввод', 'warn');
         return;
     }
     if (value.startsWith('send:')) value = value.slice(5);
-    let obj;
-    try { obj = JSON.parse(value); }
-    catch(err){ appendRawLog('⚠ Ошибка парсинга JSON: '+err.message,'in'); return; }
-    if (!socket || socket.readyState !== WebSocket.OPEN){
-        appendRawLog('⚠ WebSocket не подключен', 'in');
+    let obj = null;
+    try {
+        obj = JSON.parse(value);
+    } catch (error) {
+        appendRawLog('⚠ Ошибка парсинга JSON: ' + error.message, 'warn');
         return;
     }
-    const payload = JSON.stringify(obj);
-    socket.send(payload);
-    appendRawLog('➡ ' + payload, 'out');
+    sendRequest(obj);
 }
 
-if (rawRequestSendBtn){ rawRequestSendBtn.addEventListener('click', sendRawCustom); }
-if (rawRequestClearBtn){ rawRequestClearBtn.addEventListener('click', ()=>{ if (rawResponseLog) rawResponseLog.innerHTML='(лог пуст)'; }); }
-if (rawRequestInput){
-    rawRequestInput.addEventListener('keydown', (e)=>{
-        if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendRawCustom(); }
+if (sendLoginBtn) sendLoginBtn.addEventListener('click', sendLogin);
+if (clearSessionBtn) {
+    clearSessionBtn.addEventListener('click', function () {
+        authState.uid = null;
+        authState.loggedIn = false;
+        authState.loginInProgress = false;
+        updateSessionUi();
+        if (responsePayloadPre) responsePayloadPre.textContent = '{}';
+        if (featureGroup) featureGroup.clearLayers();
+    });
+}
+if (fillLoginPresetBtn) fillLoginPresetBtn.addEventListener('click', function () { populateRawRequest('login'); });
+if (presetDesktopBtn) presetDesktopBtn.addEventListener('click', function () { populateRawRequest('desktop'); });
+if (presetSelectMinBtn) presetSelectMinBtn.addEventListener('click', function () { populateRawRequest('select-min'); });
+if (presetDeviceTrackBtn) presetDeviceTrackBtn.addEventListener('click', function () { populateRawRequest('device-track'); });
+if (rawRequestSendBtn) rawRequestSendBtn.addEventListener('click', sendRawCustom);
+if (rawRequestClearBtn) rawRequestClearBtn.addEventListener('click', function () {
+    if (rawResponseLog) rawResponseLog.innerHTML = '(лог пуст)';
+});
+if (copyResponseBtn) copyResponseBtn.addEventListener('click', copyLatestResponse);
+if (rawRequestInput) {
+    rawRequestInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendRawCustom();
+        }
     });
 }
 
-function resolveAuth(){
-    // Prefer global authenticated state if available
-    var usr = (typeof authUser !== 'undefined' && authUser) || (window.loginUserInput && loginUserInput.value) || '';
-    var pwd = (typeof authPwd !== 'undefined' && authPwd) || (window.loginPasswordInput && loginPasswordInput.value) || '';
-    var uid = (typeof authUid !== 'undefined' && authUid != null) ? authUid : null;
-    return { usr: usr, pwd: pwd, uid: uid };
+if (sendVehicleSelectMinBtn) {
+    sendVehicleSelectMinBtn.addEventListener('click', function () {
+        const auth = ensureLoggedInOrWarn();
+        if (!auth) return;
+        sendRequest({
+            name: 'Vehicle Select Min',
+            type: 'etbl',
+            mid: 4,
+            act: 'setup',
+            filter: [{ selecteduid: [auth.uid] }],
+            nowait: true,
+            waitfor: [],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid,
+            lang: 'en'
+        });
+    });
 }
 
-function ensureAuthOrWarn(){
-    var a = resolveAuth();
-    if(!a.usr || !a.pwd){
-        alert('Отсутствуют учетные данные. Выполните вход.');
-        return null;
-    }
-    return a;
+if (sendVehicleShowBtn) {
+    sendVehicleShowBtn.addEventListener('click', function () {
+        const auth = ensureLoggedInOrWarn();
+        if (!auth) return;
+        sendRequest({
+            name: 'Vehicle Show',
+            type: 'etbl',
+            mid: 2,
+            act: 'setup',
+            filter: [],
+            nowait: true,
+            waitfor: [],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid,
+            lang: 'en'
+        });
+    });
 }
 
-sendMileageReportBtn.addEventListener('click', () => {
-    const auth = ensureAuthOrWarn();
-    if(!auth) return;
-    const dateTo = new Date(dateToInput.value).toISOString();
-    const dateFrom = new Date(dateFromInput.value).toISOString();
-    const vehicleId = vehicleIdInput.value;
-    const request = {
-        name: 'Mileage Report', type: 'map', mid: 2, act: 'filter',
-        filter: [
-            { selectedvihicleid: [vehicleId] },
-            { selectedpgdateto: [dateTo] },
-            { selectedpgdatefrom: [dateFrom] }
-        ],
-        usr: auth.usr, pwd: auth.pwd, uid: auth.uid, lang: 'en'
-    };
-    sendRequest(request);
-});
+if (sendMileageReportBtn) {
+    sendMileageReportBtn.addEventListener('click', function () {
+        const auth = ensureLoggedInOrWarn();
+        if (!auth) return;
+        const range = getDateRange();
+        const vehicleId = vehicleIdInput.value;
+        sendRequest({
+            name: 'Mileage Report',
+            type: 'map',
+            mid: 2,
+            act: 'filter',
+            filter: [
+                { selectedvihicleid: [vehicleId] },
+                { selectedpgdateto: [range.dateTo] },
+                { selectedpgdatefrom: [range.dateFrom] }
+            ],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid,
+            lang: 'en'
+        });
+    });
+}
 
-sendDeviceTrackBtn.addEventListener('click', () => {
-    const auth = ensureAuthOrWarn();
-    if(!auth) return;
-    const dateTo = new Date(dateToInput.value).toISOString();
-    const dateFrom = new Date(dateFromInput.value).toISOString();
-    const deviceId = vehicleIdInput.value;
-    const request = {
-        name: 'Device Track', type: 'etbl', mid: 6, act: 'filter',
-        filter: [
-            { selectedpgdateto: [dateTo] },
-            { selectedpgdatefrom: [dateFrom] },
-            { selecteddeviceid: [deviceId] }
-        ],
-        usr: auth.usr, pwd: auth.pwd, uid: auth.uid, lang: 'en'
-    };
-    sendRequest(request);
-});
+if (sendDeviceTrackBtn) {
+    sendDeviceTrackBtn.addEventListener('click', function () {
+        const auth = ensureLoggedInOrWarn();
+        if (!auth) return;
+        const range = getDateRange();
+        const deviceId = vehicleIdInput.value;
+        sendRequest({
+            name: 'Device Track',
+            type: 'etbl',
+            mid: 6,
+            act: 'filter',
+            filter: [
+                { selectedpgdateto: [range.dateTo] },
+                { selectedpgdatefrom: [range.dateFrom] },
+                { selecteddeviceid: [deviceId] }
+            ],
+            usr: auth.usr,
+            pwd: auth.pwd,
+            uid: auth.uid,
+            lang: 'en'
+        });
+    });
+}
 
-
-// --- Initial Load ---
 initMap();
 setDefaultInputs();
+updateSessionUi();
+populateRawRequest('login');
 connect();

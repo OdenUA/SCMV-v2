@@ -25,6 +25,7 @@ function connect() {
   statusDiv = document.getElementById('status');
   socket = new WebSocket(wsUrl);
   socket.onopen = function () {
+    authLastLoginFailed = false;
     updateStatus('Соединение установлено.', 'green', 4000);
     requestVehicleSelectMin();
     try {
@@ -98,8 +99,13 @@ function connect() {
         showRouteToast("✅ Логин успешен");
         requestVehicleSelectMin();
       } else {
+        authLoginInProgress = false;
+        authLastLoginFailed = true;
+        if (typeof resetAuthState === 'function') resetAuthState(false);
         try { var dotErr = document.getElementById('loginStatusDot'); if(dotErr){ dotErr.classList.remove('status-online'); dotErr.classList.add('status-offline'); dotErr.title = data.msg || 'Offline'; } } catch(_){}
+        updateStatus('Ошибка логина. Проверьте логин/пароль.', 'red', 6000);
         showRouteToast("⚠ Ошибка логина");
+        try { if (socket && socket.readyState === WebSocket.OPEN) socket.close(); } catch(_){ }
       }
       return;
     }
@@ -640,6 +646,13 @@ function connect() {
     }
   };
   socket.onclose = function () {
+    var loginFailed = !!authLastLoginFailed;
+    authLoginInProgress = false;
+    if (typeof resetAuthState === 'function') resetAuthState(false);
+    if (loginFailed) {
+      updateStatus('Логин не выполнен. Проверьте логин/пароль.', 'red', 8000);
+      return;
+    }
     updateStatus('Соединение потеряно. Повторное подключение...', 'red');
     setTimeout(connect, 5000);
   };
@@ -732,6 +745,8 @@ function sendLogin() {
     statusDiv.style.color = "red";
     return;
   }
+  authLoginInProgress = true;
+  authLastLoginFailed = false;
   var req = buildLoginRequest();
   statusDiv.textContent = "Отправка логина...";
   statusDiv.style.color = "blue";

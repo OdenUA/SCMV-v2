@@ -530,6 +530,8 @@ function setAuthInfo(uid, user, pwd) {
   authUser = user;
   authPwd = pwd;
   authLoggedIn = true;
+  authLoginInProgress = false;
+  authLastLoginFailed = false;
   if (rememberCheckbox && rememberCheckbox.checked) {
       localStorage.setItem("dt_remember", "1");
       localStorage.setItem("dt_user", user || "");
@@ -549,6 +551,35 @@ function setAuthInfo(uid, user, pwd) {
     loginBtn.textContent = "Logout";
     loginBtn.classList.remove("btn-danger");
     loginBtn.classList.add("btn-success");
+  }
+}
+
+function resetAuthState(clearRemember) {
+  authLoggedIn = false;
+  authLoginInProgress = false;
+  authUid = null;
+  authUser = '';
+  authPwd = '';
+  if (clearRemember) {
+    localStorage.removeItem("dt_remember");
+    localStorage.removeItem("dt_user");
+    localStorage.removeItem("dt_pwd");
+  }
+  if (loginInfo) {
+    loginInfo.textContent = '';
+    loginInfo.style.color = '';
+  }
+  if (loginBtn) {
+    loginBtn.disabled = false;
+    loginBtn.textContent = "Login";
+    loginBtn.classList.remove("btn-success");
+    loginBtn.classList.add("btn-danger");
+  }
+  var dot = document.getElementById('loginStatusDot');
+  if (dot) {
+    dot.classList.remove('status-online');
+    dot.classList.add('status-offline');
+    dot.title = 'Offline';
   }
 }
 
@@ -718,21 +749,10 @@ function renderVehicleTable() {
         .forEach(function (th) {
           th.style.position = 'sticky';
           th.style.top = '0px';
-          th.style.zIndex = 3;
-          th.style.background = '#f8f9fa';
         });
-      // compute header height and expose it as a CSS variable on the overlay body
-      var headerH = headRow.offsetHeight || 0;
-      try {
-        var overlayBody = vehicleOverlay ? vehicleOverlay.querySelector('.vehicle-overlay-body') : null;
-        if (overlayBody && overlayBody.style) {
-          overlayBody.style.setProperty('--vehicle-table-filter-top', headerH + 'px');
-        }
-      } catch (e) {}
     }
+    overlayBody.style.setProperty('--vehicle-table-filter-top', headerH + 'px');
   } catch (e) {}
-
-  // ensure we recompute sticky positions on resize while overlay is open
   try {
     if (vehicleOverlay && !vehicleOverlay.dataset.resizeBound) {
       window.addEventListener('resize', function () {
@@ -1590,8 +1610,8 @@ function ensureDeviceStatusOverlay() {
       // set focus to Global Search input shortly after opening so cursor is placed there
       setTimeout(function(){ try{ var gsi = document.getElementById('deviceStatusSearchInput'); if(gsi) gsi.focus(); }catch(e){} }, 20);
       // send init then setup (setup will return rows; init provides cols mapping)
-      var initReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'init', usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
-      var setupReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' };
+      var initReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'init', usr: 'zheleznov', pwd: '**pwd**', uid: 360, lang: 'en' };
+      var setupReq = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: '**pwd**', uid: 360, lang: 'en' };
       try { setReqStart && setReqStart('Device Status init'); }catch(_){ }
       try { sendRequest(initReq); } catch(e){ console.warn('send Device Status init failed', e); }
       // send setup shortly after init so server can respond with cols first
@@ -1644,7 +1664,7 @@ function ensureDeviceStatusOverlay() {
   }catch(e){ console.warn('Binding Device Status search/reset failed', e); }
   if (refreshBtn && !refreshBtn.dataset.bound) {
     refreshBtn.addEventListener('click', function(){
-      try{ var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: 'a!540986', uid: 360, lang: 'en' }; sendRequest(req); updateStatus('Обновление Device Status...', 'blue', 2000); }catch(e){ console.warn('refresh device status failed', e); }
+      try{ var req = { name: 'Device Status', type: 'etbl', mid: 2, act: 'setup', filter: [{ selecteduid: [360] }], nowait: false, waitfor: [], usr: 'zheleznov', pwd: '**pwd**', uid: 360, lang: 'en' }; sendRequest(req); updateStatus('Обновление Device Status...', 'blue', 2000); }catch(e){ console.warn('refresh device status failed', e); }
     }); refreshBtn.dataset.bound='1';
   }
 }

@@ -46,6 +46,8 @@ var authLoggedIn = false;
 var authUid = null;
 var authUser = '';
 var authPwd = '';
+var authLoginInProgress = false;
+var authLastLoginFailed = false;
 // Vehicle overlay data
 var vehicleSelectMinData = null;
 var vehicleFilteredData = null;
