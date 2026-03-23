@@ -48,6 +48,11 @@ document.addEventListener('keydown', function(e) {
       sqlMod.style.display = 'none';
       return;
     }
+    var anomalySettingsMod = document.getElementById('anomalySettingsModal');
+    if (anomalySettingsMod && anomalySettingsMod.style.display !== 'none' && anomalySettingsMod.style.display !== '') {
+      anomalySettingsMod.style.display = 'none';
+      return;
+    }
     // Close Device Edit overlay
     var deviceEditOv = document.getElementById('deviceEditOverlay');
     if (deviceEditOv && deviceEditOv.style.display !== 'none' && deviceEditOv.style.display !== '') {
@@ -177,9 +182,87 @@ function init() {
     });
   }
 
+  (function initAnomalySettingsModal(){
+    if(!anomalySettingsBtn || !anomalySettingsModal || !anomalySettingsForm) return;
+    var fields = {
+      gapThresholdMinutes: document.getElementById('anomalyGapThresholdMinutes'),
+      speedThresholdKph: document.getElementById('anomalySpeedThresholdKph'),
+      jumpSpeedThresholdKph: document.getElementById('anomalyJumpSpeedThresholdKph'),
+      realSpeedThresholdKph: document.getElementById('anomalyRealSpeedThresholdKph'),
+      positionJumpDistanceM: document.getElementById('anomalyPositionJumpDistanceM'),
+      tableMinDistanceM: document.getElementById('anomalyTableMinDistanceM')
+    };
+
+    function fillForm(settings){
+      if(!settings) return;
+      if(fields.gapThresholdMinutes) fields.gapThresholdMinutes.value = (Number(settings.gapThresholdMs || 0) / 60000).toString();
+      if(fields.speedThresholdKph) fields.speedThresholdKph.value = settings.speedThresholdKph;
+      if(fields.jumpSpeedThresholdKph) fields.jumpSpeedThresholdKph.value = settings.jumpSpeedThresholdKph;
+      if(fields.realSpeedThresholdKph) fields.realSpeedThresholdKph.value = settings.realSpeedThresholdKph;
+      if(fields.positionJumpDistanceM) fields.positionJumpDistanceM.value = settings.positionJumpDistanceM;
+      if(fields.tableMinDistanceM) fields.tableMinDistanceM.value = settings.tableMinDistanceM;
+    }
+
+    function collectSettings(){
+      return {
+        gapThresholdMs: Number(fields.gapThresholdMinutes && fields.gapThresholdMinutes.value) * 60000,
+        speedThresholdKph: Number(fields.speedThresholdKph && fields.speedThresholdKph.value),
+        jumpSpeedThresholdKph: Number(fields.jumpSpeedThresholdKph && fields.jumpSpeedThresholdKph.value),
+        realSpeedThresholdKph: Number(fields.realSpeedThresholdKph && fields.realSpeedThresholdKph.value),
+        positionJumpDistanceM: Number(fields.positionJumpDistanceM && fields.positionJumpDistanceM.value),
+        tableMinDistanceM: Number(fields.tableMinDistanceM && fields.tableMinDistanceM.value)
+      };
+    }
+
+    function openModal(){
+      fillForm(typeof window.getAnomalySettings === 'function' ? window.getAnomalySettings() : null);
+      anomalySettingsModal.style.display = 'block';
+    }
+
+    function closeModal(){
+      anomalySettingsModal.style.display = 'none';
+    }
+
+    if(!anomalySettingsBtn.dataset.bound){
+      anomalySettingsBtn.addEventListener('click', openModal);
+      anomalySettingsBtn.dataset.bound = '1';
+    }
+    if(anomalySettingsCloseBtn && !anomalySettingsCloseBtn.dataset.bound){
+      anomalySettingsCloseBtn.addEventListener('click', closeModal);
+      anomalySettingsCloseBtn.dataset.bound = '1';
+    }
+    if(anomalySettingsCancelBtn && !anomalySettingsCancelBtn.dataset.bound){
+      anomalySettingsCancelBtn.addEventListener('click', closeModal);
+      anomalySettingsCancelBtn.dataset.bound = '1';
+    }
+    if(anomalySettingsResetBtn && !anomalySettingsResetBtn.dataset.bound){
+      anomalySettingsResetBtn.addEventListener('click', function(){
+        var settings = typeof window.resetAnomalySettings === 'function' ? window.resetAnomalySettings() : null;
+        fillForm(settings);
+        if(typeof updateStatus === 'function') updateStatus('Настройки аномалий сброшены', 'green', 3000);
+      });
+      anomalySettingsResetBtn.dataset.bound = '1';
+    }
+    if(!anomalySettingsForm.dataset.bound){
+      anomalySettingsForm.addEventListener('submit', function(ev){
+        ev.preventDefault();
+        var settings = collectSettings();
+        if(typeof window.saveAnomalySettings === 'function') {
+          window.saveAnomalySettings(settings);
+        }
+        if(typeof updateStatus === 'function') updateStatus('Настройки аномалий сохранены', 'green', 3000);
+        closeModal();
+      });
+      anomalySettingsForm.dataset.bound = '1';
+    }
+  })();
+
   window.addEventListener("click", function (e) {
     if (e.target === sqlModal) {
       sqlModal.style.display = "none";
+    }
+    if (e.target === anomalySettingsModal) {
+      anomalySettingsModal.style.display = 'none';
     }
   });
 

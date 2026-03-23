@@ -195,7 +195,8 @@ function processDeviceTrack(points) {
             ],
           });
           directionDecorator.addLayer(gapDeco);
-          if (distanceM >= 500) {
+          var includeInTable = distanceM >= ANOMALY_TABLE_MIN_DISTANCE_M;
+          if (includeInTable) {
             var durSec = timeDiffMs / 1000;
             var durDisplay = durSec >= 3600 ? (durSec / 3600).toFixed(2) + " h" : durSec >= 60 ? (durSec / 60).toFixed(1) + " m" : Math.round(durSec) + " s";
             anomalies.push({

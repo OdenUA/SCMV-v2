@@ -23,8 +23,14 @@ var startstopSumResultThead = document.querySelector('#startstopSumResultTable t
 var startstopSumThead = document.querySelector('#startstopSumTable thead');
 // generateSqlBtn removed (button moved/removed from Device Track Details)
 var sqlModal = document.getElementById('sqlModal');
-var closeModalBtn = document.querySelector('.close-button');
+var closeModalBtn = document.getElementById('sqlModalCloseBtn');
 var sqlOutput = document.getElementById('sql-output');
+var anomalySettingsBtn = document.getElementById('anomalySettingsBtn');
+var anomalySettingsModal = document.getElementById('anomalySettingsModal');
+var anomalySettingsCloseBtn = document.getElementById('anomalySettingsCloseBtn');
+var anomalySettingsForm = document.getElementById('anomalySettingsForm');
+var anomalySettingsResetBtn = document.getElementById('anomalySettingsResetBtn');
+var anomalySettingsCancelBtn = document.getElementById('anomalySettingsCancelBtn');
 var boundsDebugContainer = document.getElementById('boundsDebugContainer');
 var boundsDebugOutput = document.getElementById('boundsDebugOutput');
 var toggleVehicleBtn = document.getElementById('toggleVehicleBtn');
@@ -131,10 +137,76 @@ var ANOMALY_SPEED_THRESHOLD_KPH = 200;                  // 200 km/h - Speed Spik
 var ANOMALY_JUMP_SPEED_THRESHOLD_KPH = 50;              // 50 km/h - calculated speed threshold for Position Jump
 var ANOMALY_REAL_SPEED_THRESHOLD_KPH = 10;              // 10 km/h - reported speed threshold for Position Jump
 var ANOMALY_POSITION_JUMP_DISTANCE_M = 1200;             // 1200 m - distance threshold for Position Jump
+var ANOMALY_TABLE_MIN_DISTANCE_M = 0;                    // 0 m - minimum distance to show anomaly in the table
 
-// Raw Device Track (drawRawDeviceTrack)
-var ANOMALY_RAW_GAP_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes - Time Gap threshold for raw track
-var ANOMALY_RAW_SPEED_THRESHOLD_KPH = 150;              // 150 km/h - Speed Spike threshold for raw track
+var ANOMALY_SETTINGS_STORAGE_KEY = 'anomalySettings';
+window.DEFAULT_ANOMALY_SETTINGS = {
+	gapThresholdMs: ANOMALY_GAP_THRESHOLD_MS,
+	speedThresholdKph: ANOMALY_SPEED_THRESHOLD_KPH,
+	jumpSpeedThresholdKph: ANOMALY_JUMP_SPEED_THRESHOLD_KPH,
+	realSpeedThresholdKph: ANOMALY_REAL_SPEED_THRESHOLD_KPH,
+	positionJumpDistanceM: ANOMALY_POSITION_JUMP_DISTANCE_M,
+	tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M
+};
+
+window.getAnomalySettings = function(){
+	return {
+		gapThresholdMs: ANOMALY_GAP_THRESHOLD_MS,
+		speedThresholdKph: ANOMALY_SPEED_THRESHOLD_KPH,
+		jumpSpeedThresholdKph: ANOMALY_JUMP_SPEED_THRESHOLD_KPH,
+		realSpeedThresholdKph: ANOMALY_REAL_SPEED_THRESHOLD_KPH,
+		positionJumpDistanceM: ANOMALY_POSITION_JUMP_DISTANCE_M,
+		tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M
+	};
+};
+
+window.applyAnomalySettings = function(settings){
+	if(!settings || typeof settings !== 'object') return window.getAnomalySettings();
+	function asNumber(value, fallback){
+		var num = Number(value);
+		return isFinite(num) && num >= 0 ? num : fallback;
+	}
+	ANOMALY_GAP_THRESHOLD_MS = asNumber(settings.gapThresholdMs, ANOMALY_GAP_THRESHOLD_MS);
+	ANOMALY_SPEED_THRESHOLD_KPH = asNumber(settings.speedThresholdKph, ANOMALY_SPEED_THRESHOLD_KPH);
+	ANOMALY_JUMP_SPEED_THRESHOLD_KPH = asNumber(settings.jumpSpeedThresholdKph, ANOMALY_JUMP_SPEED_THRESHOLD_KPH);
+	ANOMALY_REAL_SPEED_THRESHOLD_KPH = asNumber(settings.realSpeedThresholdKph, ANOMALY_REAL_SPEED_THRESHOLD_KPH);
+	ANOMALY_POSITION_JUMP_DISTANCE_M = asNumber(settings.positionJumpDistanceM, ANOMALY_POSITION_JUMP_DISTANCE_M);
+	ANOMALY_TABLE_MIN_DISTANCE_M = asNumber(settings.tableMinDistanceM, ANOMALY_TABLE_MIN_DISTANCE_M);
+	return window.getAnomalySettings();
+};
+
+window.loadAnomalySettings = function(){
+	try{
+		var raw = localStorage.getItem(ANOMALY_SETTINGS_STORAGE_KEY);
+		if(!raw) return window.getAnomalySettings();
+		var parsed = JSON.parse(raw);
+		return window.applyAnomalySettings(parsed);
+	}catch(e){
+		console.warn('Не удалось загрузить настройки аномалий', e);
+		return window.getAnomalySettings();
+	}
+};
+
+window.saveAnomalySettings = function(settings){
+	var applied = window.applyAnomalySettings(settings);
+	try{
+		localStorage.setItem(ANOMALY_SETTINGS_STORAGE_KEY, JSON.stringify(applied));
+	}catch(e){
+		console.warn('Не удалось сохранить настройки аномалий', e);
+	}
+	return applied;
+};
+
+window.resetAnomalySettings = function(){
+	try{
+		localStorage.removeItem(ANOMALY_SETTINGS_STORAGE_KEY);
+	}catch(e){
+		console.warn('Не удалось очистить настройки аномалий', e);
+	}
+	return window.applyAnomalySettings(window.DEFAULT_ANOMALY_SETTINGS);
+};
+
+window.loadAnomalySettings();
 
 // --- Anomaly layer storage (global) ---
 window._rawTrackGapLayers = [];

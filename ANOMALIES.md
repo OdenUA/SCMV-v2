@@ -75,6 +75,8 @@ if (speedKph > SPEED_THRESHOLD_KPH) {
 - В Device Track: красная линия
 - В Track Raw: жёлтая пунктирная линия (порог 150 км/ч)
 
+**Отображение в таблице:** Показывается в таблице аномалий без дополнительного фильтра по минимальному расстоянию.
+
 ---
 
 ### 1.3 Position Jump (Прыжок позиции)
@@ -108,6 +110,8 @@ if (distanceM >= POSITION_JUMP_DISTANCE_M) {
 
 **Визуализация:** 
 - Красная пунктирная линия (dashArray: "10,5")
+
+**Отображение в таблице:** Показывается в таблице аномалий по тем же условиям, что и на карте, без дополнительного фильтра `≥ 500 м`.
 - В popup отображается расстояние в км
 
 **Суть:** Резкое изменение координат, не соответствующее реальному движению — признак сбоя GPS или потери сигнала.
@@ -293,12 +297,10 @@ function drawMileageGaps() {
 | Константа | Значение | Описание | Файл |
 |-----------|----------|----------|------|
 | `ANOMALY_GAP_THRESHOLD_MS` | 600 000 мс (10 мин) | Порог временного разрыва | globals.js |
-| `ANOMALY_SPEED_THRESHOLD_KPH` | 200 км/ч | Порог скачка скорости (Device Track) | globals.js |
-| `ANOMALY_RAW_SPEED_THRESHOLD_KPH` | 150 км/ч | Порог скачка скорости (Track Raw) | globals.js |
+| `ANOMALY_SPEED_THRESHOLD_KPH` | 200 км/ч | Общий порог скачка скорости для аномалий трека | globals.js |
 | `ANOMALY_JUMP_SPEED_THRESHOLD_KPH` | 50 км/ч | Расчётная скорость для прыжка позиции | globals.js |
 | `ANOMALY_REAL_SPEED_THRESHOLD_KPH` | 10 км/ч | Заявленная скорость для прыжка позиции | globals.js |
 | `ANOMALY_POSITION_JUMP_DISTANCE_M` | 800 м | Порог расстояния для прыжка позиции | globals.js |
-| `ANOMALY_RAW_GAP_THRESHOLD_MS` | 300 000 мс (5 мин) | Порог временного разрыва (Raw Track) | globals.js |
 | `satThreshold` | 10 (настраиваемый) | Минимальное количество спутников | device_track.js |
 | `BOUNDS.MIN_LAT` | 44.3° | Минимальная широта (юг) | globals.js |
 | `BOUNDS.MAX_LAT` | 52.4° | Максимальная широта (север) | globals.js |
