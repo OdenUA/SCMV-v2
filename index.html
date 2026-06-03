@@ -294,6 +294,7 @@
         <div class="table-container">
           <div class="table-header">
             <h2>Аномалии трека устройства</h2>
+            <button id="bulkDeleteAnomaliesBtn" class="btn btn-danger btn-xs" type="button">🗑️ Массовое удаление</button>
           </div>
           <div class="table-scroll track-scroll">
             <table id="resultTable">
@@ -427,6 +428,33 @@
             <button id="anomalySettingsResetBtn" class="btn btn-secondary" type="button">Сбросить</button>
             <button id="anomalySettingsCancelBtn" class="btn btn-secondary" type="button">Отмена</button>
             <button id="anomalySettingsSaveBtn" class="btn" type="submit">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="bulkDeleteModal" class="modal" data-hidden>
+      <div class="modal-content">
+        <span id="bulkDeleteCloseBtn" class="close-button">&times;</span>
+        <h2>Массовое удаление аномалий</h2>
+        <p class="anomaly-settings-note">Выберите критерии для отбора аномалий, которые будут удалены.</p>
+        <form id="bulkDeleteForm" class="anomaly-settings-form">
+          <div class="anomaly-settings-grid">
+            <label style="flex-direction:row;align-items:center;gap:8px;">
+              <input id="bulkDeleteSpeedCheck" type="checkbox" />
+              <span>Calculated Speed (km/h) больше чем</span>
+              <input id="bulkDeleteSpeedValue" type="number" min="0" step="1" value="200" style="width:80px;" />
+            </label>
+            <label style="flex-direction:row;align-items:center;gap:8px;">
+              <input id="bulkDeleteDistanceCheck" type="checkbox" />
+              <span>Distance (km) больше чем</span>
+              <input id="bulkDeleteDistanceValue" type="number" min="0" step="0.01" value="1" style="width:80px;" />
+            </label>
+          </div>
+          <p class="anomaly-settings-note">Если выбраны оба критерия, будет применено условие ИЛИ.</p>
+          <div class="anomaly-settings-actions">
+            <button id="bulkDeleteCancelBtn" class="btn btn-secondary" type="button">Отмена</button>
+            <button id="bulkDeleteOkBtn" class="btn" type="submit">OK</button>
           </div>
         </form>
       </div>

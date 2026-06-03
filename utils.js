@@ -276,6 +276,90 @@ function generateAnomalySql(anomaly) {
   }
 }
 
+// Generate bulk SQL for multiple anomalies (exact per-anomaly ranges, unique recalcstartstop)
+function generateBulkAnomalySql(anomalies, criteriaText) {
+  try {
+    if (!Array.isArray(anomalies) || anomalies.length === 0) {
+      showRouteToast('⚠ Нет аномалий для удаления', 2200);
+      return;
+    }
+
+    var deviceId = (typeof deviceIdInput !== 'undefined' && deviceIdInput) ? (deviceIdInput.value || '') : '';
+    if (!deviceId) {
+      showRouteToast('⚠ Не определен ID устройства', 2200);
+      return;
+    }
+
+    function parseAnomalyTime(str) {
+      if (!str) return null;
+      var m = String(str).match(/^(\d{2})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+      if (!m) return null;
+      var dd = m[1], mm = m[2], yy = m[3], hh = m[4], mi = m[5], ss = m[6];
+      var fullYear = '20' + yy;
+      return new Date(fullYear, parseInt(mm,10)-1, parseInt(dd,10), parseInt(hh,10), parseInt(mi,10), parseInt(ss,10));
+    }
+
+    var pad = function(n) { return n.toString().padStart(2, '0'); };
+    var formatDateTime = function(d) {
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    };
+
+    var sqlCommands = '-- Массовое удаление аномалий: ' + anomalies.length + ' шт.';
+    if (criteriaText) sqlCommands += '\n-- ' + criteriaText;
+    sqlCommands += '\n';
+    var affectedDatesSet = {};
+
+    anomalies.forEach(function(anomaly) {
+      var startTime = anomaly['Start Time'];
+      var endTime = anomaly['End Time'];
+      if (!startTime || !endTime) return;
+
+      var startDate = parseAnomalyTime(startTime);
+      var endDate = parseAnomalyTime(endTime);
+      if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return;
+
+      startDate.setSeconds(startDate.getSeconds() - 1);
+      endDate.setSeconds(endDate.getSeconds() + 1);
+
+      var current = new Date(startDate.getTime());
+      while (current.getTime() <= endDate.getTime()) {
+        var dayEnd = new Date(current.getTime());
+        dayEnd.setHours(23, 59, 59, 999);
+        var segmentEnd = new Date(Math.min(dayEnd.getTime(), endDate.getTime()));
+
+        var segmentStartStr = buildLocalDateParam(formatDateTime(current), false);
+        var segmentEndStr = buildLocalDateParam(formatDateTime(segmentEnd), true);
+        sqlCommands += "DELETE FROM snsrmain WHERE deviceid='" + deviceId + "' AND wdate >= '" + segmentStartStr + "' AND wdate <= '" + segmentEndStr + "';\n";
+
+        var dateStr = current.getFullYear() + '-' + pad(current.getMonth() + 1) + '-' + pad(current.getDate());
+        affectedDatesSet[dateStr] = true;
+
+        current = new Date(dayEnd.getTime() + 1);
+      }
+    });
+
+    var affectedDates = Object.keys(affectedDatesSet).sort();
+    if (affectedDates.length > 0) {
+      sqlCommands += '\n';
+      affectedDates.forEach(function(dateStr) {
+        sqlCommands += 'SELECT recalcstartstop(' + deviceId + ", '" + dateStr + "'::date, true);\n";
+      });
+    }
+
+    if (typeof sqlModal !== 'undefined' && sqlModal) {
+      sqlModal.style.display = 'block';
+    }
+    if (typeof sqlOutput !== 'undefined' && sqlOutput) {
+      sqlOutput.textContent = sqlCommands;
+    }
+
+    showRouteToast('✂️ SQL для массового удаления готов', 2200);
+  } catch (err) {
+    console.warn('generateBulkAnomalySql failed', err);
+    showRouteToast('⚠ Ошибка генерации SQL', 2200);
+  }
+}
+
 // Make polylines clickable in route mode & show nearest point popup for Device Track
 function attachRouteAwareClick(layer) {
   if (!layer || !layer.on) return;

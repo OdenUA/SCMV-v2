@@ -53,6 +53,11 @@ document.addEventListener('keydown', function(e) {
       anomalySettingsMod.style.display = 'none';
       return;
     }
+    var bulkDeleteMod = document.getElementById('bulkDeleteModal');
+    if (bulkDeleteMod && bulkDeleteMod.style.display !== 'none' && bulkDeleteMod.style.display !== '') {
+      bulkDeleteMod.style.display = 'none';
+      return;
+    }
     // Close Device Edit overlay
     var deviceEditOv = document.getElementById('deviceEditOverlay');
     if (deviceEditOv && deviceEditOv.style.display !== 'none' && deviceEditOv.style.display !== '') {
@@ -257,12 +262,92 @@ function init() {
     }
   })();
 
+  (function initBulkDeleteModal(){
+    if(!bulkDeleteModal || !bulkDeleteForm) return;
+
+    function openModal(){
+      bulkDeleteModal.style.display = 'block';
+    }
+    function closeModal(){
+      bulkDeleteModal.style.display = 'none';
+    }
+
+    if(bulkDeleteAnomaliesBtn && !bulkDeleteAnomaliesBtn.dataset.bound){
+      bulkDeleteAnomaliesBtn.addEventListener('click', function(){
+        if(!window._lastTrackAnomalies || !window._lastTrackAnomalies.length){
+          showRouteToast('⚠ Таблица аномалий пуста. Сначала нажмите Track Raw.', 3000);
+          return;
+        }
+        openModal();
+      });
+      bulkDeleteAnomaliesBtn.dataset.bound = '1';
+    }
+    if(bulkDeleteCloseBtn && !bulkDeleteCloseBtn.dataset.bound){
+      bulkDeleteCloseBtn.addEventListener('click', closeModal);
+      bulkDeleteCloseBtn.dataset.bound = '1';
+    }
+    if(bulkDeleteCancelBtn && !bulkDeleteCancelBtn.dataset.bound){
+      bulkDeleteCancelBtn.addEventListener('click', closeModal);
+      bulkDeleteCancelBtn.dataset.bound = '1';
+    }
+    if(!bulkDeleteForm.dataset.bound){
+      bulkDeleteForm.addEventListener('submit', function(ev){
+        ev.preventDefault();
+        var speedCheck = bulkDeleteSpeedCheck && bulkDeleteSpeedCheck.checked;
+        var speedValue = bulkDeleteSpeedValue ? Number(bulkDeleteSpeedValue.value) : NaN;
+        var distanceCheck = bulkDeleteDistanceCheck && bulkDeleteDistanceCheck.checked;
+        var distanceValue = bulkDeleteDistanceValue ? Number(bulkDeleteDistanceValue.value) : NaN;
+
+        if(!speedCheck && !distanceCheck){
+          showRouteToast('⚠ Выберите хотя бы один критерий', 2200);
+          return;
+        }
+
+        var anomalies = window._lastTrackAnomalies || [];
+        var filtered = anomalies.filter(function(anom){
+          var type = anom['Anomaly Type'];
+          if(type !== 'Out of Bounds' && type !== 'Distance Jump' && type !== 'Speed Spike') return false;
+          var speedOk = false, distanceOk = false;
+          if(speedCheck){
+            var s = parseFloat(anom['Calculated Speed (km/h)']);
+            if(!isNaN(s) && s > speedValue) speedOk = true;
+          }
+          if(distanceCheck){
+            var d = parseFloat(anom['Distance (km)']);
+            if(!isNaN(d) && d > distanceValue) distanceOk = true;
+          }
+          if(speedCheck && distanceCheck){
+            return speedOk || distanceOk;
+          }
+          if(speedCheck) return speedOk;
+          if(distanceCheck) return distanceOk;
+          return false;
+        });
+
+        if(filtered.length === 0){
+          showRouteToast('⚠ По заданным критериям аномалий не найдено', 2200);
+          return;
+        }
+
+        closeModal();
+        var criteriaParts = [];
+        if(speedCheck) criteriaParts.push('Calculated Speed (km/h) больше чем ' + speedValue);
+        if(distanceCheck) criteriaParts.push('Distance (km) больше чем ' + distanceValue);
+        generateBulkAnomalySql(filtered, criteriaParts.join(', '));
+      });
+      bulkDeleteForm.dataset.bound = '1';
+    }
+  })();
+
   window.addEventListener("click", function (e) {
     if (e.target === sqlModal) {
       sqlModal.style.display = "none";
     }
     if (e.target === anomalySettingsModal) {
       anomalySettingsModal.style.display = 'none';
+    }
+    if (e.target === bulkDeleteModal) {
+      bulkDeleteModal.style.display = 'none';
     }
   });
 

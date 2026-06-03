@@ -606,6 +606,7 @@ function connect() {
         tableHead.innerHTML = "";
         try {
           var anomalies = processDeviceTrack(response);
+          window._lastTrackAnomalies = anomalies || [];
              if(anomalies && anomalies.length){
                populateTable(tableBody, tableHead, anomalies);
                updateStatus('Device Track: найдено аномалий: '+anomalies.length, 'green', 6000);
