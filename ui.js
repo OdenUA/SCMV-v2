@@ -412,6 +412,7 @@ function init() {
         showRouteToast("⚠ Сначала выполните вход");
         return;
       }
+      if (typeof window.clearAnalysis === 'function') window.clearAnalysis();
       var dateTo = buildLocalDateParam(dateToInput.value, true);
       var dateFrom = buildLocalDateParam(dateFromInput.value, false);
       var deviceId = deviceIdInput.value;
@@ -465,6 +466,7 @@ function init() {
         showRouteToast("⚠ Сначала выполните вход");
         return;
       }
+      if (typeof window.clearAnalysis === 'function') window.clearAnalysis();
         if (mileageGapLayers && mileageGapLayers.length) {
           mileageGapLayers.forEach(function (g) {
             trackLayerGroup.removeLayer(g);
@@ -538,6 +540,7 @@ function init() {
   if(sendDeviceTrackRawBtn){
     sendDeviceTrackRawBtn.addEventListener('click', function(){
       if (!authLoggedIn) { showRouteToast('⚠ Сначала выполните вход'); return; }
+      if (typeof window.clearAnalysis === 'function') window.clearAnalysis();
       // Keep similar pre-checks as normal Track: clear gap layers etc
       try{ if(mileageGapLayers && mileageGapLayers.length){ mileageGapLayers.forEach(function(g){ try{ trackLayerGroup.removeLayer(g);}catch(_){} }); mileageGapLayers=[]; } }catch(e){ console.warn('Не удалось очистить стоянки перед Device Track Raw', e); }
       var dateTo = buildLocalDateParam(dateToInput.value, true);
@@ -576,6 +579,18 @@ function init() {
 
   setReqStart && setReqStart('Vehicle Track');
   sendRequest(trackReq);
+    });
+  }
+
+  // Analyze track button handler
+  if(sendAnalyzeTrackBtn){
+    sendAnalyzeTrackBtn.addEventListener('click', function(){
+      if (!authLoggedIn) { showRouteToast('⚠ Сначала выполните вход'); return; }
+      if (typeof window.loadAnalysisTrack === 'function') {
+        window.loadAnalysisTrack();
+      } else {
+        showRouteToast('⚠ Модуль анализа не загружен');
+      }
     });
   }
 

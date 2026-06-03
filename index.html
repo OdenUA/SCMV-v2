@@ -125,6 +125,9 @@
             <button id="splitDevLogToggle" type="button" class="btn btn-secondary" aria-pressed="false" title="Split">Split</button>
           </div>
         </div>
+        <div id="actionAnalyzeRow" style="grid-column:1 / -1; padding-right:5px; padding-left:5px; box-sizing:border-box;">
+          <button id="sendAnalyzeTrack" class="btn" style="width:100%">Analyze</button>
+        </div>
       </div>
       
       <!-- Перенесено: кнопка скрытия направления теперь под картой -->
@@ -147,6 +150,26 @@
     <div id="mapContainer">
       <div id="map"></div>
       <div id="resizeHandle"></div>
+    </div>
+
+    <!-- Analysis table (desktop layout) -->
+    <div id="analysisContainer" style="display:none; margin: 10px 40px;">
+      <div class="table-container">
+        <div class="table-header">
+          <h2>Анализ маршрута <span id="analysisSummary" style="font-weight:normal; font-size:13px; margin-left:8px;"></span></h2>
+          <div id="analysisViewToggle" style="display:none; margin-top:6px;">
+            <button id="analysisViewChrono" class="btn btn-small" style="margin-right:4px;">Хронология</button>
+            <button id="analysisViewSummary" class="btn btn-small" style="margin-right:4px;">Сводка</button>
+            <button id="analysisHideOk" class="btn btn-small active">Скрыть норму</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="analysisTable">
+            <thead id="analysisThead"></thead>
+            <tbody id="analysisTbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div class="main-content-wrapper">
@@ -469,6 +492,7 @@
     <script src="stops.js"></script>
     <script src="mileage.js"></script>
     <script src="anomalies.js"></script>
+    <script src="analysis.js"></script>
     <script src="device_track.js"></script>
     <script src="device_log.js"></script>
     <!-- SheetJS (XLSX) for client-side XLSX export -->

@@ -1089,6 +1089,10 @@ function drawRawDeviceTrack(points){
           updateStatus('Full Device Track (merged): '+uniq.length+' строк','green',6000);
           try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
           try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
+          if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
+            try{ window.runAnalysisFromRows(uniq); }catch(e){ console.warn('Analysis from full track failed', e); }
+            window._awaitingAnalysisTrack = false;
+          }
           return true;
         }catch(e){ console.warn('Failed to merge split segments', e); }
       } else {
@@ -1112,6 +1116,10 @@ function drawRawDeviceTrack(points){
   // Automatic run of the report for the full selection
         try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
   try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
+        if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
+          try{ window.runAnalysisFromRows(rows); }catch(e){ console.warn('Analysis from full track failed', e); }
+          window._awaitingAnalysisTrack = false;
+        }
         return true;
       }
     }

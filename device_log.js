@@ -270,6 +270,8 @@ window.initDeviceLog = function() {
     sendDeviceLogBtn.dataset.bound = '1';
   }
 
+  window.sendDeviceLogRequests = sendDeviceLogRequests;
+
   // Auto-clear tables when device ID changes
   if (deviceIdInput && !deviceIdInput.dataset.logsWatcher) {
     var lastSeenValue = deviceIdInput.value;

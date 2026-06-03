@@ -646,3 +646,34 @@ h2 {
 .floating-panel.collapsed + .panel-fab{ right:12px; transform: translateX(0); }
 .floating-panel.collapsed { --panel-collapsed: 1; }
 .floating-panel.collapsed ~ .panel-fab { transform: translateX(0) rotate(180deg); }
+
+/* Analysis table (desktop layout under map) */
+#analysisContainer .table-container {
+    margin-top: 0;
+}
+#analysisContainer table {
+    font-size: 0.85rem;
+}
+#analysisContainer th,
+#analysisContainer td {
+    padding: 6px 8px;
+    white-space: nowrap;
+}
+#analysisContainer tbody tr:hover {
+    background: #f1f5ff;
+    cursor: pointer;
+}
+#analysisViewToggle .btn-small {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    color: #333;
+    cursor: pointer;
+}
+#analysisViewToggle .btn-small.active {
+    background: #4a86e8;
+    color: #fff;
+    border-color: #4a86e8;
+}

@@ -49,6 +49,7 @@ var lineWidthValue = document.getElementById('lineWidthValue');
 var manualRouteInfoDiv = document.getElementById('manualRouteInfo');
 // Device Log/Alarm elements
 var sendDeviceLogBtn = document.getElementById('sendDeviceLog');
+var sendAnalyzeTrackBtn = document.getElementById('sendAnalyzeTrack');
 var deviceAlarmThead = document.getElementById('deviceAlarmThead');
 var deviceAlarmTbody = document.getElementById('deviceAlarmTbody');
 var deviceLogThead = document.getElementById('deviceLogThead');

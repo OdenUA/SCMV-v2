@@ -78,6 +78,8 @@ function connect() {
     // here caused the spinner to disappear before DOM updates completed.
   // Allow device_log.js to capture its packets first
   try { if(window.__handleDeviceLogResponse && window.__handleDeviceLogResponse(data)) { return; } } catch(e) { console.warn('DeviceLog handler error', e); }
+  // Analysis track response capture early
+  try { if(window.__handleAnalysisTrackResponse && window.__handleAnalysisTrackResponse(data)) { return; } } catch(e){ console.warn('Analysis track handler error', e); }
   // Full Device Track setup (raw) capture early
   try { if(window.__handleFullTrackSetup && window.__handleFullTrackSetup(data)) { return; } } catch(e){ console.warn('FullTrack handler error', e); }
   // Fuel report response handler
@@ -576,6 +578,7 @@ function connect() {
         processMileageReport(response);
         updateStatus('Mileage Report: получено', 'green', 5000);
   } else if (data.name === "Vehicle Track") {
+        if (typeof window.clearAnalysis === 'function') window.clearAnalysis();
         if (vehicleSelectMinData) {
           var f2 =
             data.filter &&

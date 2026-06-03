@@ -173,7 +173,28 @@ function initMap(){
   btn.dataset.bound='1';
 })();
 function currentLineWidth(){ var v=parseInt(lineWidthSlider?lineWidthSlider.value:'2',10); return isNaN(v)?2:v; }
-function updateAllLineWidths(){ var w=currentLineWidth(); if(lineWidthValue) lineWidthValue.textContent=String(w); if(routeRoadPolyline){ routeRoadPolyline.setStyle({weight:w+1}); } if(trackLayerGroup){ trackLayerGroup.eachLayer(function(layer){ if(layer instanceof L.Polyline){ if(layer===routeRoadPolyline) return; layer.setStyle({weight:w}); }});} if(previouslySelectedLayer){ previouslySelectedLayer.setStyle({weight:w+3}); } if(directionsVisible){ rebuildDirections(); } }
+function updateAllLineWidths(){
+  var w=currentLineWidth();
+  if(lineWidthValue) lineWidthValue.textContent=String(w);
+  if(routeRoadPolyline){ routeRoadPolyline.setStyle({weight:w+1}); }
+  function updateLayer(layer){
+    if(layer instanceof L.LayerGroup || layer instanceof L.FeatureGroup){
+      layer.eachLayer(updateLayer);
+    } else if(layer instanceof L.Polyline){
+      if(layer===routeRoadPolyline) return;
+      var newWeight = w;
+      if(layer._isAnalysisAnomaly){
+        newWeight = Math.max(w * 3 + 2, 3);
+      } else if(layer._isAnalysisPolyline){
+        newWeight = w * 3;
+      }
+      layer.setStyle({weight:newWeight});
+    }
+  }
+  if(trackLayerGroup){ trackLayerGroup.eachLayer(updateLayer); }
+  if(previouslySelectedLayer){ previouslySelectedLayer.setStyle({weight:w+3}); }
+  if(directionsVisible){ rebuildDirections(); }
+}
 if(lineWidthSlider){ lineWidthSlider.addEventListener('input', updateAllLineWidths); }
 function rebuildDirections(){
   try{
@@ -183,23 +204,26 @@ function rebuildDirections(){
     var repeat = arrowSize * 8; // spacing between arrows
     if(directionDecorator){ try{ trackLayerGroup.removeLayer(directionDecorator);}catch(_){}}
     directionDecorator = L.layerGroup();
-    if(trackLayerGroup){
-      trackLayerGroup.eachLayer(function(layer){
-        if(layer instanceof L.Polyline){
-          var latlngs = layer.getLatLngs();
-          var lengthOk = false;
-          if(Array.isArray(latlngs)){
-            if(latlngs.length>1) lengthOk=true;
-            else if(latlngs.length===1 && Array.isArray(latlngs[0]) && latlngs[0].length>1) lengthOk=true;
-          }
-          if(!lengthOk) return;
-          var color = (layer.options && layer.options.color) || '#000';
-          var deco = L.polylineDecorator(layer,{
-            patterns:[{ offset: offset, repeat: repeat, symbol: L.Symbol.arrowHead({ pixelSize: arrowSize, pathOptions: { fillOpacity:1, weight:0, color: color } }) }]
-          });
-          directionDecorator.addLayer(deco);
+    function processLayer(layer){
+      if(layer instanceof L.LayerGroup || layer instanceof L.FeatureGroup){
+        layer.eachLayer(processLayer);
+      } else if(layer instanceof L.Polyline){
+        var latlngs = layer.getLatLngs();
+        var lengthOk = false;
+        if(Array.isArray(latlngs)){
+          if(latlngs.length>1) lengthOk=true;
+          else if(latlngs.length===1 && Array.isArray(latlngs[0]) && latlngs[0].length>1) lengthOk=true;
         }
-      });
+        if(!lengthOk) return;
+        var color = (layer.options && layer.options.color) || '#000';
+        var deco = L.polylineDecorator(layer,{
+          patterns:[{ offset: offset, repeat: repeat, symbol: L.Symbol.arrowHead({ pixelSize: arrowSize, pathOptions: { fillOpacity:1, weight:0, color: color } }) }]
+        });
+        directionDecorator.addLayer(deco);
+      }
+    }
+    if(trackLayerGroup){
+      trackLayerGroup.eachLayer(processLayer);
     }
     if(directionsVisible){ trackLayerGroup.addLayer(directionDecorator); }
   } catch(err){ console.warn('Failed to rebuild directions', err); }
