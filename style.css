@@ -351,7 +351,7 @@ h2 {
 .floating-panel .actions .btn{flex:1 1 100px;padding:6px 8px;}
 .actions-grid > div { display: block; }
 .actions-grid > div > .btn { width: 100% !important; box-sizing: border-box !important; flex: none !important; }
-.actions-grid #actionBottomRight > #devLogWrapper > .btn { width: auto !important; }
+.actions-grid #actionTopRight > #devLogWrapper > .btn { width: auto !important; }
 .floating-panel .sub-actions{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
 .floating-panel .line-width{display:flex;align-items:center;gap:6px;}
 .floating-panel .line-width span{font-size:12px;}
