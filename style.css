@@ -373,7 +373,8 @@ h2 {
 .setting-help-tooltip{position:absolute;right:0;top:24px;width:260px;padding:10px 12px;border-radius:8px;background:#1f2937;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 10px 24px rgba(0,0,0,.2);opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .16s ease,transform .16s ease;z-index:10001;}
 .setting-help-tooltip::before{content:'';position:absolute;top:-6px;right:10px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:6px solid #1f2937;}
 .setting-help:hover .setting-help-tooltip,
-.setting-help:focus-within .setting-help-tooltip{opacity:1;transform:translateY(0);pointer-events:auto;}
+.setting-help:focus-within .setting-help-tooltip,
+.setting-help.is-open .setting-help-tooltip{opacity:1;transform:translateY(0);pointer-events:auto;}
 .anomaly-settings-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
 
 @media (max-width: 720px){
@@ -676,4 +677,314 @@ h2 {
     background: #4a86e8;
     color: #fff;
     border-color: #4a86e8;
+}
+
+
+/* Base margins for containers that previously had inline styles */
+#analysisContainer { margin: 10px 40px; }
+#fullDeviceTrackReportContainer { margin-bottom: 10px; }
+
+/* ============================
+   Mobile / touch adaptations
+   ============================ */
+
+/* Mobile tabs (hidden on desktop by default) */
+.mobile-tabs {
+  display: none;
+}
+/* Mobile date row hidden on desktop */
+.date-mobile-row {
+  display: none;
+}
+
+/* Tablets and phones */
+@media (max-width: 768px) {
+  body { margin: 8px; }
+
+  /* Map: full width, larger adaptive height */
+  #mapContainer {
+    margin-left: 0;
+    margin-right: 0;
+    height: 60vh;
+    min-height: 300px;
+  }
+
+  /* Larger resize handle for touch */
+  #resizeHandle {
+    width: 80px;
+    height: 16px;
+    bottom: -8px;
+  }
+
+  /* Login panel compact */
+  .login-panel {
+    gap: 6px;
+  }
+  .login-panel .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* Mobile tabs */
+  .mobile-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 6px 0;
+    margin: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-tab-btn {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    padding: 8px 10px;
+    font-size: 12px;
+    border: 1px solid #ced4da;
+    background: #f8f9fa;
+    color: #333;
+    border-radius: 6px;
+    cursor: pointer;
+    min-height: 40px;
+    font-weight: 600;
+  }
+  .mobile-tab-btn.active {
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+  }
+
+  /* Tab panels: only one visible at a time on mobile */
+  .mobile-tab-panel {
+    display: none !important;
+  }
+  .mobile-tab-panel.active {
+    display: block !important;
+  }
+
+  /* Floating panel -> bottom drawer */
+  .floating-panel {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: 50vh;
+    border-radius: 12px 12px 0 0;
+    transform: translateY(calc(100% - 48px));
+    padding-bottom: 42px;
+    box-shadow: 0 -4px 14px -2px rgba(0,0,0,.18);
+    box-sizing: border-box;
+    z-index: 2000;
+  }
+  .floating-panel.collapsed {
+    transform: translateY(calc(100% - 48px));
+  }
+  .floating-panel:not(.collapsed) {
+    transform: translateY(0);
+  }
+  /* Mobile date pickers: hide desktop datetime-local, show date+time row */
+  .date-label-desktop { display: none !important; }
+  .date-mobile-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .date-mobile-row label {
+    flex: 1 1 50%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    margin: 0;
+  }
+  .date-mobile-row input[type=date],
+  .date-mobile-row input[type=time] {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 4px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+  }
+
+  /* Make all inputs inside panel fill width on mobile */
+  .floating-panel input[type=datetime-local],
+  .floating-panel input[type=number],
+  .floating-panel input[type=date],
+  .floating-panel input[type=time] {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 40px;
+  }
+  .floating-panel .input-with-btn {
+    width: 100%;
+  }
+  /* Remove extra grid padding that causes overflow */
+  .floating-panel .actions-grid > div {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .floating-panel .line-width input[type=range] {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  /* FAB moved to bottom-left to avoid drawer overlap */
+  .panel-fab {
+    top: auto;
+    right: auto;
+    left: 12px;
+    bottom: 12px;
+    z-index: 10011;
+  }
+
+  /* Main content single column */
+  .main-content-wrapper {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+  }
+  .left-column,
+  .right-column {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  /* Device Alarm + Device Log stack vertically */
+  .device-extra-grid {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .device-extra-grid .table-container:first-child,
+  .device-extra-grid .table-container:last-child {
+    flex: 1 1 100%;
+    max-width: none;
+    width: 100%;
+  }
+
+  /* Compact analysis table for mobile */
+  #analysisTable {
+    font-size: 0.7rem;
+  }
+  #analysisTable th,
+  #analysisTable td {
+    padding: 2px 4px;
+    white-space: nowrap;
+  }
+  #analysisContainer .table-header h2 {
+    font-size: 0.9rem;
+  }
+
+  /* Remove side margins from critical table containers */
+  #analysisContainer {
+    margin: 8px 0;
+  }
+  #fullDeviceTrackReportContainer {
+    margin-bottom: 8px;
+  }
+
+  /* Limit table heights so several tables fit on screen */
+  .main-content-wrapper .table-scroll,
+  .main-content-wrapper .sum-scroll,
+  .main-content-wrapper .track-scroll,
+  #fullDeviceTrackScroll {
+    max-height: 220px;
+  }
+
+  /* Overlays fullscreen on mobile */
+  .vehicle-overlay-content {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    max-width: none;
+    border-radius: 0;
+  }
+  .vehicle-overlay-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .vehicle-overlay-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .vehicle-search-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  /* Modals nearly full width */
+  .modal-content {
+    width: 92vw;
+    margin: 4% auto;
+    padding: 16px;
+  }
+  .anomaly-settings-modal-content {
+    width: min(92vw, 720px);
+  }
+
+  /* Leaflet controls: keep away from bottom drawer */
+  .leaflet-bottom.leaflet-right .leaflet-control-attribution,
+  .leaflet-bottom.leaflet-right .leaflet-control-scale,
+  .leaflet-bottom.leaflet-right .leaflet-bar {
+    margin-right: 8px;
+    margin-bottom: 56px;
+  }
+
+  /* Prevent iOS Safari zoom on inputs */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Touch sizing: minimum 44x44 tap targets */
+  .btn,
+  .color-filter-btn,
+  .panel-settings-btn,
+  .close-button,
+  #filterPanelToggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .btn-xs {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Smaller table fonts for density */
+  table {
+    font-size: 0.8rem;
+  }
+  th, td {
+    padding: 3px 4px;
+  }
+
+  /* Active state for table rows on touch */
+  .vehicle-table tbody tr:active,
+  #analysisContainer tbody tr:active,
+  #fullDeviceTrackTbody tr:active {
+    background: #d0e8ff !important;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 480px) {
+  #mapContainer {
+    height: 40vh;
+    min-height: 220px;
+  }
+  table {
+    font-size: 0.75rem;
+  }
+  .floating-panel {
+    max-height: 55vh;
+  }
+  .btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
 }

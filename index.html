@@ -92,15 +92,26 @@
           </button>
         </div>
       </label>
-      <label
+      <label class="date-label-desktop"
         >Дата с
         <input type="datetime-local" id="dateFrom" />
       </label>
+      <div class="date-mobile-row" data-mobile-date-for="dateFrom">
+        <label>Дата с <input type="date" class="mobile-date" data-target="dateFrom" /></label>
+        <label>Время <input type="time" class="mobile-time" data-target="dateFrom" value="00:00" /></label>
+      </div>
       <div style="display:flex; align-items:center; gap:4px; margin-bottom:2px;">
         <span style="white-space:nowrap;">Дата по</span>
-  <button id="copyDateFromToBtn" type="button" class="btn btn-secondary btn-inline" style="font-size:12px; padding:2px 6px; line-height:1; vertical-align:middle;">⇐</button>
+        <button id="copyDateFromToBtn" type="button" class="btn btn-secondary btn-inline" style="font-size:12px; padding:2px 6px; line-height:1; vertical-align:middle;">⇐</button>
       </div>
-      <input type="datetime-local" id="dateTo" style="margin-bottom:8px;" />
+      <label class="date-label-desktop"
+        >Дата по
+        <input type="datetime-local" id="dateTo" />
+      </label>
+      <div class="date-mobile-row" data-mobile-date-for="dateTo">
+        <label>Дата по <input type="date" class="mobile-date" data-target="dateTo" /></label>
+        <label>Время <input type="time" class="mobile-time" data-target="dateTo" value="23:59" /></label>
+      </div>
       <style>
         /* make action buttons uniform height */
         .actions .btn { height:28px; padding:6px 6px; box-sizing:border-box; }
@@ -146,8 +157,17 @@
       <div id="resizeHandle"></div>
     </div>
 
+    <!-- Mobile tabs for table groups -->
+    <div class="mobile-tabs" id="mobileTabs">
+      <button class="mobile-tab-btn active" data-tab="startstop">Start/Stop</button>
+      <button class="mobile-tab-btn" data-tab="anomalies">Аномалии</button>
+      <button class="mobile-tab-btn" data-tab="devlog">Dev Log</button>
+      <button class="mobile-tab-btn" data-tab="logs">Logs</button>
+      <button class="mobile-tab-btn" data-tab="analysis">Анализ</button>
+    </div>
+
     <!-- Analysis table (desktop layout) -->
-    <div id="analysisContainer" style="display:none; margin: 10px 40px;">
+    <div id="analysisContainer" class="mobile-tab-panel" data-mobile-tab="analysis" style="display:none;">
       <div class="table-container">
         <div class="table-header">
           <h2>Анализ маршрута <span id="analysisSummary" style="font-weight:normal; font-size:13px; margin-left:8px;"></span></h2>
@@ -168,7 +188,7 @@
 
     <div class="main-content-wrapper">
       <div class="left-column">
-        <div class="device-extra-grid">
+        <div class="device-extra-grid mobile-tab-panel" data-mobile-tab="logs">
           <div class="table-container">
             <h2>Device Alarm</h2>
             <div class="table-scroll">
@@ -188,9 +208,10 @@
             </div>
           </div>
         </div>
+        <div class="mobile-tab-panel" data-mobile-tab="devlog">
         <div
           id="fullDeviceTrackReportContainer"
-          style="display: none; margin-bottom: 10px"
+          style="display: none;"
         >
           <h3 style="margin: 4px 0">
             Отчёт по интервалам
@@ -282,7 +303,8 @@
           </div>
         </div>
 
-        <div class="table-container" style="flex: 1 1 100%">
+        </div>
+        <div class="table-container mobile-tab-panel" data-mobile-tab="devlog" style="flex: 1 1 100%">
           <div class="table-header">
             <h2>Full Device Track (setup) <span id="fullDeviceTrackCount" style="font-weight:normal; font-size:13px; margin-left:8px;">0 записей</span></h2>
             <div class="header-btn-group">
@@ -308,7 +330,7 @@
         </div>
       </div>
       <div class="right-column">
-        <div class="table-container">
+        <div class="table-container mobile-tab-panel" data-mobile-tab="anomalies">
           <div class="table-header">
             <h2>Аномалии трека устройства</h2>
             <button id="bulkDeleteAnomaliesBtn" class="btn btn-danger btn-xs" type="button">🗑️ Массовое удаление</button>
@@ -320,7 +342,7 @@
             </table>
           </div>
         </div>
-        <div class="table-container">
+        <div class="table-container mobile-tab-panel" data-mobile-tab="startstop">
           <h2>Start/Stop Sum Result</h2>
           <div class="table-scroll sum-scroll">
             <table id="startstopSumResultTable">
@@ -330,7 +352,7 @@
           </div>
         </div>
 
-        <div class="table-container">
+        <div class="table-container mobile-tab-panel" data-mobile-tab="startstop">
           <h2>Startstop Sum</h2>
           <div class="table-scroll sum-scroll">
             <table id="startstopSumTable">
@@ -340,7 +362,7 @@
           </div>
         </div>
 
-        <div class="table-container">
+        <div class="table-container mobile-tab-panel" data-mobile-tab="startstop">
           <h2>Start/Stop Accumulation</h2>
           <div class="table-scroll">
             <table id="startstopAccumulationTable">

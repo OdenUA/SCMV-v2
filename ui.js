@@ -1,3 +1,23 @@
+// Helper to sync mobile date/time inputs from the original datetime-local input
+function syncMobileDateFromOriginal(targetId){
+  try{
+    var original = document.getElementById(targetId);
+    var row = document.querySelector('.date-mobile-row[data-mobile-date-for="' + targetId + '"]');
+    if(!original || !row) return;
+    var dateInput = row.querySelector('.mobile-date');
+    var timeInput = row.querySelector('.mobile-time');
+    if(!dateInput || !timeInput) return;
+    var val = original.value;
+    if(val && val.length >= 16){
+      dateInput.value = val.slice(0,10);
+      timeInput.value = val.slice(11,16);
+    } else {
+      dateInput.value = '';
+      timeInput.value = '';
+    }
+  }catch(e){}
+}
+
 // Button to copy date from dateFrom to dateTo
 document.addEventListener('DOMContentLoaded', function(){
   var btn = document.getElementById('copyDateFromToBtn');
@@ -9,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function(){
         // Take only the date portion (YYYY-MM-DD)
         var datePart = from.value.split('T')[0];
         to.value = datePart + 'T23:59';
+        syncMobileDateFromOriginal('dateTo');
       }
     });
   }
@@ -260,6 +281,26 @@ function init() {
       });
       anomalySettingsForm.dataset.bound = '1';
     }
+    // Touch tooltip support: toggle is-open on click
+    var settingHelps = anomalySettingsModal.querySelectorAll('.setting-help');
+    Array.prototype.forEach.call(settingHelps, function(el){
+      if(el.dataset.tooltipBound) return;
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        var isOpen = el.classList.contains('is-open');
+        Array.prototype.forEach.call(settingHelps, function(other){ other.classList.remove('is-open'); });
+        if(!isOpen) el.classList.add('is-open');
+      });
+      el.dataset.tooltipBound = '1';
+    });
+    if(!anomalySettingsModal.dataset.tooltipOutsideBound){
+      document.addEventListener('click', function(e){
+        if(!anomalySettingsModal.contains(e.target)) return;
+        if(e.target.closest && e.target.closest('.setting-help')) return;
+        Array.prototype.forEach.call(settingHelps, function(el){ el.classList.remove('is-open'); });
+      });
+      anomalySettingsModal.dataset.tooltipOutsideBound = '1';
+    }
   })();
 
   (function initBulkDeleteModal(){
@@ -404,8 +445,9 @@ function init() {
   try{ splitBtn.style.flex = '0 0 ' + Math.ceil(splitMin) + 'px'; splitBtn.style.boxSizing='border-box'; }catch(_){ }
     }catch(e){ console.warn('adjustDevLogButtons failed', e); }
   }
-  // call adjustment on init and on window resize
-  try{ window.addEventListener('resize', function(){ setTimeout(adjustDevLogButtons, 50); }); }catch(e){}
+  // call adjustment on init and on window resize (debounced)
+  var adjustDevLogTimeout = null;
+  try{ window.addEventListener('resize', function(){ clearTimeout(adjustDevLogTimeout); adjustDevLogTimeout = setTimeout(adjustDevLogButtons, 120); }); }catch(e){}
   if (sendMileageReportBtn) {
     sendMileageReportBtn.addEventListener("click", function () {
       if (!authLoggedIn) {
@@ -706,6 +748,84 @@ function init() {
         fab.dataset.bound = '1';
       }
     })();
+
+  // Mobile tabs for table groups
+  (function initMobileTabs(){
+    var tabsContainer = document.getElementById('mobileTabs');
+    if(!tabsContainer) return;
+    var buttons = tabsContainer.querySelectorAll('.mobile-tab-btn');
+    var panels = document.querySelectorAll('.mobile-tab-panel');
+
+    function switchTab(tabName){
+      Array.prototype.forEach.call(buttons, function(btn){
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      });
+      Array.prototype.forEach.call(panels, function(panel){
+        panel.classList.toggle('active', panel.dataset.mobileTab === tabName);
+      });
+    }
+
+    Array.prototype.forEach.call(buttons, function(btn){
+      btn.addEventListener('click', function(){
+        switchTab(btn.dataset.tab);
+      });
+    });
+
+    // Observe visibility changes so that when a module shows its container,
+    // we automatically activate the corresponding tab on mobile.
+    if(window.MutationObserver && window.innerWidth < 768){
+      var observer = new MutationObserver(function(mutations){
+        mutations.forEach(function(mutation){
+          if(mutation.type === 'attributes' && mutation.attributeName === 'style'){
+            var el = mutation.target;
+            if(el.classList.contains('mobile-tab-panel')){
+              var tab = el.dataset.mobileTab;
+              if(tab && el.style.display !== 'none'){
+                switchTab(tab);
+              }
+            }
+          }
+        });
+      });
+      Array.prototype.forEach.call(panels, function(panel){
+        observer.observe(panel, { attributes: true, attributeFilter: ['style'] });
+      });
+    }
+
+    // Default: show first tab on mobile
+    if(window.innerWidth < 768 && buttons.length){
+      switchTab(buttons[0].dataset.tab);
+    }
+
+    window.switchMobileTab = switchTab;
+  })();
+
+  // Mobile date/time pickers: sync with original datetime-local inputs
+  (function initMobileDatePickers(){
+    var rows = document.querySelectorAll('.date-mobile-row');
+    if(!rows.length) return;
+    Array.prototype.forEach.call(rows, function(row){
+      var targetId = row.dataset.mobileDateFor;
+      var targetInput = document.getElementById(targetId);
+      if(!targetInput) return;
+      var dateInput = row.querySelector('.mobile-date');
+      var timeInput = row.querySelector('.mobile-time');
+      if(!dateInput || !timeInput) return;
+      // init from original value
+      if(targetInput.value && targetInput.value.length >= 16){
+        dateInput.value = targetInput.value.slice(0,10);
+        timeInput.value = targetInput.value.slice(11,16);
+      }
+      function syncToOriginal(){
+        var d = dateInput.value;
+        var t = timeInput.value || '00:00';
+        if(d) targetInput.value = d + 'T' + t;
+        else targetInput.value = '';
+      }
+      dateInput.addEventListener('change', syncToOriginal);
+      timeInput.addEventListener('change', syncToOriginal);
+    });
+  })();
 }
 
 function setAuthInfo(uid, user, pwd) {

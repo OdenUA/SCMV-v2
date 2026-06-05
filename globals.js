@@ -244,5 +244,6 @@ try{
 
 function showLoadingOverlay(msg){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; if(msg){ var t = el.querySelector('.global-loading-text'); if(t) t.textContent = msg; } el.classList.add('visible'); }catch(e){} }
 function hideLoadingOverlay(){ try{ var el = document.getElementById('globalLoadingOverlay'); if(!el) return; el.classList.remove('visible'); }catch(e){} }
+function isMobileView(){ return window.innerWidth < 768; }
 
 // formatAnomalyTime moved to anomalies.js

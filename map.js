@@ -149,14 +149,24 @@ function initMap(){
   var mapDivEl = document.getElementById('map');
   if(!handle||!container||!mapDivEl) return;
   var resizing=false;
-  handle.addEventListener('mousedown', function(e){ e.preventDefault(); resizing=true; document.body.style.cursor='ns-resize'; document.body.style.userSelect='none'; });
-  document.addEventListener('mousemove', function(e){
+  function startResize(y){
+    resizing=true; document.body.style.cursor='ns-resize'; document.body.style.userSelect='none';
+  }
+  function doResize(y){
     if(!resizing) return;
     var top = container.getBoundingClientRect().top;
-    var newH = e.clientY - top; if(newH<150) newH=150; if(newH> window.innerHeight-100) newH = window.innerHeight-100;
+    var newH = y - top; if(newH<150) newH=150; if(newH> window.innerHeight-100) newH = window.innerHeight-100;
     container.style.height=newH+'px'; mapDivEl.style.height=newH+'px'; if(map){ map.invalidateSize(); }
-  });
-  document.addEventListener('mouseup', function(){ if(!resizing) return; resizing=false; document.body.style.cursor=''; document.body.style.userSelect=''; if(map) map.invalidateSize(); });
+  }
+  function endResize(){
+    if(!resizing) return; resizing=false; document.body.style.cursor=''; document.body.style.userSelect=''; if(map) map.invalidateSize();
+  }
+  handle.addEventListener('mousedown', function(e){ e.preventDefault(); startResize(e.clientY); });
+  document.addEventListener('mousemove', function(e){ doResize(e.clientY); });
+  document.addEventListener('mouseup', endResize);
+  handle.addEventListener('touchstart', function(e){ e.preventDefault(); startResize(e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ doResize(e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchend', endResize);
 })();
 
 // --- Filter panel collapse toggle (migrated) ---
@@ -228,3 +238,11 @@ function rebuildDirections(){
     if(directionsVisible){ trackLayerGroup.addLayer(directionDecorator); }
   } catch(err){ console.warn('Failed to rebuild directions', err); }
 }
+
+
+// Ensure map resizes correctly when browser window changes (e.g. orientation change on mobile)
+try{
+  window.addEventListener('resize', function(){
+    if(map){ map.invalidateSize(); }
+  });
+}catch(e){ console.warn('Map resize listener failed', e); }
