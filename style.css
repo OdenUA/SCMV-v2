@@ -356,9 +356,12 @@ h2 {
 .floating-panel .line-width{display:flex;align-items:center;gap:6px;}
 .floating-panel .line-width span{font-size:12px;}
 .floating-panel .panel-status{margin-top:auto;font-size:12px;padding-top:6px;border-top:1px solid #e1e5eb;color:#555;}
-.panel-settings-btn{position:absolute;right:10px;bottom:10px;width:28px;height:28px;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;background:#6c757d;color:#fff;box-shadow:0 2px 8px rgba(108,117,125,.3);}
+.panel-bottom-row{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:4px;}
+.panel-settings-btn{width:28px;height:28px;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;background:#6c757d;color:#fff;box-shadow:0 2px 8px rgba(108,117,125,.3);border:none;cursor:pointer;}
 .panel-settings-btn:hover{background:#5c636a;}
 .panel-settings-btn svg{display:block;}
+.panel-clipboard-icon{width:24px;height:24px;border-radius:4px;cursor:pointer;object-fit:contain;transition:transform .15s,box-shadow .15s;background:#fff;}
+.panel-clipboard-icon:hover{transform:scale(1.1);box-shadow:0 2px 6px rgba(0,0,0,.25);}
 
 .anomaly-settings-modal-content{max-width:720px;width:min(92vw,720px);}
 .anomaly-settings-note{margin:0 0 14px;color:#555;font-size:13px;}
@@ -701,6 +704,11 @@ h2 {
 @media (max-width: 768px) {
   body { margin: 8px; }
 
+  /* Hide clipboard icons on mobile */
+  .panel-clipboard-icon {
+    display: none;
+  }
+
   /* Map: full width, larger adaptive height */
   #mapContainer {
     margin-left: 0;
@@ -945,6 +953,7 @@ h2 {
   .btn,
   .color-filter-btn,
   .panel-settings-btn,
+  .panel-clipboard-icon,
   .close-button,
   #filterPanelToggle {
     min-height: 44px;

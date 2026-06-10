@@ -253,6 +253,57 @@ function init() {
       anomalySettingsBtn.addEventListener('click', openModal);
       anomalySettingsBtn.dataset.bound = '1';
     }
+    // Clipboard icons in panel bottom row
+    function getStartstopDestValue(){
+      var table = document.getElementById('startstopSumResultTable');
+      if(!table) return '';
+      var thead = table.querySelector('thead');
+      var tbody = table.querySelector('tbody');
+      if(!thead || !tbody) return '';
+      var headers = thead.querySelectorAll('th');
+      var destIndex = -1;
+      for(var i=0; i<headers.length; i++){
+        if((headers[i].textContent || '').trim() === 'dest'){
+          destIndex = i;
+          break;
+        }
+      }
+      if(destIndex === -1) return '';
+      var rows = tbody.querySelectorAll('tr');
+      if(rows.length === 0) return '';
+      var lastRow = rows[rows.length - 1];
+      var cells = lastRow.querySelectorAll('td');
+      if(destIndex >= cells.length) return '';
+      return (cells[destIndex].textContent || '').trim();
+    }
+    var clipboardIcons = document.querySelectorAll('.panel-clipboard-icon');
+    for(var ci=0; ci<clipboardIcons.length; ci++){
+      (function(icon){
+        icon.addEventListener('click', function(){
+          var text = icon.getAttribute('data-clipboard');
+          var template = icon.getAttribute('data-clipboard-template');
+          if(template){
+            var destVal = getStartstopDestValue();
+            text = template.replace('{{dest}}', destVal).replace(/\\n/g, '\n');
+          }
+          if(!text) return;
+          try{
+            if(navigator.clipboard && navigator.clipboard.writeText){
+              navigator.clipboard.writeText(text).catch(function(err){ console.warn('Clipboard failed', err); });
+            } else {
+              var ta = document.createElement('textarea');
+              ta.value = text;
+              ta.style.position = 'fixed';
+              ta.style.opacity = '0';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            }
+          }catch(e){ console.warn('Copy error', e); }
+        });
+      })(clipboardIcons[ci]);
+    }
     if(anomalySettingsCloseBtn && !anomalySettingsCloseBtn.dataset.bound){
       anomalySettingsCloseBtn.addEventListener('click', closeModal);
       anomalySettingsCloseBtn.dataset.bound = '1';
