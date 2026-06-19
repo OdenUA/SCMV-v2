@@ -312,8 +312,135 @@
     return parts.join(' + ');
   }
 
+  // --- Map highlight helpers ---
+  function stopAnalysisBlink() {
+    if (window._analysisBlinkTimer) {
+      try { clearInterval(window._analysisBlinkTimer); } catch (e) {}
+      window._analysisBlinkTimer = null;
+    }
+  }
+
+  function fitMapToPoints(points, options) {
+    if (!map || !points || points.length === 0) return;
+    if (points.length === 1) {
+      map.setView([points[0].latitude, points[0].longitude], 15, { animate: true });
+      return;
+    }
+    var latlngs = [];
+    for (var i = 0; i < points.length; i++) {
+      latlngs.push([points[i].latitude, points[i].longitude]);
+    }
+    var opts = options || {};
+    opts.padding = opts.padding || [40, 40];
+    opts.maxZoom = opts.maxZoom || 16;
+    opts.animate = opts.animate !== false;
+    map.fitBounds(L.latLngBounds(latlngs), opts);
+  }
+
+  function getAnalysisLayerBaseWeight(layer) {
+    var w = (typeof currentLineWidth === 'function' ? currentLineWidth() : 2);
+    if (layer && layer._isAnalysisAnomaly) {
+      return Math.max(w * 3 + 2, 3);
+    }
+    if (layer && layer._isAnalysisPolyline) {
+      return w * 3;
+    }
+    return (layer && layer.options && layer.options.weight) || 3;
+  }
+
+  function collectAnomalyLayersForSegment(seg, issueFilter) {
+    var layers = [];
+    if (!seg || !seg.points || seg.points.length === 0) return layers;
+    var filterMap = null;
+    if (issueFilter) {
+      filterMap = {};
+      if (typeof issueFilter === 'string') {
+        filterMap[issueFilter] = true;
+      } else if (issueFilter.size !== undefined) {
+        var vals = Array.from(issueFilter);
+        for (var i = 0; i < vals.length; i++) filterMap[vals[i]] = true;
+      } else {
+        filterMap = issueFilter;
+      }
+    }
+    for (var i = 0; i < seg.points.length; i++) {
+      var pt = seg.points[i];
+      if (!pt || !pt._anomalyLayers) continue;
+      for (var j = 0; j < pt._anomalyLayers.length; j++) {
+        var layer = pt._anomalyLayers[j];
+        if (!layer) continue;
+        if (!filterMap || filterMap[layer._anomalyType]) {
+          if (layers.indexOf(layer) < 0) layers.push(layer);
+        }
+      }
+    }
+    return layers;
+  }
+
+  function blinkAnalysisLayers(layers) {
+    stopAnalysisBlink();
+    if (!layers || layers.length === 0) return;
+    var highlightColor = '#FFD700';
+    var highlightWeightDelta = 4;
+    var intervalMs = 250;
+    var cycles = 6;
+    var validLayers = [];
+    var originals = [];
+    for (var i = 0; i < layers.length; i++) {
+      var layer = layers[i];
+      if (!layer || typeof layer.setStyle !== 'function') continue;
+      validLayers.push(layer);
+      originals.push({
+        color: layer.options.color,
+        opacity: layer.options.opacity,
+        dashArray: layer.options.dashArray
+      });
+      try { layer.bringToFront(); } catch (e) {}
+    }
+    if (validLayers.length === 0) return;
+
+    var tick = 0;
+    window._analysisBlinkTimer = setInterval(function() {
+      var isHighlight = tick % 2 === 0;
+      for (var i = 0; i < validLayers.length; i++) {
+        var layer = validLayers[i];
+        var orig = originals[i];
+        var style = {};
+        if (isHighlight) {
+          style.color = highlightColor;
+          style.opacity = 1;
+          style.weight = getAnalysisLayerBaseWeight(layer) + highlightWeightDelta;
+        } else {
+          style.color = orig.color;
+          style.opacity = orig.opacity != null ? orig.opacity : 0.9;
+          style.weight = getAnalysisLayerBaseWeight(layer);
+        }
+        if (orig.dashArray != null) style.dashArray = orig.dashArray;
+        try { layer.setStyle(style); } catch (e) {}
+      }
+      tick++;
+      if (tick >= cycles) {
+        clearInterval(window._analysisBlinkTimer);
+        window._analysisBlinkTimer = null;
+        for (var i = 0; i < validLayers.length; i++) {
+          var layer = validLayers[i];
+          var orig = originals[i];
+          try {
+            layer.setStyle({
+              color: orig.color,
+              weight: getAnalysisLayerBaseWeight(layer),
+              opacity: orig.opacity != null ? orig.opacity : 0.9,
+              dashArray: orig.dashArray
+            });
+          } catch (e) {}
+        }
+      }
+    }, intervalMs);
+  }
+
   // --- Map rendering ---
   function clearAnalysis() {
+    stopAnalysisBlink();
     try {
       if (window.analysisLayerGroup) {
         window.analysisLayerGroup.clearLayers();
@@ -327,6 +454,29 @@
         window.analysisAnomalyLayerGroup.clearLayers();
         if (trackLayerGroup && trackLayerGroup.hasLayer(window.analysisAnomalyLayerGroup)) {
           trackLayerGroup.removeLayer(window.analysisAnomalyLayerGroup);
+        }
+      }
+    } catch (e) {}
+    try {
+      if (window.analysisSegments && window.analysisSegments.length) {
+        for (var i = 0; i < window.analysisSegments.length; i++) {
+          var seg = window.analysisSegments[i];
+          if (!seg) continue;
+          seg._polyline = null;
+          if (seg.points) {
+            for (var j = 0; j < seg.points.length; j++) {
+              var pt = seg.points[j];
+              if (pt) pt._anomalyLayers = null;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    try {
+      if (window._analysisRawPoints && window._analysisRawPoints.length) {
+        for (var i = 0; i < window._analysisRawPoints.length; i++) {
+          var pt = window._analysisRawPoints[i];
+          if (pt) pt._anomalyLayers = null;
         }
       }
     } catch (e) {}
@@ -346,6 +496,7 @@
   }
 
   function renderAnalysisSegments(segments) {
+    stopAnalysisBlink();
     if (!trackLayerGroup) return;
     try {
       if (window.analysisLayerGroup) {
@@ -373,6 +524,7 @@
       var poly = L.polyline(latlngs, { color: color, weight: lineW, opacity: 0.9 }).addTo(window.analysisLayerGroup);
       poly._isAnalysisPolyline = true;
       poly._analysisSegment = seg;
+      seg._polyline = poly;
       poly.on('click', function(e) {
         if (routeModeActive) {
           if (e && e.latlng && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: e.latlng });
@@ -449,6 +601,9 @@
             .bindPopup(popupHtml)
             .addTo(window.analysisAnomalyLayerGroup);
           aPoly._isAnalysisAnomaly = true;
+          aPoly._anomalyType = anomalyType;
+          if (!curr._anomalyLayers) curr._anomalyLayers = [];
+          curr._anomalyLayers.push(aPoly);
         }
       }
       trackLayerGroup.addLayer(window.analysisAnomalyLayerGroup);
@@ -471,6 +626,7 @@
           endTime: seg.endTime,
           issues: new Set(seg.issues),
           points: seg.points ? seg.points.slice() : [],
+          sourceSegments: [seg],
           count: seg.count || 0,
           distance: seg.distance || 0,
           stats: {
@@ -489,6 +645,7 @@
         current.endTime = seg.endTime;
         current.count += (seg.count || 0);
         current.distance += getSegmentDistance(seg);
+        current.sourceSegments.push(seg);
         if (seg.points && seg.points.length > 0) {
           current.points = current.points.concat(seg.points);
         }
@@ -521,6 +678,7 @@
           endTime: seg.endTime,
           issues: new Set(seg.issues),
           points: seg.points ? seg.points.slice() : [],
+          sourceSegments: [seg],
           count: seg.count || 0,
           distance: getSegmentDistance(seg),
           stats: {
@@ -684,6 +842,29 @@
       tdDist.textContent = (g.totalDistance / 1000).toFixed(2);
       tr.appendChild(tdDist);
 
+      tr.style.cursor = 'pointer';
+      (function(group) {
+        tr.addEventListener('click', function() {
+          var allPoints = [];
+          var layers = [];
+          var anomalyLayers = [];
+          for (var k = 0; k < group.entries.length; k++) {
+            var entry = group.entries[k];
+            if (entry && entry.points) {
+              for (var p = 0; p < entry.points.length; p++) allPoints.push(entry.points[p]);
+            }
+            if (entry && entry._polyline) layers.push(entry._polyline);
+            var entryAnomalies = collectAnomalyLayersForSegment(entry, group.issue);
+            for (var a = 0; a < entryAnomalies.length; a++) {
+              if (anomalyLayers.indexOf(entryAnomalies[a]) < 0) anomalyLayers.push(entryAnomalies[a]);
+            }
+          }
+          var allLayers = layers.concat(anomalyLayers);
+          if (allPoints.length > 0) fitMapToPoints(allPoints, { padding: [50, 50], maxZoom: 15, animate: true });
+          blinkAnalysisLayers(allLayers);
+        });
+      })(g);
+
       tbody.appendChild(tr);
     }
 
@@ -812,11 +993,21 @@
 
       (function(s) {
         tr.addEventListener('click', function() {
-          if (s.points && s.points.length > 0 && map) {
-            var midIdx = Math.floor(s.points.length / 2);
-            var midPt = s.points[midIdx];
-            map.setView([midPt.latitude, midPt.longitude], 15, { animate: true });
+          if (!s.points || s.points.length === 0 || !map) return;
+          fitMapToPoints(s.points, { padding: [40, 40], maxZoom: 16, animate: true });
+          var layers = [];
+          var anomalyLayers = [];
+          var sourceSegs = s.sourceSegments && s.sourceSegments.length > 0 ? s.sourceSegments : [s];
+          for (var k = 0; k < sourceSegs.length; k++) {
+            var src = sourceSegs[k];
+            if (src && src._polyline) layers.push(src._polyline);
+            var srcAnomalies = collectAnomalyLayersForSegment(src, s.issues);
+            for (var a = 0; a < srcAnomalies.length; a++) {
+              if (anomalyLayers.indexOf(srcAnomalies[a]) < 0) anomalyLayers.push(srcAnomalies[a]);
+            }
           }
+          var allLayers = layers.concat(anomalyLayers);
+          blinkAnalysisLayers(allLayers);
         });
       })(seg);
 

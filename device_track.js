@@ -743,6 +743,8 @@ function drawRawDeviceTrack(points){
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumThead) startstopSumThead.innerHTML=''; if(startstopSumTbody) startstopSumTbody.innerHTML=''; }catch(_){ }
+        // also clear Route Analysis table and map layers
+        try{ if(typeof window.clearAnalysis === 'function') window.clearAnalysis(); }catch(_){}
         return;
       }
 
@@ -756,6 +758,8 @@ function drawRawDeviceTrack(points){
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumThead) startstopSumThead.innerHTML=''; if(startstopSumTbody) startstopSumTbody.innerHTML=''; }catch(_){ }
+        // also clear Route Analysis on date change
+        try{ if(typeof window.clearAnalysis === 'function') window.clearAnalysis(); }catch(_){}
         return;
       }
 
