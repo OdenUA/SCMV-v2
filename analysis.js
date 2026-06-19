@@ -926,8 +926,6 @@
       showRouteToast('⚠ Сначала выполните вход');
       return;
     }
-    var dateTo = buildLocalDateParam(dateToInput.value, true);
-    var dateFrom = buildLocalDateParam(dateFromInput.value, false);
     var deviceId = deviceIdInput.value;
     if (!deviceId) {
       showRouteToast('⚠ Выберите устройство');
@@ -937,34 +935,14 @@
     try { if (mileageGapLayers && mileageGapLayers.length) { mileageGapLayers.forEach(function(g) { trackLayerGroup.removeLayer(g); }); mileageGapLayers = []; } } catch (e) {}
     try { if (typeof window.trackDeviceSwitch === 'function') window.trackDeviceSwitch(deviceId); } catch (e) {}
 
-    // Send Device Alarm + Device Log + Full Device Track (same as Dev Log button)
-    if (typeof window.sendDeviceLogRequests === 'function') {
+    // Use unified loader: Device Alarm + Device Log + Full Device Track, then run analysis
+    if (typeof window.loadDeviceData === 'function') {
+      window.loadDeviceData({ analysis: true });
+    } else if (typeof window.sendDeviceLogRequests === 'function') {
+      window._awaitingAnalysisTrack = true;
       window.sendDeviceLogRequests();
-    }
-    // Also request full device track setup for analysis (act: 'setup' like Dev Log)
-    if (typeof window.requestFullDeviceTrackSetup === 'function') {
-      window._awaitingAnalysisTrack = true;
-      window.requestFullDeviceTrackSetup();
     } else {
-      // Fallback to direct filter request if full setup not available
-      var req = {
-        name: 'Device Track',
-        type: 'etbl',
-        mid: 6,
-        act: 'filter',
-        filter: [
-          { selectedpgdateto: [dateTo] },
-          { selectedpgdatefrom: [dateFrom] },
-          { selecteddeviceid: [deviceId] }
-        ],
-        usr: authUser,
-        pwd: authPwd,
-        uid: authUid,
-        lang: 'en'
-      };
-      window._awaitingAnalysisTrack = true;
-      try { setReqStart && setReqStart('Device Track'); } catch(_){}
-      sendRequest(req);
+      showRouteToast('⚠ Модуль загрузки не доступен');
     }
   };
 
@@ -1006,6 +984,10 @@
   window.__handleAnalysisTrackResponse = function(data) {
     if (!data || data.name !== 'Device Track') return false;
     if (!window._awaitingAnalysisTrack) return false;
+    // Если этот же ответ обрабатывается загрузчиком Full Device Track,
+    // не перехватываем его: пусть __handleFullTrackSetup сделает финализацию
+    // (таблица, снятие спиннера), а затем сам запустит анализ.
+    if (window._awaitingFullTrackSetup) return false;
     window._awaitingAnalysisTrack = false;
     try {
       if (data.res && data.res[0] && Array.isArray(data.res[0].f)) {

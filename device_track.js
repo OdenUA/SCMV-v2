@@ -2,6 +2,33 @@
 // Functions parseTrackDate, isOutOfBounds, attachRouteAwareClick, addOutOfBoundsAnomaly, 
 // formatAnomalyTime, detectRawTrackAnomalies, linkAnomalyIndices - moved to anomalies.js
 
+// --- Adaptive full-track chunking: server caps responses at 14000 rows ---
+var FULL_TRACK_ROW_LIMIT = 14000;
+
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+function formatDateTimeLocal(d){
+  if(!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
+function getRowTimestamp(r){
+  if(!r) return null;
+  var tsStr = r.wdate || r.WDATE || r.date || r.Date || r.ts || '';
+  if(!tsStr) return null;
+  try { return parseTrackDate(tsStr); } catch(e){ return null; }
+}
+
+function findOldestTimestamp(rows){
+  var minTs = null;
+  for(var i=0; i<rows.length; i++){
+    var ts = getRowTimestamp(rows[i]);
+    if(ts && !isNaN(ts.getTime())){
+      if(minTs === null || ts.getTime() < minTs.getTime()) minTs = ts;
+    }
+  }
+  return minTs;
+}
+
 function processDeviceTrack(points) {
   // Use global _trackData if available
   if (Array.isArray(window._trackData) && window._trackData.length > 0) {
@@ -23,7 +50,8 @@ function processDeviceTrack(points) {
           if(m && m[1]){
             num = parseInt(m[1].replace(/\s+/g,''), 10);
           }
-          if(num === 14000) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
+          var wasChunked = /\(частями\)/.test(txt);
+          if(num === 14000 && !wasChunked) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
         }catch(_){ try{ el.style.backgroundColor = ''; }catch(_2){} }
       };
       // run once to sync state
@@ -572,7 +600,15 @@ function drawRawDeviceTrack(points){
       var el = document.getElementById('fullDeviceTrackCount');
       if(!el) return;
       var base = (typeof n === 'number' ? (n + ' записей') : '0 записей');
-      // highlight extremely large counts
+      // If data was loaded in chunks, mark it so the user knows the full range is covered
+      try{
+        if(window._fullTrackWasChunked){
+          el.textContent = base + ' (частями)';
+          el.style.backgroundColor = '';
+          return;
+        }
+      }catch(_){}
+      // highlight exact server limit (legacy warning, should not appear when chunking succeeded)
       try{
         var isHuge = (typeof n === 'number' && n === 14000);
         if(isHuge) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
@@ -605,6 +641,13 @@ function drawRawDeviceTrack(points){
     try { window._fullTrackIndexByTs = {}; } catch(_){ }
     try { window._devLogRequestedFull = false; } catch(_){ }
     try { window._awaitingFullTrackSetupSegments = null; } catch(_){}
+    // Preserve an active full-track load state; otherwise reset it
+    try {
+      if(!(window._fullTrackLoadState && window._fullTrackLoadState.active)){
+        window._fullTrackLoadState = null;
+      }
+    } catch(_){}
+    try { window._fullTrackWasChunked = false; } catch(_){}
     // remove badge if present
     try { var b = document.getElementById('fullDeviceTrackSegBadge'); if(b && b.parentNode) b.parentNode.removeChild(b); } catch(_){}
     try { window._lastFullTrackSegments = null; } catch(_){ }
@@ -653,6 +696,11 @@ function drawRawDeviceTrack(points){
   // instead of directly clearing individual tables so behavior is consistent.
   window.handleDeviceOrDateChange = function(opts){
     opts = opts || {};
+    // When Full Device Track request triggers this, Device Alarm/Device Log may still be chunking.
+    // Preserve their chunk states so ongoing responses can still be merged.
+    var triggeredByFullTrackRequest = (opts.source === 'sendRequest' && opts.name === 'Device Track');
+    var triggeredByLogRequest = (opts.source === 'sendRequest' && (opts.name === 'Device Alarm' || opts.name === 'Device Log'));
+    var triggeredByDataRequest = triggeredByFullTrackRequest || triggeredByLogRequest;
     try{
       // Decide whether this is a device change or date change
       var curFrom = (typeof dateFromInput !== 'undefined' && dateFromInput) ? dateFromInput.value : null;
@@ -685,11 +733,12 @@ function drawRawDeviceTrack(points){
         datesChanged = (lastFromTs !== null && curFromTs !== null && lastFromTs !== curFromTs) || (lastToTs !== null && curToTs !== null && lastToTs !== curToTs);
       }
 
-      // If device changed -> clear everything (safe)
+      // If device changed -> clear everything (safe), but preserve loading states
+      // for active data requests (Dev Log / Analyze manage their own tables).
       if(deviceChanged){
-        try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){}
+        if(!triggeredByDataRequest){ try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){} }
         try{ if(typeof window.clearDeviceTrackDetails === 'function') window.clearDeviceTrackDetails(); }catch(_){}
-        try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){ }
+        if(!triggeredByDataRequest){ try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){} }
         // also clear Start/Stop tables
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
@@ -700,9 +749,9 @@ function drawRawDeviceTrack(points){
       // If dates changed, clear the usual tables. If dates did NOT change, do not clear
       // Anomalies (`#resultTable`) and Start/Stop tables if they already contain data.
       if(datesChanged){
-        try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){}
+        if(!triggeredByDataRequest){ try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){} }
         try{ if(typeof window.clearDeviceTrackDetails === 'function') window.clearDeviceTrackDetails(); }catch(_){}
-        try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){ }
+        if(!triggeredByDataRequest){ try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){} }
         // clear Start/Stop tables on date change as well
         try{ if(startstopAccumulationThead) startstopAccumulationThead.innerHTML=''; if(startstopAccumulationTbody) startstopAccumulationTbody.innerHTML=''; }catch(_){ }
         try{ if(startstopSumResultThead) startstopSumResultThead.innerHTML=''; if(startstopSumResultTbody) startstopSumResultTbody.innerHTML=''; }catch(_){ }
@@ -712,8 +761,8 @@ function drawRawDeviceTrack(points){
 
   // dates did NOT change and device did not change -> do not clear Anomalies or Start/Stop tables
   // but still clear Full Device Track and device logs to avoid stale full-track state
-      try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){}
-      try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){ }
+      if(!triggeredByDataRequest){ try{ if(typeof window.clearFullDeviceTrackTable === 'function') window.clearFullDeviceTrackTable(); }catch(_){} }
+      if(!triggeredByDataRequest){ try{ if(typeof window.hardClearDeviceLogTables === 'function') window.hardClearDeviceLogTables(); }catch(_){} }
     }catch(e){ console.warn('handleDeviceOrDateChange failed', e); }
   };
   // Hide details when dates or device selection actually change (guard against focus/blur without value change)
@@ -853,103 +902,139 @@ function drawRawDeviceTrack(points){
     if(!authLoggedIn){ showRouteToast('⚠ Сначала вход'); return; }
     var req=buildFullSetupRequest(); if(!req){ showRouteToast('⚠ Нет параметров для полного трека'); return; }
     try {
-      // Check Split checkbox and whether user requested a full-day range 00:00 - 23:59 on the same date
-      var doSplit = false;
-      try {
-        var splitEl = document.getElementById('splitDevLogCheckbox');
-        if(splitEl && splitEl.checked && dateFromInput && dateToInput && dateFromInput.value && dateToInput.value){
-          var fromVal = dateFromInput.value; var toVal = dateToInput.value;
-          // Ensure inputs include time part
-          var fromDate = new Date(fromVal);
-          var toDate = new Date(toVal);
-          if(!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())){
-            // same calendar day and exact times 00:00 and 23:59
-            if(fromDate.getFullYear() === toDate.getFullYear() && fromDate.getMonth() === toDate.getMonth() && fromDate.getDate() === toDate.getDate() && fromDate.getHours() === 0 && fromDate.getMinutes() === 0 && toDate.getHours() === 23 && toDate.getMinutes() === 59){
-              doSplit = true;
-            }
-          }
-        }
-      } catch(e){ /* ignore and fallback to non-split */ }
+      // Clear previous Full Device Track UI and caches before starting a new load.
+      // Do not call clearFullDeviceTrackTable here because it would reset _fullTrackLoadState
+      // and hide the spinner; handleDeviceOrDateChange is also configured to skip this table
+      // when the Device Track request itself triggers the change check.
+      try { clearFull(); if(fullBody) fullBody.innerHTML = '<tr><td colspan="100" style="text-align:center; padding:16px;"><span class="dt-spinner" style="width:18px; height:18px; display:inline-block; vertical-align:middle; margin-right:8px;"></span>Загрузка Full Device Track...</td></tr>'; var fdtc = document.getElementById('fullDeviceTrackCount'); if(fdtc) fdtc.textContent = '0 записей (загрузка...)'; } catch(_){}
+      try { _fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null; } catch(_){}
+      try { window._fullTrackIndexByTs = {}; } catch(_){}
+      try { window._devLogRequestedFull = false; } catch(_){}
+      try { window._awaitingFullTrackSetupSegments = null; } catch(_){}
+      try { window._lastFullTrackSegments = null; } catch(_){}
+      try { window._fullTrackSegmentsFinalized = false; } catch(_){}
+      try { var b = document.getElementById('fullDeviceTrackSegBadge'); if(b && b.parentNode) b.parentNode.removeChild(b); }catch(_){}
+      try { if(reportContainer) reportContainer.style.display='none'; }catch(_){}
+      // Extract original date range from the request filter
+      var originalFrom = '', originalTo = '', deviceId = '';
+      try{
+        (req.filter || []).forEach(function(f){
+          var keys = Object.keys(f || {});
+          keys.forEach(function(k){
+            var lk = k.toLowerCase();
+            var v = Array.isArray(f[k]) ? f[k][0] : f[k];
+            if(!v) return;
+            if(lk.indexOf('pgdatefrom') !== -1) originalFrom = String(v);
+            else if(lk.indexOf('pgdateto') !== -1) originalTo = String(v);
+            else if(lk.indexOf('deviceid') !== -1) deviceId = String(v);
+          });
+        });
+      } catch(e){ console.warn('requestFull: не удалось извлечь параметры фильтра', e); }
 
-      if(!doSplit){
-        // Normal single request
-        // Clear any previous per-segment metadata/badge so non-split runs show no stale segment counts
-        try{ window._lastFullTrackSegments = null; }catch(_){}
-        try{ window._fullTrackSegmentsFinalized = false; }catch(_){}
-        try{ window._awaitingFullTrackSetupSegments = null; }catch(_){}
-        try{ var b = document.getElementById('fullDeviceTrackSegBadge'); if(b && b.parentNode) b.parentNode.removeChild(b); }catch(_){}
-  // start timing for single Device Track request
-  try { setReqStart && setReqStart('Device Track'); } catch(_){}
-  window._awaitingFullTrackSetup = true; // mark that a reply is expected
-  updateStatus('Загрузка Full Device Track...','blue');
-  try { if(fullHead && fullBody){ window.__dt_setTableLoading('fullDeviceTrackTable', true); } } catch(e){}
-        // sendRequest will centrally decide whether tables should be cleared
-        try { sendRequest(req); } catch(e) { console.warn('Failed to send full track request', e); }
-      } else {
-        // Split into three time windows for the same day
-        // Prepare segment metadata (ranges and counters)
-        var dayPart = dateFromInput.value.split('T')[0];
-        var segs = [ ['00:00','10:59'], ['11:00','15:59'], ['16:00','23:59'] ];
-        var segMeta = [];
-        for(var si=0; si<segs.length; si++){
-          var fromLocalStr = dayPart + 'T' + segs[si][0];
-          var toLocalStr = dayPart + 'T' + segs[si][1];
-          // include Date objects for reliable comparisons; add seconds to bounds
-          var fromTs = new Date(fromLocalStr + ':00');
-          var toTs = new Date(toLocalStr + ':59');
-          segMeta.push({ idx: si+1, fromLocal: fromLocalStr, toLocal: toLocalStr, count:0, fromTs: fromTs, toTs: toTs });
-        }
-  window._awaitingFullTrackSetupSegments = { expected: 3, received: 0, rows: [], segments: segMeta };
-  // indicate we haven't finalized per-segment counts yet
-  try{ window._fullTrackSegmentsFinalized = false; }catch(_){}
-        // add visual badge to Full Device Track header (or update existing)
-        try{
-          var header = document.getElementById('fullDeviceTrackCount');
-          if(header){
-            var badge = document.getElementById('fullDeviceTrackSegBadge');
-            if(!badge){
-              badge = document.createElement('span'); badge.id='fullDeviceTrackSegBadge';
-              badge.style.marginLeft='8px'; badge.style.fontSize='12px'; badge.style.color='#333'; badge.style.background='#f0f0f0'; badge.style.border='1px solid #ccc'; badge.style.padding='2px 6px'; badge.style.borderRadius='12px';
-              header.parentNode && header.parentNode.insertBefore(badge, header.nextSibling);
-            }
-            badge.textContent = 'сегменты 0/3';
-          }
-        }catch(e){}
-        // start timing for split full track (total load time)
-        try { setReqStart && setReqStart('Device Track (split)'); } catch(_){}
-        window._awaitingFullTrackSetup = true;
-        updateStatus('Загрузка Full Device Track (split)...','blue');
-        // add a spinner next to fullDeviceTrackCount
-        try{
-          var headerEl = document.getElementById('fullDeviceTrackCount');
-          if(headerEl){
-            // show centralized spinner next to header
-            try{ window.__dt_showSpinner('fullDeviceTrackSpinner', { insertAfterId: 'fullDeviceTrackCount', marginLeft: '8px', width: '14px', height: '14px' }); }catch(_){ }
-          }
-        }catch(_){ }
-  try { if(fullHead && fullBody){ window.__dt_setTableLoading('fullDeviceTrackTable', true); } } catch(e){}
-        // build 3 local datetime strings for the same date
-        var dayPart = dateFromInput.value.split('T')[0];
-        var segs = [ ['00:00','08:59'], ['09:00','16:59'], ['17:00','23:59'] ];
-        for(var si=0; si<segs.length; si++){
-          try{
-            var fromLocal = dayPart + 'T' + segs[si][0];
-            var toLocal = dayPart + 'T' + segs[si][1];
-            var fromIso = buildLocalDateParam(fromLocal, false);
-            var toIso = buildLocalDateParam(toLocal, true);
-            var segReq = { name:'Device Track', type:'etbl', mid:6, act:'setup', filter:[ {selectedpgdateto:[toIso]}, {selectedpgdatefrom:[fromIso]}, {selecteddeviceid:[deviceIdInput.value]} ], nowait:false, waitfor:['selectedpgdateto'], usr:authUser, pwd:authPwd, uid:authUid, lang:'en', _splitBatch:true };
-            // mark request as a segment (harmless extra field) for debugging if needed
-            try{ segReq._ft_segment = si+1; }catch(_){}
-            // Delegate clearing decision to sendRequest; do not call handler locally
-            try { sendRequest(segReq); } catch(e) { console.warn('Failed to send split segment', e); }
-          } catch(e){ console.warn('Failed to send split segment', e); }
-        }
-      }
+      // Initialize adaptive chunking state
+      window._fullTrackLoadState = {
+        active: true,
+        accumulatedRows: [],
+        originalFrom: originalFrom,
+        originalTo: originalTo,
+        deviceId: deviceId,
+        analysisAfter: window._awaitingAnalysisTrack,
+        chunkIndex: 0,
+        hitLimit: false,
+        lastOldestTs: null
+      };
+      // Keep legacy split-related flags clean
+      try{ window._lastFullTrackSegments = null; }catch(_){}
+      try{ window._fullTrackSegmentsFinalized = false; }catch(_){}
+      try{ window._awaitingFullTrackSetupSegments = null; }catch(_){}
+      try{ window._fullTrackWasChunked = false; }catch(_){}
+      try{ var b = document.getElementById('fullDeviceTrackSegBadge'); if(b && b.parentNode) b.parentNode.removeChild(b); }catch(_){}
+
+      // start timing for Device Track request
+      try { setReqStart && setReqStart('Device Track'); } catch(_){}
+      window._awaitingFullTrackSetup = true;
+      updateStatus('Загрузка Full Device Track (часть 1)...','blue');
+      try { if(fullHead && fullBody){ window.__dt_setTableLoading('fullDeviceTrackTable', true); } } catch(e){}
+      try{ window.__dt_hideSpinner('fullDeviceTrackSpinner'); window.__dt_showSpinner('fullDeviceTrackSpinner', { insertAfterId: 'fullDeviceTrackCount', marginLeft: '8px', width: '14px', height: '14px' }); }catch(_){ }
+      // Полноэкранный оверлей убран — индикация загрузки только на уровне таблицы
+      try { sendRequest(req); } catch(e) { console.warn('Failed to send full track request', e); }
     }
     catch(e){ console.error(e); }
   }
   // Export function for external calls (for example, when Dev Log is pressed)
   window.requestFullDeviceTrackSetup = requestFull;
+
+  function sendFullTrackChunk(dateFromStr, dateToStr){
+    try{
+      var state = window._fullTrackLoadState;
+      if(!state || !state.active) return;
+      state.chunkIndex++;
+      var chunkReq = {
+        name:'Device Track', type:'etbl', mid:6, act:'setup',
+        filter:[
+          {selectedpgdateto:[dateToStr]},
+          {selectedpgdatefrom:[dateFromStr]},
+          {selecteddeviceid:[state.deviceId]}
+        ],
+        nowait:false, waitfor:['selectedpgdateto'],
+        usr:authUser, pwd:authPwd, uid:authUid, lang:'en',
+        _splitBatch:true // reuse ws.js flag so it doesn't reset tables between chunks
+      };
+      updateStatus('Загрузка Full Device Track (часть '+(state.chunkIndex+1)+', до '+dateToStr+')...','blue');
+      sendRequest(chunkReq);
+    }catch(e){ console.warn('sendFullTrackChunk failed', e); }
+  }
+
+  function finalizeFullTrackLoad(){
+    try{
+      var state = window._fullTrackLoadState;
+      if(!state) return;
+      var combined = state.accumulatedRows || [];
+      // Deduplicate: use wdate + latitude + longitude if available; fallback to JSON
+      var seen = {};
+      var uniq = [];
+      for(var i=0;i<combined.length;i++){
+        var r = combined[i];
+        var key = '';
+        try{
+          var ts = r.wdate || r.WDATE || r.date || r.Date || r.ts || '';
+          var lat = (r.latitude!=null?String(r.latitude): (r.LATITUDE!=null?String(r.LATITUDE): (r.lat!=null?String(r.lat): '')));
+          var lon = (r.longitude!=null?String(r.longitude): (r.LONGITUDE!=null?String(r.LONGITUDE): (r.lon!=null?String(r.lon): (r.Longitude!=null?String(r.Longitude): ''))));
+          key = ts + '|' + lat + '|' + lon;
+        }catch(e){ key = JSON.stringify(r); }
+        if(!seen[key]){ seen[key]=true; uniq.push(r); }
+      }
+      // Sort by parsed timestamp ascending
+      try{
+        uniq.sort(function(a,b){ var pa = parseTrackDate(a.wdate||a.WDATE||a.date||a.Date||a.ts||''); var pb = parseTrackDate(b.wdate||b.WDATE||b.date||b.Date||b.ts||''); return pa - pb; });
+      }catch(e){}
+
+      window._awaitingFullTrackSetup = false;
+      try{ window._fullTrackWasChunked = state.hitLimit; }catch(_){}
+      window._fullTrackLoadState = null;
+      try{ window.__dt_hideSpinner('fullDeviceTrackSpinner'); }catch(_){ }
+      updateStatus('Full Device Track: '+uniq.length+' строк, отрисовка таблицы...','blue');
+      try{ updateFullCount(uniq.length); }catch(_){ }
+      populateFull(uniq);
+      // compute elapsed for Device Track request and show
+      try{
+        if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Track']){
+          var ms = Date.now() - __reqStartTimes['Device Track'];
+          var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Track: ' + formatMs(ms);
+          try{ clearReqStart && clearReqStart('Device Track'); } catch(_){ }
+        }
+      }catch(_){ }
+      updateStatus('Full Device Track: '+uniq.length+' строк','green',6000);
+      // Automatic run of the report for the full selection
+      try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
+      try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
+
+      if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
+        try{ window.runAnalysisFromRows(uniq); }catch(e){ console.warn('Analysis from full track failed', e); }
+        window._awaitingAnalysisTrack = false;
+      }
+    }catch(e){ console.warn('finalizeFullTrackLoad failed', e); }
+  }
 
   if(reloadBtn && !reloadBtn.dataset.bound){ reloadBtn.addEventListener('click', requestFull); reloadBtn.dataset.bound='1'; }
 
@@ -958,170 +1043,74 @@ function drawRawDeviceTrack(points){
   var origHandler = window.__handleFullTrackSetup;
   window.__handleFullTrackSetup = function(data){
     if(!data || data.name !== 'Device Track') return false;
-  if(!window._awaitingFullTrackSetup) return false; // not our response
+    if(!window._awaitingFullTrackSetup) return false; // not our response
+
     if(data.res && data.res[0] && Array.isArray(data.res[0].f)){
       var rows = data.res[0].f;
-      // If split-segments collection is active, aggregate
-      if(window._awaitingFullTrackSetupSegments && typeof window._awaitingFullTrackSetupSegments === 'object'){
-        try{
-          // Log incoming segment
-          if(window._awaitingFullTrackSetupSegments.received !== undefined && window._awaitingFullTrackSetupSegments.expected !== undefined) {
-            console.log('[SPLIT] Сегмент #' + (window._awaitingFullTrackSetupSegments.received+1) + ' из ' + window._awaitingFullTrackSetupSegments.expected + ', строк: ' + (rows.length));
-          } else {
-            console.log('[SPLIT] Сегмент (неизвестный номер), строк: ' + (rows.length));
-          }
-          // assign incoming rows to corresponding segment by timestamp range when possible
-          var segsMeta = window._awaitingFullTrackSetupSegments.segments || [];
-          var assignedCount = 0;
-          try{
-            // try to bucket by checking first row timestamps against segment ranges
-            var parsedRows = rows.slice();
-            parsedRows.forEach(function(r){
-              var tsStr = r.wdate || r.WDATE || r.date || r.Date || r.ts || null;
-              var assigned = false;
-              if(tsStr){
-                for(var sm=0; sm<segsMeta.length; sm++){
-                  try{
-                    var seg = segsMeta[sm];
-                    var segFromTs = seg.fromTs;
-                    var segToTs = seg.toTs;
-                    var rt = parseTrackDate(tsStr);
-                    if(!isNaN(rt.getTime()) && segFromTs && segToTs && !isNaN(segFromTs.getTime()) && !isNaN(segToTs.getTime()) && rt.getTime() >= segFromTs.getTime() && rt.getTime() <= segToTs.getTime()){
-                      // row falls into this segment
-                      seg.count = (seg.count || 0) + 1;
-                      assigned = true; assignedCount++;
-                      break;
-                    }
-                  }catch(e){}
-                }
-              }
-            });
-          }catch(e){ /* ignore */ }
-          window._awaitingFullTrackSetupSegments.received++;
-          window._awaitingFullTrackSetupSegments.rows = window._awaitingFullTrackSetupSegments.rows.concat(rows);
-          // update badge counts
-          try{
-            var badge = document.getElementById('fullDeviceTrackSegBadge');
-            if(badge){ badge.textContent = 'сегменты '+window._awaitingFullTrackSetupSegments.received+'/'+window._awaitingFullTrackSetupSegments.expected; }
-            // also update main count area to include per-segment counts
-            try{ updateFullCount(window._awaitingFullTrackSetupSegments.rows.length); } catch(_){}
-          } catch(_){}
-          // Log how many segments have been received and how many rows have been accumulated in total
-          console.log('[SPLIT] Получено сегментов: ' + window._awaitingFullTrackSetupSegments.received + ' / ' + window._awaitingFullTrackSetupSegments.expected + ', всего строк: ' + window._awaitingFullTrackSetupSegments.rows.length);
-          // If not all segments received yet, wait
-          if(window._awaitingFullTrackSetupSegments.received < window._awaitingFullTrackSetupSegments.expected){
-            updateStatus('Получено сегментов: '+window._awaitingFullTrackSetupSegments.received+' / '+window._awaitingFullTrackSetupSegments.expected, 'blue');
-            try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(_){ }
-            return true;
-          }
-          // All segments received: merge, dedupe and sort
-          var combined = window._awaitingFullTrackSetupSegments.rows.slice();
-          // Deduplicate: use wdate + latitude + longitude if available; fallback to JSON
-          var seen = {};
-          var uniq = [];
-          for(var i=0;i<combined.length;i++){
-            var r = combined[i];
-            var key = '';
-            try{
-              var ts = r.wdate || r.WDATE || r.date || r.Date || r.ts || '';
-              var lat = (r.latitude!=null?String(r.latitude): (r.LATITUDE!=null?String(r.LATITUDE): (r.lat!=null?String(r.lat): '')));
-              var lon = (r.longitude!=null?String(r.longitude): (r.LONGITUDE!=null?String(r.LONGITUDE): (r.lon!=null?String(r.lon): (r.Longitude!=null?String(r.Longitude): ''))));
-              key = ts + '|' + lat + '|' + lon;
-            }catch(e){ key = JSON.stringify(r); }
-            if(!seen[key]){ seen[key]=true; uniq.push(r); }
-          }
-          // After dedupe, we can compute per-segment counts based on segMeta ranges
-          try{
-            var segsMetaFinal = window._awaitingFullTrackSetupSegments.segments || [];
-            // reset counts
-            segsMetaFinal.forEach(function(s){ s.count = 0; });
-            uniq.forEach(function(r){
-              var tsStr = r.wdate || r.WDATE || r.date || r.Date || r.ts || null;
-              if(!tsStr) return;
-              for(var sm=0; sm<segsMetaFinal.length; sm++){
-                try{
-                  var seg = segsMetaFinal[sm];
-                  var segFromTs = seg.fromTs || new Date(seg.fromLocal + ':00');
-                  var segToTs = seg.toTs || new Date(seg.toLocal + ':59');
-                  var rt = parseTrackDate(tsStr);
-                  if(!isNaN(rt.getTime()) && segFromTs && segToTs && !isNaN(segFromTs.getTime()) && !isNaN(segToTs.getTime()) && rt.getTime() >= segFromTs.getTime() && rt.getTime() <= segToTs.getTime()){
-                    seg.count = (seg.count || 0) + 1;
-                    break;
-                  }
-                }catch(e){}
-              }
-            });
-            // update badge with per-segment counts and store for display; mark as finalized
-            try{
-              var badge = document.getElementById('fullDeviceTrackSegBadge');
-              var parts = segsMetaFinal.map(function(s){ return s.count; });
-              window._lastFullTrackSegments = segsMetaFinal.map(function(s){ return { idx: s.idx, count: s.count, fromLocal: s.fromLocal, toLocal: s.toLocal }; });
-              // mark finalized so header shows breakdown; remove badge to avoid duplicate text
-              try{ window._fullTrackSegmentsFinalized = true; }catch(_){}
-              if(badge){
-                // update badge once then remove it to avoid duplication with header
-                badge.textContent = 'сегменты '+window._awaitingFullTrackSetupSegments.received+'/'+window._awaitingFullTrackSetupSegments.expected+' ('+parts.join('/')+')';
-                  try{ badge.parentNode && badge.parentNode.removeChild(badge); }catch(_){ }
-              }
-            }catch(_){}
-            // stop spinner and record total elapsed for split
-            try{
-                try{ window.__dt_hideSpinner('fullDeviceTrackSpinner'); }catch(_){ }
-            }catch(_){ }
-          }catch(e){}
-          // Sort by parsed timestamp ascending
-          try{
-            uniq.sort(function(a,b){ var pa = parseTrackDate(a.wdate||a.WDATE||a.date||a.Date||a.ts||''); var pb = parseTrackDate(b.wdate||b.WDATE||b.date||b.Date||b.ts||''); return pa - pb; });
-          }catch(e){}
-          // compute elapsed for split and show in responseTime
-          try{
-            if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Track (split)']){
-              var ms = Date.now() - __reqStartTimes['Device Track (split)'];
-              var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Track (split): ' + formatMs(ms);
-              try{ clearReqStart && clearReqStart('Device Track (split)'); } catch(_){ }
+      var state = window._fullTrackLoadState;
+
+      if(state && state.active){
+        state.accumulatedRows = state.accumulatedRows.concat(rows);
+        updateStatus('Загрузка Full Device Track (часть '+(state.chunkIndex+1)+', получено '+state.accumulatedRows.length+' строк)...','blue');
+        console.log('[FullTrack] Часть #'+(state.chunkIndex+1)+' получена: '+rows.length+' строк, всего накоплено: '+state.accumulatedRows.length);
+        try{ var fdtc = document.getElementById('fullDeviceTrackCount'); if(fdtc) fdtc.textContent = state.accumulatedRows.length + ' записей (загрузка...)'; } catch(_){}
+
+        if(rows.length >= FULL_TRACK_ROW_LIMIT){
+          state.hitLimit = true;
+          var oldestTs = findOldestTimestamp(rows);
+          var originalFromTs = parseTrackDate(state.originalFrom);
+          if(oldestTs && !isNaN(oldestTs.getTime()) && originalFromTs && !isNaN(originalFromTs.getTime())){
+            // Protect against infinite loop if the boundary didn't move
+            if(state.lastOldestTs !== null && oldestTs.getTime() === state.lastOldestTs){
+              console.warn('[FullTrack] Граница старейшей записи не сдвинулась, останавливаем подгрузку');
+              finalizeFullTrackLoad();
+              return true;
             }
-          }catch(_){ }
-          // finalize
-          window._awaitingFullTrackSetup = false;
-          window._awaitingFullTrackSetupSegments = null;
-          populateFull(uniq);
-          try{ updateFullCount(uniq.length); }catch(_){ }
-          updateStatus('Full Device Track (merged): '+uniq.length+' строк','green',6000);
-          try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
-          try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
-          if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
-            try{ window.runAnalysisFromRows(uniq); }catch(e){ console.warn('Analysis from full track failed', e); }
-            window._awaitingAnalysisTrack = false;
-          }
-          return true;
-        }catch(e){ console.warn('Failed to merge split segments', e); }
-      } else {
-        // Single-response path
-        window._awaitingFullTrackSetup = false;
-          try{
-            // Ensure rows are sorted ascending by timestamp so table is 00:00 -> 23:59
-            rows.sort(function(a,b){ var pa = parseTrackDate(a.wdate||a.WDATE||a.date||a.Date||a.ts||''); var pb = parseTrackDate(b.wdate||b.WDATE||b.date||b.Date||b.ts||''); return pa - pb; });
-          } catch(e){}
-          populateFull(rows);
-          try{ updateFullCount(rows.length); }catch(_){ }
-          // compute elapsed for single Device Track request and show
-          try{
-            if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Track']){
-              var ms = Date.now() - __reqStartTimes['Device Track'];
-              var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Track: ' + formatMs(ms);
-              try{ clearReqStart && clearReqStart('Device Track'); } catch(_){ }
+            state.lastOldestTs = oldestTs.getTime();
+
+            // If oldest returned record is at or before requested start, we already have everything
+            if(oldestTs.getTime() <= originalFromTs.getTime()){
+              finalizeFullTrackLoad();
+              return true;
             }
-          }catch(_){ }
-          updateStatus('Full Device Track: '+rows.length+' строк','green',6000);
-  // Automatic run of the report for the full selection
-        try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
-  try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
-        if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
-          try{ window.runAnalysisFromRows(rows); }catch(e){ console.warn('Analysis from full track failed', e); }
-          window._awaitingAnalysisTrack = false;
+
+            // Request the remaining earlier interval [originalFrom, oldestTs]
+            var newToStr = formatDateTimeLocal(oldestTs);
+            if(newToStr && newToStr > state.originalFrom){
+              sendFullTrackChunk(state.originalFrom, newToStr);
+              return true;
+            }
+          }
         }
+
+        finalizeFullTrackLoad();
         return true;
       }
+
+      // Fallback when no chunk state is active: treat response as complete
+      window._awaitingFullTrackSetup = false;
+      try{
+        rows.sort(function(a,b){ var pa = parseTrackDate(a.wdate||a.WDATE||a.date||a.Date||a.ts||''); var pb = parseTrackDate(b.wdate||b.WDATE||b.date||b.Date||b.ts||''); return pa - pb; });
+      } catch(e){}
+      try{ window.__dt_hideSpinner('fullDeviceTrackSpinner'); }catch(_){ }
+      updateStatus('Full Device Track: '+rows.length+' строк, отрисовка таблицы...','blue');
+      try{ updateFullCount(rows.length); }catch(_){ }
+      populateFull(rows);
+      try{
+        if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Track']){
+          var ms = Date.now() - __reqStartTimes['Device Track'];
+          var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Track: ' + formatMs(ms);
+          try{ clearReqStart && clearReqStart('Device Track'); } catch(_){ }
+        }
+      }catch(_){ }
+      updateStatus('Full Device Track: '+rows.length+' строк','green',6000);
+      try { saveFullTrackSettings(); runReport(); } catch(e) { console.warn('Авто отчёт не выполнен', e); }
+      try { window.__dt_setTableLoading('fullDeviceTrackTable', false); } catch(e){}
+      if(window._awaitingAnalysisTrack && typeof window.runAnalysisFromRows === 'function'){
+        try{ window.runAnalysisFromRows(rows); }catch(e){ console.warn('Analysis from full track failed', e); }
+        window._awaitingAnalysisTrack = false;
+      }
+      return true;
     }
     return false;
   };

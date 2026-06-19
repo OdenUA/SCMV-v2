@@ -364,7 +364,7 @@ function connect() {
        if (pkt && pkt.f) {
            deviceEditData = pkt.f.slice();
            try { if(typeof renderDeviceEditTable === 'function') renderDeviceEditTable(); } catch(_){}
-           setTimeout(function(){ try{ hideLoadingOverlay(); }catch(_){} }, 100);
+           // полноэкранный спиннер убран
        }
        // Check for rowsave confirmation (cols payload with id)
        // Check for ERROR first

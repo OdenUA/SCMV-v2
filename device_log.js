@@ -6,6 +6,358 @@ window._devLogRequestedFull = window._devLogRequestedFull || false;
 var lastDeviceIdForLogs = null;
 var isDeviceLogInitialized = false;
 
+// Server row limit for Device Alarm / Device Log (same cap as Full Device Track)
+var DEVICE_LOG_ROW_LIMIT = 14000;
+
+function parseTimeValue(v) {
+  try {
+    if (v == null) return NaN;
+    if (typeof v === 'number') {
+      if (v < 1e11) return v * 1000;
+      return v;
+    }
+    if (typeof v === 'string') {
+      var s = v.trim();
+      if (!s) return NaN;
+      var n = Number(s);
+      if (!isNaN(n)) {
+        if (n < 1e11) return n * 1000;
+        return n;
+      }
+      var p = Date.parse(s);
+      if (!isNaN(p)) return p;
+      var m = s.match(/^(\d{2})\.(\d{2})\.(\d{2,4})(?:[ T](\d{2}):(\d{2}):?(\d{2})?)?/);
+      if (m) {
+        var day = m[1], mon = m[2], yearPart = m[3];
+        var year = yearPart.length === 2 ? ('20' + yearPart) : yearPart;
+        var hh = m[4] || '00', mm = m[5] || '00', ss = m[6] || '00';
+        return Date.parse(year + '-' + mon + '-' + day + 'T' + hh + ':' + mm + ':' + ss);
+      }
+    }
+  } catch (e) {}
+  return NaN;
+}
+
+function sortRowsByTimeAsc(rowsArr) {
+  if (!rowsArr || !rowsArr.length) return;
+  var sample = rowsArr[0];
+  var keys = Object.keys(sample || {});
+  var timeKey = null;
+  var preferred = ['time', 'ts', 'datetime', 'date', 'pgdate', 'created', 'createdat', 'datestamp', 'dt', 'sdate'];
+  for (var i = 0; i < keys.length; i++) {
+    var kl = keys[i].toLowerCase();
+    for (var j = 0; j < preferred.length; j++) {
+      if (kl.indexOf(preferred[j]) !== -1) {
+        timeKey = keys[i];
+        break;
+      }
+    }
+    if (timeKey) break;
+  }
+  if (!timeKey) {
+    for (var k = 0; k < keys.length; k++) {
+      var val = rowsArr[0][keys[k]];
+      if (val == null) continue;
+      var t = parseTimeValue(val);
+      if (!isNaN(t)) {
+        timeKey = keys[k];
+        break;
+      }
+    }
+  }
+  if (!timeKey) return;
+  try {
+    rowsArr.sort(function (a, b) {
+      var ta = parseTimeValue(a[timeKey]);
+      var tb = parseTimeValue(b[timeKey]);
+      if (isNaN(ta) && isNaN(tb)) return 0;
+      if (isNaN(ta)) return 1;
+      if (isNaN(tb)) return -1;
+      return ta - tb;
+    });
+  } catch (e) { console.warn('Failed to sort rows by time', e); }
+}
+
+function computePowerOffDurations(rowsArr) {
+  if (!rowsArr || !rowsArr.length) return;
+  var sample = rowsArr[0];
+  var keys = Object.keys(sample || {});
+  var msgKey = null;
+  var msgCandidates = ['txt','text','msg','message','description'];
+  for (var i = 0; i < keys.length; i++) {
+    var kl = keys[i].toLowerCase();
+    for (var j = 0; j < msgCandidates.length; j++) {
+      if (kl.indexOf(msgCandidates[j]) !== -1) { msgKey = keys[i]; break; }
+    }
+    if (msgKey) break;
+  }
+  var idKey = null;
+  var idPreferred = ['did','imei','deviceid','selecteddeviceid','device','dev','id'];
+  for (var ii = 0; ii < idPreferred.length; ii++) {
+    for (var kk = 0; kk < keys.length; kk++) {
+      if (keys[kk].toLowerCase() === idPreferred[ii]) {
+        idKey = keys[kk]; break;
+      }
+    }
+    if (idKey) break;
+  }
+  if (!idKey) {
+    var idCandidates = ['deviceid','selecteddeviceid','imei','id','dev','device','did'];
+    for (var ii2 = 0; ii2 < keys.length; ii2++) {
+      var kli2 = keys[ii2].toLowerCase();
+      for (var jj2 = 0; jj2 < idCandidates.length; jj2++) {
+        if (kli2.indexOf(idCandidates[jj2]) !== -1) { idKey = keys[ii2]; break; }
+      }
+      if (idKey) break;
+    }
+  }
+  var timeKey = null;
+  var preferred = ['time', 'ts', 'datetime', 'date', 'pgdate', 'created', 'createdat', 'datestamp', 'dt','sdate'];
+  for (var k = 0; k < keys.length; k++) {
+    var klk = keys[k].toLowerCase();
+    for (var p = 0; p < preferred.length; p++) {
+      if (klk.indexOf(preferred[p]) !== -1) { timeKey = keys[k]; break; }
+    }
+    if (timeKey) break;
+  }
+  if (!timeKey) {
+    for (var kk = 0; kk < keys.length; kk++) {
+      var val = rowsArr[0][keys[kk]];
+      if (val == null) continue;
+      var t = parseTimeValue(val);
+      if (!isNaN(t)) { timeKey = keys[kk]; break; }
+    }
+  }
+  if (!msgKey || !timeKey) return;
+
+  function formatDurationRu(ms) {
+    if (!isFinite(ms) || ms < 0) return null;
+    var s = Math.floor(ms / 1000);
+    var hh = Math.floor(s / 3600);
+    var mm = Math.floor((s % 3600) / 60);
+    var ss = s % 60;
+    var parts = [];
+    if (hh) parts.push(hh + 'ч');
+    if (mm) parts.push(mm + 'м');
+    if (ss || parts.length === 0) parts.push(ss + 'с');
+    return parts.join(' ');
+  }
+
+  for (var a = 0; a < rowsArr.length; a++) {
+    try {
+      var rowA = rowsArr[a];
+      var msgA = rowA[msgKey] != null ? String(rowA[msgKey]) : '';
+      var strippedA = msgA.replace(/<[^>]*>/g,'').toLowerCase();
+      if (!msgA) continue;
+      var isOff = strippedA.indexOf('основное питание') !== -1 && /выключ/.test(strippedA);
+      var isOn = strippedA.indexOf('основное питание') !== -1 && /включ/.test(strippedA);
+      if (!isOff && !isOn) continue;
+      var idA = idKey ? rowA[idKey] : null;
+      var tA = parseTimeValue(rowA[timeKey]);
+      if (isNaN(tA)) continue;
+      var found = null;
+      for (var b = a + 1; b < rowsArr.length; b++) {
+        var rowB = rowsArr[b];
+        if (idKey && rowB[idKey] != idA) continue;
+        var msgB = rowB[msgKey] != null ? String(rowB[msgKey]) : '';
+        var strippedB = msgB.replace(/<[^>]*>/g,'').toLowerCase();
+        if (!msgB) continue;
+        if (isOff && strippedB.indexOf('основное питание') !== -1 && /включ/.test(strippedB)) {
+          var tB = parseTimeValue(rowB[timeKey]);
+          if (!isNaN(tB) && tB >= tA) { found = tB; break; }
+        }
+        if (isOn && strippedB.indexOf('основное питание') !== -1 && /выключ/.test(strippedB)) {
+          var tB2 = parseTimeValue(rowB[timeKey]);
+          if (!isNaN(tB2) && tB2 >= tA) { found = tB2; break; }
+        }
+      }
+      if (found) {
+        var durMs = found - tA;
+        var formatted = formatDurationRu(durMs);
+        if (formatted) {
+          try {
+            var orig = String(rowA[msgKey] || '');
+            if (orig.indexOf('<') !== -1) {
+              var closingMatch = orig.match(/<\/(div|p|li|td)\s*>\s*$/i);
+              if (closingMatch) {
+                var tag = closingMatch[1];
+                var re = new RegExp('</' + tag + '>\s*$', 'i');
+                rowA[msgKey] = orig.replace(re, '<br><span class="dalarm-duration">' + formatted + '</span></' + tag + '>');
+              } else if (orig.lastIndexOf('</div>') !== -1) {
+                var pos = orig.lastIndexOf('</div>');
+                rowA[msgKey] = orig.slice(0, pos) + '<br><span class="dalarm-duration">' + formatted + '</span>' + orig.slice(pos);
+              } else {
+                rowA[msgKey] = orig + '<br><span class="dalarm-duration">' + formatted + '</span>';
+              }
+            } else {
+              rowA[msgKey] = orig + '\n' + formatted;
+            }
+          } catch (ee) {
+            rowA[msgKey] = String(rowA[msgKey]) + ' ' + formatted;
+          }
+        }
+      }
+    } catch (e) { /* continue */ }
+  }
+}
+
+function dedupeRows(rows){
+  var seen = {};
+  var uniq = [];
+  for(var i=0; i<rows.length; i++){
+    var r = rows[i];
+    var key = '';
+    try{ key = JSON.stringify(r); }catch(e){ key = String(i); }
+    if(!seen[key]){ seen[key]=true; uniq.push(r); }
+  }
+  return uniq;
+}
+
+function findLogRowTimestamp(r){
+  if(!r) return null;
+  var preferred = ['time','ts','datetime','date','pgdate','created','createdat','datestamp','dt','sdate','wdate','WDATE','Date'];
+  for(var i=0; i<preferred.length; i++){
+    var key = preferred[i];
+    if(r[key] != null){
+      var t = parseTimeValue(r[key]);
+      if(!isNaN(t)) return new Date(t);
+    }
+  }
+  var keys = Object.keys(r);
+  for(var j=0; j<keys.length; j++){
+    var t2 = parseTimeValue(r[keys[j]]);
+    if(!isNaN(t2)) return new Date(t2);
+  }
+  return null;
+}
+
+function findOldestLogRowTimestamp(rows){
+  var minTs = null;
+  for(var i=0; i<rows.length; i++){
+    var ts = findLogRowTimestamp(rows[i]);
+    if(ts && !isNaN(ts.getTime())){
+      if(minTs === null || ts.getTime() < minTs.getTime()) minTs = ts;
+    }
+  }
+  return minTs;
+}
+
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+function formatDateTimeLocal(d){
+  if(!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
+function sendDeviceLogChunk(endpointName, buildReqFn, dateFromStr, dateToStr, state){
+  try{
+    if(!state || !state.active) return;
+    state.chunkIndex++;
+    var req = buildReqFn(state.deviceId, dateFromStr, dateToStr);
+    req._splitBatch = true; // do not reset tables between chunks
+    updateStatus('Загрузка ' + endpointName + ' (часть '+(state.chunkIndex+1)+')...','blue');
+    sendRequest(req);
+  }catch(e){ console.warn('sendDeviceLogChunk failed', e); }
+}
+
+function renderDeviceAlarmRows(rows){
+  try { sortRowsByTimeAsc(rows); } catch (e) {}
+  try { computePowerOffDurations(rows); } catch (e) { console.warn('computePowerOffDurations failed', e); }
+  fillTable(deviceAlarmThead, deviceAlarmTbody, rows);
+  // Do not overwrite the Full Device Track loading status while it is still active
+  if(window._awaitingFullTrackSetup){
+    updateStatus('Загрузка Full Device Track...', 'blue');
+  } else {
+    updateStatus('Device Alarm: ' + rows.length + ' стр.', 'green', 5000);
+  }
+  try { window.__dt_setTableLoading('deviceAlarmTable', false); } catch (e) {}
+}
+
+function renderDeviceLogRows(rows){
+  try { sortRowsByTimeAsc(rows); } catch (e) {}
+  fillTable(deviceLogThead, deviceLogTbody, rows);
+  // Do not overwrite the Full Device Track loading status while it is still active
+  if(window._awaitingFullTrackSetup){
+    updateStatus('Загрузка Full Device Track...', 'blue');
+  } else {
+    updateStatus('Device Log: ' + rows.length + ' стр.', 'green', 5000);
+  }
+  try { window.__dt_setTableLoading('deviceLogTable', false); } catch (e) {}
+}
+
+function finalizeDeviceAlarmLoad(){
+  try{
+    var state = window._deviceAlarmLoadState;
+    if(!state) return;
+    var rows = dedupeRows(state.accumulatedRows);
+    window._deviceAlarmLoadState = null;
+    renderDeviceAlarmRows(rows);
+    try{
+      if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Alarm']){
+        var ms = Date.now() - __reqStartTimes['Device Alarm'];
+        var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Alarm: ' + (ms < 1000 ? ms + ' ms' : (ms/1000).toFixed(1) + ' s');
+        try{ clearReqStart && clearReqStart('Device Alarm'); } catch(_){ }
+      }
+    }catch(_){}
+  }catch(e){ console.warn('finalizeDeviceAlarmLoad failed', e); }
+}
+
+function finalizeDeviceLogLoad(){
+  try{
+    var state = window._deviceLogLoadState;
+    if(!state) return;
+    var rows = dedupeRows(state.accumulatedRows);
+    window._deviceLogLoadState = null;
+    renderDeviceLogRows(rows);
+    try{
+      if(typeof __reqStartTimes !== 'undefined' && __reqStartTimes['Device Log']){
+        var ms = Date.now() - __reqStartTimes['Device Log'];
+        var el = document.getElementById('responseTime'); if(el) el.textContent = 'Device Log: ' + (ms < 1000 ? ms + ' ms' : (ms/1000).toFixed(1) + ' s');
+        try{ clearReqStart && clearReqStart('Device Log'); } catch(_){ }
+      }
+    }catch(_){}
+  }catch(e){ console.warn('finalizeDeviceLogLoad failed', e); }
+}
+
+function buildAlarmRequest(deviceId, fromIso, toIso) {
+  return {
+    name: 'Device Alarm',
+    type: 'etbl',
+    mid: 4,
+    act: 'filter',
+    filter: [{
+      selecteddeviceid: [deviceId]
+    }, {
+      selectedpgdatefrom: [fromIso]
+    }, {
+      selectedpgdateto: [toIso]
+    }],
+    usr: authUser,
+    pwd: authPwd,
+    uid: authUid,
+    lang: 'en'
+  };
+}
+
+function buildLogRequest(deviceId, fromIso, toIso) {
+  return {
+    name: 'Device Log',
+    type: 'etbl',
+    mid: 5,
+    act: 'filter',
+    filter: [{
+      selecteddeviceid: [deviceId]
+    }, {
+      selectedpgdateto: [toIso]
+    }, {
+      selectedpgdatefrom: [fromIso]
+    }],
+    usr: authUser,
+    pwd: authPwd,
+    uid: authUid,
+    lang: 'en'
+  };
+}
+
 function clearTable(thead, tbody) {
   if (thead) thead.innerHTML = '';
   if (tbody) tbody.innerHTML = '';
@@ -156,10 +508,14 @@ window.initDeviceLog = function() {
     } catch (e) {}
   }
 
-  function hardClearDeviceLogTables() {
+  function hardClearDeviceLogTables(preserveChunkState) {
     clearTable(deviceAlarmThead, deviceAlarmTbody);
     clearTable(deviceLogThead, deviceLogTbody);
     resetLogTitles();
+    if(!preserveChunkState){
+      try { window._deviceAlarmLoadState = null; } catch(_){}
+      try { window._deviceLogLoadState = null; } catch(_){}
+    }
   }
   window.hardClearDeviceLogTables = hardClearDeviceLogTables;
 
@@ -169,47 +525,11 @@ window.initDeviceLog = function() {
     return {from:from,to:to};
   }
 
-  function buildAlarmRequest(deviceId, fromIso, toIso) {
-    return {
-      name: 'Device Alarm',
-      type: 'etbl',
-      mid: 4,
-      act: 'filter',
-      filter: [{
-        selecteddeviceid: [deviceId]
-      }, {
-        selectedpgdatefrom: [fromIso]
-      }, {
-        selectedpgdateto: [toIso]
-      }],
-      usr: authUser,
-      pwd: authPwd,
-      uid: authUid,
-      lang: 'en'
-    };
-  }
-
-  function buildLogRequest(deviceId, fromIso, toIso) {
-    return {
-      name: 'Device Log',
-      type: 'etbl',
-      mid: 5,
-      act: 'filter',
-      filter: [{
-        selecteddeviceid: [deviceId]
-      }, {
-        selectedpgdateto: [toIso]
-      }, {
-        selectedpgdatefrom: [fromIso]
-      }],
-      usr: authUser,
-      pwd: authPwd,
-      uid: authUid,
-      lang: 'en'
-    };
-  }
-
-  function sendDeviceLogRequests() {
+  // Unified loader for Device Alarm + Device Log + Full Device Track.
+  // opts.analysis = true: after Full Device Track completes, run analysis (Analyze button).
+  // opts.scrollToLogs = true: scroll to the log tables (Dev Log button).
+  function loadDeviceData(opts) {
+    opts = opts || {};
     if (!authLoggedIn) {
       showRouteToast('⚠ Сначала вход');
       return;
@@ -231,38 +551,76 @@ window.initDeviceLog = function() {
       showRouteToast('⚠ Некорректный диапазон дат');
       return;
     }
-    // Scroll to bottom of the page so user sees log tables when Dev Log is requested
-    try {
-      var bottom = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0);
-      window.scrollTo({ top: bottom, behavior: 'smooth' });
-    } catch (e) { /* ignore if scrolling not supported */ }
-    // Do not hard-clear Device Alarm/Log tables here; let sendRequest decide
+    if (opts.scrollToLogs || opts.analysis) {
+      // Scroll to the Full Device Track table container so user sees the main loading area
+      try {
+        var fullTable = document.getElementById('fullDeviceTrackTable');
+        if (fullTable) {
+          var container = fullTable;
+          while(container && container.nodeType === 1 && !container.classList.contains('table-container')){
+            container = container.parentNode;
+          }
+          if(container && container.nodeType === 1){
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            fullTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        } else {
+          // fallback: scroll to bottom of the page
+          var bottom = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0);
+          window.scrollTo({ top: bottom, behavior: 'smooth' });
+        }
+      } catch (e) { /* ignore if scrolling not supported */ }
+    }
     // Show loading placeholders quickly in the table bodies to indicate activity
-    try { fillTable(deviceAlarmThead, deviceAlarmTbody, []); } catch(_){}
-    try { fillTable(deviceLogThead, deviceLogTbody, []); } catch(_){}
+    var loadingRowHtml = '<tr><td colspan="100" style="text-align:center; padding:12px;"><span class="dt-spinner" style="width:16px; height:16px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>Загрузка...</td></tr>';
+    try { if(deviceAlarmThead) deviceAlarmThead.innerHTML = ''; if(deviceAlarmTbody) deviceAlarmTbody.innerHTML = loadingRowHtml.replace('Загрузка...','Загрузка Device Alarm...'); } catch(_){}
+    try { if(deviceLogThead) deviceLogThead.innerHTML = ''; if(deviceLogTbody) deviceLogTbody.innerHTML = loadingRowHtml.replace('Загрузка...','Загрузка Device Log...'); } catch(_){}
     try {
       window.__dt_setTableLoading('deviceAlarmTable', true);
       window.__dt_setTableLoading('deviceLogTable', true);
     } catch (e) {}
+
+    // Initialize adaptive chunking state for both log endpoints
+    window._deviceAlarmLoadState = {
+      active: true, accumulatedRows: [], originalFrom: rng.from, originalTo: rng.to,
+      deviceId: deviceId, chunkIndex: 0, hitLimit: false, lastOldestTs: null
+    };
+    window._deviceLogLoadState = {
+      active: true, accumulatedRows: [], originalFrom: rng.from, originalTo: rng.to,
+      deviceId: deviceId, chunkIndex: 0, hitLimit: false, lastOldestTs: null
+    };
+
     var alarmReq = buildAlarmRequest(deviceId, rng.from, rng.to);
     var logReq = buildLogRequest(deviceId, rng.from, rng.to);
-  updateStatus('Отправка Device Alarm/Log...', 'blue');
-  try{ setReqStart && setReqStart('Device Alarm'); } catch(_){}
-  try{ setReqStart && setReqStart('Device Log'); } catch(_){}
-  // sendRequest will detect date/device changes and call the central handler before sending
+    // _splitBatch prevents ws.js from clearing tables between chunks / on date change
+    alarmReq._splitBatch = true;
+    logReq._splitBatch = true;
 
-  sendRequest(alarmReq);
-  sendRequest(logReq);
+    updateStatus('Отправка Device Alarm/Log (часть 1)...', 'blue');
+    try{ setReqStart && setReqStart('Device Alarm'); } catch(_){}
+    try{ setReqStart && setReqStart('Device Log'); } catch(_){}
+
+    sendRequest(alarmReq);
+    sendRequest(logReq);
     lastDeviceIdForLogs = deviceId;
-  // After sending logs, initiate retrieval of the full Device Track (setup), if available
+
+    // After sending logs, initiate retrieval of the full Device Track (setup), if available
     try {
       if (typeof window.requestFullDeviceTrackSetup === 'function') {
         window._devLogRequestedFull = true;
+        if (opts.analysis) {
+          window._awaitingAnalysisTrack = true;
+        }
         window.requestFullDeviceTrackSetup();
       }
     } catch (e) {
-      console.warn('Не удалось отправить полный трек после Dev Log:', e);
+      console.warn('Не удалось отправить полный трек:', e);
     }
+  }
+
+  function sendDeviceLogRequests() {
+    loadDeviceData({ scrollToLogs: true });
   }
 
   if (sendDeviceLogBtn && !sendDeviceLogBtn.dataset.bound) {
@@ -271,6 +629,7 @@ window.initDeviceLog = function() {
   }
 
   window.sendDeviceLogRequests = sendDeviceLogRequests;
+  window.loadDeviceData = loadDeviceData;
 
   // Auto-clear tables when device ID changes
   if (deviceIdInput && !deviceIdInput.dataset.logsWatcher) {
@@ -309,7 +668,6 @@ window.__handleDeviceLogResponse = function (data) {
         if (Array.isArray(candidate)) return candidate;
       }
       if (d.res && Array.isArray(d.res)) return d.res;
-      // fallback: if payload itself is an array
       if (Array.isArray(d)) return d;
     } catch (e) {}
     return null;
@@ -317,240 +675,54 @@ window.__handleDeviceLogResponse = function (data) {
 
   var rows = extractRows(data);
   if (!rows || !Array.isArray(rows)) {
-    // If we didn't find rows, be tolerant and return false so other handlers can try
     console.warn('DeviceLog handler: could not extract rows for', data.name, data);
     return false;
   }
 
-  // Helper: try to detect time-like key and sort rows ascending by that time
-  function parseTimeValue(v) {
-    try {
-      if (v == null) return NaN;
-      if (typeof v === 'number') {
-        // numeric seconds vs ms: if value looks like seconds, convert to ms
-        if (v < 1e11) return v * 1000; // likely seconds
-        return v; // likely ms
-      }
-      if (typeof v === 'string') {
-        var s = v.trim();
-        if (!s) return NaN;
-        // numeric string
-        var n = Number(s);
-        if (!isNaN(n)) {
-          if (n < 1e11) return n * 1000;
-          return n;
-        }
-        // ISO or RFC parseable
-        var p = Date.parse(s);
-        if (!isNaN(p)) return p;
-        // try dd.mm.yy or dd.mm.yyyy [ hh:mm:ss]
-        var m = s.match(/^(\d{2})\.(\d{2})\.(\d{2,4})(?:[ T](\d{2}):(\d{2}):?(\d{2})?)?/);
-        if (m) {
-          var day = m[1], mon = m[2], yearPart = m[3];
-          var year = yearPart.length === 2 ? ('20' + yearPart) : yearPart;
-          var hh = m[4] || '00', mm = m[5] || '00', ss = m[6] || '00';
-          return Date.parse(year + '-' + mon + '-' + day + 'T' + hh + ':' + mm + ':' + ss);
-        }
-      }
-    } catch (e) {}
-    return NaN;
-  }
+  function processChunkedResponse(endpointName, state, buildReqFn, finalizeFn){
+    if(!state || !state.active) return false;
+    state.accumulatedRows = state.accumulatedRows.concat(rows);
+    console.log('['+endpointName+'] Часть #'+(state.chunkIndex+1)+' получена: '+rows.length+' строк, всего: '+state.accumulatedRows.length);
 
-  function sortRowsByTimeAsc(rowsArr) {
-    if (!rowsArr || !rowsArr.length) return;
-    var sample = rowsArr[0];
-    var keys = Object.keys(sample || {});
-    var timeKey = null;
-  var preferred = ['time', 'ts', 'datetime', 'date', 'pgdate', 'created', 'createdat', 'datestamp', 'dt', 'sdate'];
-    // look for a key that contains any preferred token
-    for (var i = 0; i < keys.length; i++) {
-      var kl = keys[i].toLowerCase();
-      for (var j = 0; j < preferred.length; j++) {
-        if (kl.indexOf(preferred[j]) !== -1) {
-          timeKey = keys[i];
-          break;
+    if(rows.length >= DEVICE_LOG_ROW_LIMIT){
+      state.hitLimit = true;
+      var oldestTs = findOldestLogRowTimestamp(rows);
+      var originalFromTs = parseTrackDate(state.originalFrom);
+      if(oldestTs && !isNaN(oldestTs.getTime()) && originalFromTs && !isNaN(originalFromTs.getTime())){
+        if(state.lastOldestTs !== null && oldestTs.getTime() === state.lastOldestTs){
+          console.warn('['+endpointName+'] Граница не сдвинулась, останавливаем подгрузку');
+          finalizeFn();
+          return true;
         }
-      }
-      if (timeKey) break;
-    }
-    // if not found, try to detect by parsability of the first row values
-    if (!timeKey) {
-      for (var k = 0; k < keys.length; k++) {
-        var val = rowsArr[0][keys[k]];
-        if (val == null) continue;
-        var t = parseTimeValue(val);
-        if (!isNaN(t)) {
-          timeKey = keys[k];
-          break;
+        state.lastOldestTs = oldestTs.getTime();
+        if(oldestTs.getTime() <= originalFromTs.getTime()){
+          finalizeFn();
+          return true;
+        }
+        var newToStr = formatDateTimeLocal(oldestTs);
+        if(newToStr && newToStr > state.originalFrom){
+          sendDeviceLogChunk(endpointName, buildReqFn, state.originalFrom, newToStr, state);
+          return true;
         }
       }
     }
-    if (!timeKey) return;
-    try {
-      rowsArr.sort(function (a, b) {
-        var ta = parseTimeValue(a[timeKey]);
-        var tb = parseTimeValue(b[timeKey]);
-        if (isNaN(ta) && isNaN(tb)) return 0;
-        if (isNaN(ta)) return 1; // push unknowns to end
-        if (isNaN(tb)) return -1;
-        return ta - tb; // ascending
-      });
-    } catch (e) { console.warn('Failed to sort rows by time', e); }
-  }
-
-  // For Device Alarm: compute duration of each power state (on/off) as the time until the next opposite-state event
-  function computePowerOffDurations(rowsArr) {
-    if (!rowsArr || !rowsArr.length) return;
-    var sample = rowsArr[0];
-    var keys = Object.keys(sample || {});
-    // find message key
-    var msgKey = null;
-    var msgCandidates = ['txt','text','msg','message','description'];
-    for (var i = 0; i < keys.length; i++) {
-      var kl = keys[i].toLowerCase();
-      for (var j = 0; j < msgCandidates.length; j++) {
-        if (kl.indexOf(msgCandidates[j]) !== -1) { msgKey = keys[i]; break; }
-      }
-      if (msgKey) break;
-    }
-    // find id key to match same device (optional)
-    // Prefer explicit device identifiers like 'did' or 'imei' over generic row 'id'
-    var idKey = null;
-    var idPreferred = ['did','imei','deviceid','selecteddeviceid','device','dev','id'];
-    for (var ii = 0; ii < idPreferred.length; ii++) {
-      for (var kk = 0; kk < keys.length; kk++) {
-        if (keys[kk].toLowerCase() === idPreferred[ii]) {
-          idKey = keys[kk]; break;
-        }
-      }
-      if (idKey) break;
-    }
-    // fallback: partial name match if exact keys not found
-    if (!idKey) {
-      var idCandidates = ['deviceid','selecteddeviceid','imei','id','dev','device','did'];
-      for (var ii2 = 0; ii2 < keys.length; ii2++) {
-        var kli2 = keys[ii2].toLowerCase();
-        for (var jj2 = 0; jj2 < idCandidates.length; jj2++) {
-          if (kli2.indexOf(idCandidates[jj2]) !== -1) { idKey = keys[ii2]; break; }
-        }
-        if (idKey) break;
-      }
-    }
-
-  // find time key (similar logic as sorter)
-    var timeKey = null;
-    var preferred = ['time', 'ts', 'datetime', 'date', 'pgdate', 'created', 'createdat', 'datestamp', 'dt','sdate'];
-    for (var k = 0; k < keys.length; k++) {
-      var klk = keys[k].toLowerCase();
-      for (var p = 0; p < preferred.length; p++) {
-        if (klk.indexOf(preferred[p]) !== -1) { timeKey = keys[k]; break; }
-      }
-      if (timeKey) break;
-    }
-    // fallback: detect any parsable time field in first row
-    if (!timeKey) {
-      for (var kk = 0; kk < keys.length; kk++) {
-        var val = rowsArr[0][keys[kk]];
-        if (val == null) continue;
-        var t = parseTimeValue(val);
-        if (!isNaN(t)) { timeKey = keys[kk]; break; }
-      }
-    }
-    if (!msgKey || !timeKey) return;
-
-    // detection completed (debug logs removed in production)
-
-    function formatDurationRu(ms) {
-      if (!isFinite(ms) || ms < 0) return null;
-      var s = Math.floor(ms / 1000);
-      var hh = Math.floor(s / 3600);
-      var mm = Math.floor((s % 3600) / 60);
-      var ss = s % 60;
-      var parts = [];
-      if (hh) parts.push(hh + 'ч');
-      if (mm) parts.push(mm + 'м');
-      if (ss || parts.length === 0) parts.push(ss + 'с');
-      return parts.join(' ');
-    }
-
-    for (var a = 0; a < rowsArr.length; a++) {
-      try {
-        var rowA = rowsArr[a];
-  var msgA = rowA[msgKey] != null ? String(rowA[msgKey]) : '';
-  var strippedA = msgA.replace(/<[^>]*>/g,'').toLowerCase();
-        if (!msgA) continue;
-  var isOff = strippedA.indexOf('основное питание') !== -1 && /выключ/.test(strippedA);
-  var isOn = strippedA.indexOf('основное питание') !== -1 && /включ/.test(strippedA);
-        if (!isOff && !isOn) continue;
-        var idA = idKey ? rowA[idKey] : null;
-        var tA = parseTimeValue(rowA[timeKey]);
-        if (isNaN(tA)) continue;
-        // find next opposite-state event for same device (if idKey) or globally otherwise
-        var found = null;
-        for (var b = a + 1; b < rowsArr.length; b++) {
-          var rowB = rowsArr[b];
-          if (idKey && rowB[idKey] != idA) continue;
-          var msgB = rowB[msgKey] != null ? String(rowB[msgKey]) : '';
-          var strippedB = msgB.replace(/<[^>]*>/g,'').toLowerCase();
-          if (!msgB) continue;
-          if (isOff && strippedB.indexOf('основное питание') !== -1 && /включ/.test(strippedB)) {
-            var tB = parseTimeValue(rowB[timeKey]);
-            if (!isNaN(tB) && tB >= tA) { found = tB; break; }
-          }
-          if (isOn && strippedB.indexOf('основное питание') !== -1 && /выключ/.test(strippedB)) {
-            var tB2 = parseTimeValue(rowB[timeKey]);
-            if (!isNaN(tB2) && tB2 >= tA) { found = tB2; break; }
-          }
-        }
-        if (found) {
-          var durMs = found - tA;
-          var formatted = formatDurationRu(durMs);
-          if (formatted) {
-            try {
-              var orig = String(rowA[msgKey] || '');
-              // If message contains HTML, try to insert the duration before the last closing block tag
-              if (orig.indexOf('<') !== -1) {
-                // Prefer to insert before common block tags so the duration appears inside the same block
-                var closingMatch = orig.match(/<\/(div|p|li|td)\s*>\s*$/i);
-                if (closingMatch) {
-                  var tag = closingMatch[1];
-                  var re = new RegExp('</' + tag + '>\s*$', 'i');
-                  rowA[msgKey] = orig.replace(re, '<br><span class="dalarm-duration">' + formatted + '</span></' + tag + '>');
-                } else if (orig.lastIndexOf('</div>') !== -1) {
-                  var pos = orig.lastIndexOf('</div>');
-                  rowA[msgKey] = orig.slice(0, pos) + '<br><span class="dalarm-duration">' + formatted + '</span>' + orig.slice(pos);
-                } else {
-                  rowA[msgKey] = orig + '<br><span class="dalarm-duration">' + formatted + '</span>';
-                }
-              } else {
-                // plain text: append newline, which will be rendered as <br> in fillTable
-                rowA[msgKey] = orig + '\n' + formatted;
-              }
-            } catch (ee) {
-              // best-effort fallback: append formatted duration as plain text
-              rowA[msgKey] = String(rowA[msgKey]) + ' ' + formatted;
-            }
-          }
-        }
-      } catch (e) { /* continue */ }
-    }
+    finalizeFn();
+    return true;
   }
 
   if (data.name === 'Device Alarm') {
-    // sort alarms by time (ascending) when possible
-    try { sortRowsByTimeAsc(rows); } catch (e) {}
-    // compute durations for power off/on sequences and append to messages
-    try { computePowerOffDurations(rows); } catch (e) { console.warn('computePowerOffDurations failed', e); }
-    fillTable(deviceAlarmThead, deviceAlarmTbody, rows);
-    updateStatus('Device Alarm: ' + rows.length + ' стр.', 'green', 5000);
-  try { window.__dt_setTableLoading('deviceAlarmTable', false); } catch (e) {}
+    if(processChunkedResponse('Device Alarm', window._deviceAlarmLoadState, buildAlarmRequest, finalizeDeviceAlarmLoad)){
+      return true;
+    }
+    renderDeviceAlarmRows(rows);
     return true;
   }
 
   if (data.name === 'Device Log') {
-    fillTable(deviceLogThead, deviceLogTbody, rows);
-    updateStatus('Device Log: ' + rows.length + ' стр.', 'green', 5000);
-  try { window.__dt_setTableLoading('deviceLogTable', false); } catch (e) {}
+    if(processChunkedResponse('Device Log', window._deviceLogLoadState, buildLogRequest, finalizeDeviceLogLoad)){
+      return true;
+    }
+    renderDeviceLogRows(rows);
     return true;
   }
 

@@ -444,36 +444,11 @@ function init() {
   });
 
   // Requests buttons
-  // Ensure backward-compatible split checkbox element exists
-  (function ensureSplitCheckboxCompat(){
-    try{
-      var compat = document.getElementById('splitDevLogCheckbox');
-      if(!compat){
-        var hidden = document.createElement('input'); hidden.type='checkbox'; hidden.id='splitDevLogCheckbox'; hidden.style.display='none'; document.body.appendChild(hidden);
-      }
-      var toggle = document.getElementById('splitDevLogToggle');
-      if(toggle && !toggle.dataset.bound){
-        toggle.addEventListener('click', function(e){
-          try{
-            var pressed = toggle.getAttribute('aria-pressed') === 'true';
-            pressed = !pressed;
-            toggle.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-            // visual state
-            if(pressed){ toggle.classList.remove('btn-secondary'); toggle.classList.add('btn-primary'); } else { toggle.classList.remove('btn-primary'); toggle.classList.add('btn-secondary'); }
-            var compatEl = document.getElementById('splitDevLogCheckbox'); if(compatEl) compatEl.checked = pressed;
-          }catch(e){}
-        });
-        toggle.dataset.bound = '1';
-      }
-    }catch(e){}
-  })();
-
-  // Adjust Dev Log + Split buttons so combined width equals width of a single Dev Log button
+  // Adjust Dev Log button to fill its container (Split button removed)
   function adjustDevLogButtons(){
     try{
   var wrapper = document.getElementById('devLogWrapper');
   var sendBtn = document.getElementById('sendDeviceLog');
-  var splitBtn = document.getElementById('splitDevLogToggle');
   var mileageBtn = document.getElementById('sendMileageReport');
   var trackBtn = document.getElementById('sendDeviceTrack');
   var trackRawBtn = document.getElementById('sendDeviceTrackRaw');
@@ -481,19 +456,13 @@ function init() {
   var topRight = document.getElementById('actionTopRight');
   var bottomLeft = document.getElementById('actionBottomLeft');
   var bottomRight = document.getElementById('actionBottomRight');
-  if(!wrapper || !sendBtn || !splitBtn || !trackRawBtn || !topLeft || !topRight || !bottomLeft || !bottomRight) return;
+  if(!wrapper || !sendBtn || !trackRawBtn || !topLeft || !topRight || !bottomLeft || !bottomRight) return;
   // ensure top buttons fill their containers
   try{ if(mileageBtn){ mileageBtn.style.width = '100%'; mileageBtn.style.boxSizing='border-box'; } }catch(_){ }
   try{ if(trackBtn){ trackBtn.style.width = '100%'; trackBtn.style.boxSizing='border-box'; } }catch(_){ }
   try{ if(trackRawBtn){ trackRawBtn.style.width = '100%'; trackRawBtn.style.boxSizing='border-box'; } }catch(_){ }
-  // bottom-right: split between Dev Log (flexible) and Split (minimal)
-  var brWidth = Math.floor(bottomRight.getBoundingClientRect().width || 160);
-  var splitMin = 36;
-  var gap = 6;
-  var available = brWidth - gap - splitMin;
-  if(available < 40) available = Math.max(40, brWidth - gap - splitMin);
-  try{ sendBtn.style.flex = '0 0 ' + Math.floor(available) + 'px'; sendBtn.style.boxSizing='border-box'; }catch(_){ }
-  try{ splitBtn.style.flex = '0 0 ' + Math.ceil(splitMin) + 'px'; splitBtn.style.boxSizing='border-box'; }catch(_){ }
+  // Dev Log now occupies the whole bottom-right wrapper
+  try{ sendBtn.style.width = '100%'; sendBtn.style.boxSizing='border-box'; sendBtn.style.flex = '1 1 auto'; }catch(_){ }
     }catch(e){ console.warn('adjustDevLogButtons failed', e); }
   }
   // call adjustment on init and on window resize (debounced)

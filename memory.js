@@ -72,6 +72,18 @@
       if (typeof window._awaitingFullTrackSetupSegments !== 'undefined') {
         window._awaitingFullTrackSetupSegments = null;
       }
+      if (typeof window._fullTrackLoadState !== 'undefined') {
+        window._fullTrackLoadState = null;
+      }
+      if (typeof window._fullTrackWasChunked !== 'undefined') {
+        window._fullTrackWasChunked = false;
+      }
+      if (typeof window._deviceAlarmLoadState !== 'undefined') {
+        window._deviceAlarmLoadState = null;
+      }
+      if (typeof window._deviceLogLoadState !== 'undefined') {
+        window._deviceLogLoadState = null;
+      }
 
       memoryStats.lastCleanup = new Date();
       console.log('[Memory] Очистка завершена. Освобождено объектов:', freed);
