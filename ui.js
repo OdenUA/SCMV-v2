@@ -216,7 +216,12 @@ function init() {
       jumpSpeedThresholdKph: document.getElementById('anomalyJumpSpeedThresholdKph'),
       realSpeedThresholdKph: document.getElementById('anomalyRealSpeedThresholdKph'),
       positionJumpDistanceM: document.getElementById('anomalyPositionJumpDistanceM'),
-      tableMinDistanceM: document.getElementById('anomalyTableMinDistanceM')
+      tableMinDistanceM: document.getElementById('anomalyTableMinDistanceM'),
+      clipboardReb: document.getElementById('anomalyClipboardReb'),
+      clipboardReb2: document.getElementById('anomalyClipboardReb2'),
+      clipboardDevOff: document.getElementById('anomalyClipboardDevOff'),
+      clipboardDevOn: document.getElementById('anomalyClipboardDevOn'),
+      clipboardOkTemplate: document.getElementById('anomalyClipboardOkTemplate')
     };
 
     function fillForm(settings){
@@ -227,6 +232,11 @@ function init() {
       if(fields.realSpeedThresholdKph) fields.realSpeedThresholdKph.value = settings.realSpeedThresholdKph;
       if(fields.positionJumpDistanceM) fields.positionJumpDistanceM.value = settings.positionJumpDistanceM;
       if(fields.tableMinDistanceM) fields.tableMinDistanceM.value = settings.tableMinDistanceM;
+      if(fields.clipboardReb) fields.clipboardReb.value = settings.clipboardReb || '';
+      if(fields.clipboardReb2) fields.clipboardReb2.value = settings.clipboardReb2 || '';
+      if(fields.clipboardDevOff) fields.clipboardDevOff.value = settings.clipboardDevOff || '';
+      if(fields.clipboardDevOn) fields.clipboardDevOn.value = settings.clipboardDevOn || '';
+      if(fields.clipboardOkTemplate) fields.clipboardOkTemplate.value = settings.clipboardOkTemplate || '';
     }
 
     function collectSettings(){
@@ -236,7 +246,12 @@ function init() {
         jumpSpeedThresholdKph: Number(fields.jumpSpeedThresholdKph && fields.jumpSpeedThresholdKph.value),
         realSpeedThresholdKph: Number(fields.realSpeedThresholdKph && fields.realSpeedThresholdKph.value),
         positionJumpDistanceM: Number(fields.positionJumpDistanceM && fields.positionJumpDistanceM.value),
-        tableMinDistanceM: Number(fields.tableMinDistanceM && fields.tableMinDistanceM.value)
+        tableMinDistanceM: Number(fields.tableMinDistanceM && fields.tableMinDistanceM.value),
+        clipboardReb: fields.clipboardReb && fields.clipboardReb.value,
+        clipboardReb2: fields.clipboardReb2 && fields.clipboardReb2.value,
+        clipboardDevOff: fields.clipboardDevOff && fields.clipboardDevOff.value,
+        clipboardDevOn: fields.clipboardDevOn && fields.clipboardDevOn.value,
+        clipboardOkTemplate: fields.clipboardOkTemplate && fields.clipboardOkTemplate.value
       };
     }
 
@@ -280,11 +295,24 @@ function init() {
     for(var ci=0; ci<clipboardIcons.length; ci++){
       (function(icon){
         icon.addEventListener('click', function(){
-          var text = icon.getAttribute('data-clipboard');
-          var template = icon.getAttribute('data-clipboard-template');
-          if(template){
+          var key = icon.getAttribute('data-clipboard-key');
+          var settings = typeof window.getAnomalySettings === 'function' ? window.getAnomalySettings() : {};
+          var text = '';
+          if(key === 'reb') text = settings.clipboardReb || icon.getAttribute('data-clipboard') || '';
+          else if(key === 'reb2') text = settings.clipboardReb2 || icon.getAttribute('data-clipboard') || '';
+          else if(key === 'devoff') text = settings.clipboardDevOff || icon.getAttribute('data-clipboard') || '';
+          else if(key === 'devon') text = settings.clipboardDevOn || icon.getAttribute('data-clipboard') || '';
+          else if(key === 'ok'){
             var destVal = getStartstopDestValue();
+            var template = settings.clipboardOkTemplate || icon.getAttribute('data-clipboard-template') || '';
             text = template.replace('{{dest}}', destVal).replace(/\\n/g, '\n');
+          } else {
+            text = icon.getAttribute('data-clipboard') || '';
+            var fallbackTemplate = icon.getAttribute('data-clipboard-template') || '';
+            if(fallbackTemplate){
+              var destVal2 = getStartstopDestValue();
+              text = fallbackTemplate.replace('{{dest}}', destVal2).replace(/\\n/g, '\n');
+            }
           }
           if(!text) return;
           try{

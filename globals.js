@@ -150,6 +150,13 @@ var ANOMALY_REAL_SPEED_THRESHOLD_KPH = 10;              // 10 km/h - reported sp
 var ANOMALY_POSITION_JUMP_DISTANCE_M = 1200;             // 1200 m - distance threshold for Position Jump
 var ANOMALY_TABLE_MIN_DISTANCE_M = 0;                    // 0 m - minimum distance to show anomaly in the table
 
+// Default clipboard texts for panel-bottom-row icons
+var CLIPBOARD_TEXT_REB = 'Збій у роботі GPS пристрою через застосування РЕБ. Частково відсутні координати у БД';
+var CLIPBOARD_TEXT_REB2 = 'Збій у роботі GPS пристрою через застосування РЕБ. Відбулось зависання модулю GPS у пристрої. Частково відсутні координати у БД';
+var CLIPBOARD_TEXT_DEVOFF = 'Несвоєчасне вимкнення трекеру. Частково відсутні координати у БД';
+var CLIPBOARD_TEXT_DEVON = 'Несвоєчасне увімкнення трекеру. Частково відсутні координати у БД';
+var CLIPBOARD_TEXT_OK_TEMPLATE = 'У базі збережено повний трек без часових розривів, втрати сигналу або інших аномальних проявів.\nПробіг по GPS: {{dest}} км';
+
 var ANOMALY_SETTINGS_STORAGE_KEY = 'anomalySettings';
 window.DEFAULT_ANOMALY_SETTINGS = {
 	gapThresholdMs: ANOMALY_GAP_THRESHOLD_MS,
@@ -157,7 +164,12 @@ window.DEFAULT_ANOMALY_SETTINGS = {
 	jumpSpeedThresholdKph: ANOMALY_JUMP_SPEED_THRESHOLD_KPH,
 	realSpeedThresholdKph: ANOMALY_REAL_SPEED_THRESHOLD_KPH,
 	positionJumpDistanceM: ANOMALY_POSITION_JUMP_DISTANCE_M,
-	tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M
+	tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M,
+	clipboardReb: CLIPBOARD_TEXT_REB,
+	clipboardReb2: CLIPBOARD_TEXT_REB2,
+	clipboardDevOff: CLIPBOARD_TEXT_DEVOFF,
+	clipboardDevOn: CLIPBOARD_TEXT_DEVON,
+	clipboardOkTemplate: CLIPBOARD_TEXT_OK_TEMPLATE
 };
 
 window.getAnomalySettings = function(){
@@ -167,7 +179,12 @@ window.getAnomalySettings = function(){
 		jumpSpeedThresholdKph: ANOMALY_JUMP_SPEED_THRESHOLD_KPH,
 		realSpeedThresholdKph: ANOMALY_REAL_SPEED_THRESHOLD_KPH,
 		positionJumpDistanceM: ANOMALY_POSITION_JUMP_DISTANCE_M,
-		tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M
+		tableMinDistanceM: ANOMALY_TABLE_MIN_DISTANCE_M,
+		clipboardReb: CLIPBOARD_TEXT_REB,
+		clipboardReb2: CLIPBOARD_TEXT_REB2,
+		clipboardDevOff: CLIPBOARD_TEXT_DEVOFF,
+		clipboardDevOn: CLIPBOARD_TEXT_DEVON,
+		clipboardOkTemplate: CLIPBOARD_TEXT_OK_TEMPLATE
 	};
 };
 
@@ -177,12 +194,20 @@ window.applyAnomalySettings = function(settings){
 		var num = Number(value);
 		return isFinite(num) && num >= 0 ? num : fallback;
 	}
+	function asString(value, fallback){
+		return typeof value === 'string' && value.length ? value : fallback;
+	}
 	ANOMALY_GAP_THRESHOLD_MS = asNumber(settings.gapThresholdMs, ANOMALY_GAP_THRESHOLD_MS);
 	ANOMALY_SPEED_THRESHOLD_KPH = asNumber(settings.speedThresholdKph, ANOMALY_SPEED_THRESHOLD_KPH);
 	ANOMALY_JUMP_SPEED_THRESHOLD_KPH = asNumber(settings.jumpSpeedThresholdKph, ANOMALY_JUMP_SPEED_THRESHOLD_KPH);
 	ANOMALY_REAL_SPEED_THRESHOLD_KPH = asNumber(settings.realSpeedThresholdKph, ANOMALY_REAL_SPEED_THRESHOLD_KPH);
 	ANOMALY_POSITION_JUMP_DISTANCE_M = asNumber(settings.positionJumpDistanceM, ANOMALY_POSITION_JUMP_DISTANCE_M);
 	ANOMALY_TABLE_MIN_DISTANCE_M = asNumber(settings.tableMinDistanceM, ANOMALY_TABLE_MIN_DISTANCE_M);
+	CLIPBOARD_TEXT_REB = asString(settings.clipboardReb, CLIPBOARD_TEXT_REB);
+	CLIPBOARD_TEXT_REB2 = asString(settings.clipboardReb2, CLIPBOARD_TEXT_REB2);
+	CLIPBOARD_TEXT_DEVOFF = asString(settings.clipboardDevOff, CLIPBOARD_TEXT_DEVOFF);
+	CLIPBOARD_TEXT_DEVON = asString(settings.clipboardDevOn, CLIPBOARD_TEXT_DEVON);
+	CLIPBOARD_TEXT_OK_TEMPLATE = asString(settings.clipboardOkTemplate, CLIPBOARD_TEXT_OK_TEMPLATE);
 	return window.getAnomalySettings();
 };
 

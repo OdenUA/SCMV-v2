@@ -378,6 +378,9 @@ h2 {
 .setting-help:hover .setting-help-tooltip,
 .setting-help:focus-within .setting-help-tooltip,
 .setting-help.is-open .setting-help-tooltip{opacity:1;transform:translateY(0);pointer-events:auto;}
+.anomaly-settings-clipboard h3{margin:0 0 10px;font-size:14px;font-weight:600;color:#333;}
+.anomaly-settings-clipboard-grid textarea{width:100%;padding:8px 10px;font-size:14px;resize:vertical;box-sizing:border-box;font-family:inherit;}
+.anomaly-clipboard-icon-preview{width:20px;height:20px;object-fit:contain;border-radius:3px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15);}
 .anomaly-settings-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
 
 @media (max-width: 720px){
