@@ -64,6 +64,7 @@ function processDeviceTrack(points) {
   try{ if(document && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureFullCountObserver); else ensureFullCountObserver(); }catch(_){ }
   var anomalies = [];
   outOfBoundsGroups = [];
+  window._outOfBoundsLayers = [];
   if(boundsDebugContainer) boundsDebugContainer.style.display = 'none';
   if(boundsDebugOutput) boundsDebugOutput.textContent = '';
   // generateSqlBtn removed; SQL button for anomalies is created in report when needed
@@ -308,6 +309,10 @@ function drawRawDeviceTrack(points){
     if(!Array.isArray(points) || !points.length){ updateStatus('Device Track: нет данных', '#dc3545', 6000); return; }
     // Clear layer group (ws.js already does but be defensive)
     if(trackLayerGroup){ trackLayerGroup.clearLayers(); }
+    // Restore Out of Bounds polylines drawn by processDeviceTrack
+    if(window._outOfBoundsLayers && window._outOfBoundsLayers.length){
+      window._outOfBoundsLayers.forEach(function(l){ try{ trackLayerGroup.addLayer(l); }catch(e){} });
+    }
     window._trackMarkersByTs = {};
     var parsed=[]; var latlngs=[];
     for(var i=0;i<points.length;i++){

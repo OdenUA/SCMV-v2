@@ -279,6 +279,8 @@ function addOutOfBoundsAnomaly(group, allPoints, anomalies) {
       formatDate(group.endTime)
     );
   attachRouteAwareClick(poly);
+  window._outOfBoundsLayers = window._outOfBoundsLayers || [];
+  window._outOfBoundsLayers.push(poly);
   var dist = calculatePolylineDistance(anomalyLatLngs);
   var durSec = (group.endTime - group.startTime) / 1000;
   var durDisplay = formatDurationLabel(durSec);
@@ -387,6 +389,40 @@ function blinkRawTrackAnomaly(type, index) {
   }, intervalMs);
 }
 
+// Highlight an Out of Bounds polyline (kept separately from raw-track layers)
+function blinkOutOfBoundsLayer(layer) {
+  if (!layer) return;
+  var baseStyle = { color: '#800080', weight: 4, opacity: 0.9 };
+  var highlightColor = '#FFD700';
+  var intervalMs = 250;
+  var cycles = 6;
+  var tick = 0;
+
+  try {
+    if (trackLayerGroup && !trackLayerGroup.hasLayer(layer)) {
+      trackLayerGroup.addLayer(layer);
+    }
+    layer.setStyle({ color: highlightColor, weight: 7, opacity: 1, dashArray: null });
+    layer.bringToFront();
+    if (layer.getBounds && map) {
+      map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    }
+    layer.openPopup();
+  } catch (e) {}
+
+  var timer = setInterval(function () {
+    tick++;
+    var isHighlight = tick % 2 === 0;
+    try {
+      layer.setStyle(isHighlight ? { color: highlightColor, weight: 7, opacity: 1, dashArray: null } : baseStyle);
+    } catch (e) {}
+    if (tick >= cycles) {
+      clearInterval(timer);
+      try { layer.setStyle(baseStyle); } catch (e) {}
+    }
+  }, intervalMs);
+}
+
 // Attach click handlers to anomaly table rows for raw-track layers
 function attachRawTrackAnomalyClickHandlers(tbody, anomalies) {
   if (!tbody || !anomalies || !anomalies.length) return;
@@ -396,12 +432,18 @@ function attachRawTrackAnomalyClickHandlers(tbody, anomalies) {
     if (!row) return;
     var type = anom['Anomaly Type'];
     var config = RAW_TRACK_ANOMALY_CONFIG[type];
-    if (!config) return;
-    var index = anom[config.indexKey];
-    if (index == null) return;
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', function () {
-      blinkRawTrackAnomaly(type, index);
-    });
+    if (config) {
+      var index = anom[config.indexKey];
+      if (index == null) return;
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function () {
+        blinkRawTrackAnomaly(type, index);
+      });
+    } else if (type === 'Out of Bounds' && anom.layer) {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function () {
+        blinkOutOfBoundsLayer(anom.layer);
+      });
+    }
   });
 }
