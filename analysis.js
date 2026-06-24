@@ -40,11 +40,11 @@
 
   var ISSUE_PRIORITY = [
     'MOVEMENT_WITHOUT_POWER',
-    'POSITION_JUMP',
     'LOW_VOLTAGE',
-    'SPEED_SPIKE',
-    'LOW_SATELLITES',
     'TIME_GAP',
+    'SPEED_SPIKE',
+    'POSITION_JUMP',
+    'LOW_SATELLITES',
     'ALTITUDE_SPIKE',
     'STATIC_MOVING'
   ];
@@ -297,19 +297,25 @@
     var arr = Array.from(segment.issues);
     for (var i = 0; i < arr.length; i++) {
       var issue = arr[i];
-      if (issue === 'LOW_VOLTAGE') {
-        var voltage = segment.stats && segment.stats.avgVoltage;
-        parts.push(voltage != null ? 'Низкое значение batvoltage: ' + voltage.toFixed(1) : 'Низкое значение batvoltage');
-      } else if (issue === 'POSITION_JUMP') {
-        parts.push('Прыжок позиции');
-      } else if (issue === 'LOW_SATELLITES') {
-        var sats = segment.stats && segment.stats.avgSatellites;
-        parts.push(sats != null ? 'Мало спутников ' + sats.toFixed(1) : 'Мало спутников');
-      } else {
-        parts.push(TRACK_ISSUE_META[issue].displayName);
-      }
+      parts.push(singleIssueLabel(issue, segment));
     }
     return parts.join(' + ');
+  }
+
+  function singleIssueLabel(issue, segment) {
+    var meta = TRACK_ISSUE_META[issue] || TRACK_ISSUE_META['NONE'];
+    if (issue === 'LOW_VOLTAGE') {
+      var voltage = segment && segment.stats && segment.stats.avgVoltage;
+      return voltage != null ? 'Низкое значение batvoltage: ' + voltage.toFixed(1) : meta.displayName;
+    }
+    if (issue === 'POSITION_JUMP') {
+      return 'Прыжок позиции';
+    }
+    if (issue === 'LOW_SATELLITES') {
+      var sats = segment && segment.stats && segment.stats.avgSatellites;
+      return sats != null ? 'Мало спутников ' + sats.toFixed(1) : meta.displayName;
+    }
+    return meta.displayName;
   }
 
   // --- Map highlight helpers ---
@@ -723,33 +729,36 @@
       return;
     }
 
-    // Group by primary issue
+    // Group by every individual issue so each anomaly type is represented
     var groups = {};
     for (var i = 0; i < segments.length; i++) {
       var seg = segments[i];
-      var pIssue = primaryIssue(seg.issues);
-      if (!groups[pIssue]) {
-        groups[pIssue] = {
-          issue: pIssue,
-          count: 0,
-          totalPoints: 0,
-          totalDistance: 0,
-          totalDuration: 0,
-          weightSpeed: 0,
-          weightVoltage: 0,
-          weightSats: 0,
-          entries: []
-        };
+      var issueList = (seg.issues && seg.issues.size > 0) ? Array.from(seg.issues) : ['NONE'];
+      for (var ii = 0; ii < issueList.length; ii++) {
+        var issue = issueList[ii];
+        if (!groups[issue]) {
+          groups[issue] = {
+            issue: issue,
+            count: 0,
+            totalPoints: 0,
+            totalDistance: 0,
+            totalDuration: 0,
+            weightSpeed: 0,
+            weightVoltage: 0,
+            weightSats: 0,
+            entries: []
+          };
+        }
+        var g = groups[issue];
+        g.count++;
+        g.totalPoints += (seg.count || 0);
+        g.totalDistance += getSegmentDistance(seg);
+        g.totalDuration += (seg.duration || 0);
+        g.weightSpeed += ((seg.stats && seg.stats.avgSpeed) || 0) * (seg.count || 0);
+        g.weightVoltage += ((seg.stats && seg.stats.avgVoltage) || 0) * (seg.count || 0);
+        g.weightSats += ((seg.stats && seg.stats.avgSatellites) || 0) * (seg.count || 0);
+        g.entries.push(seg);
       }
-      var g = groups[pIssue];
-      g.count++;
-      g.totalPoints += (seg.count || 0);
-      g.totalDistance += getSegmentDistance(seg);
-      g.totalDuration += (seg.duration || 0);
-      g.weightSpeed += ((seg.stats && seg.stats.avgSpeed) || 0) * (seg.count || 0);
-      g.weightVoltage += ((seg.stats && seg.stats.avgVoltage) || 0) * (seg.count || 0);
-      g.weightSats += ((seg.stats && seg.stats.avgSatellites) || 0) * (seg.count || 0);
-      g.entries.push(seg);
     }
 
     // Convert to array and sort: problems first, then OK
@@ -941,77 +950,86 @@
     }
     thead.appendChild(trHead);
 
-    // Build rows
+    // Build rows: one row per individual issue so every anomaly is visible and clickable
     tbody.innerHTML = '';
     for (var i = 0; i < displaySegments.length; i++) {
       var seg = displaySegments[i];
-      var pIssue = primaryIssue(seg.issues);
-      var color = TRACK_ISSUE_META[pIssue].color;
+      var issueList = (seg.issues && seg.issues.size > 0) ? Array.from(seg.issues) : ['NONE'];
       var st = seg.stats || {};
       var startStr = padTime(seg.startTime.getHours()) + ':' + padTime(seg.startTime.getMinutes()) + ':' + padTime(seg.startTime.getSeconds());
       var endStr = padTime(seg.endTime.getHours()) + ':' + padTime(seg.endTime.getMinutes()) + ':' + padTime(seg.endTime.getSeconds());
-
-      var tr = document.createElement('tr');
-      tr.style.cursor = 'pointer';
-
-      var tdColor = document.createElement('td');
-      tdColor.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + color + ';"></span>';
-      tr.appendChild(tdColor);
-
-      var tdTime = document.createElement('td');
-      tdTime.textContent = startStr + ' - ' + endStr;
-      tr.appendChild(tdTime);
-
-      var tdIssues = document.createElement('td');
-      tdIssues.textContent = issuesLabel(seg);
-      tr.appendChild(tdIssues);
-
-      var tdDuration = document.createElement('td');
-      tdDuration.textContent = formattedDuration(seg.duration);
-      tr.appendChild(tdDuration);
-
-      var tdCount = document.createElement('td');
-      tdCount.textContent = seg.count;
-      tr.appendChild(tdCount);
-
-      var tdSpeed = document.createElement('td');
-      tdSpeed.textContent = st.avgSpeed != null ? st.avgSpeed.toFixed(1) : '';
-      tr.appendChild(tdSpeed);
-
-      var tdVoltage = document.createElement('td');
-      tdVoltage.textContent = st.avgVoltage != null ? st.avgVoltage.toFixed(1) : '';
-      tr.appendChild(tdVoltage);
-
-      var tdSats = document.createElement('td');
-      tdSats.textContent = st.avgSatellites != null ? st.avgSatellites.toFixed(1) : '';
-      tr.appendChild(tdSats);
-
-      var tdDist = document.createElement('td');
       var distVal = getSegmentDistance(seg);
-      tdDist.textContent = distVal > 0 ? (distVal / 1000).toFixed(2) : (st.distanceTraveled != null ? (st.distanceTraveled / 1000).toFixed(2) : '0.00');
-      tr.appendChild(tdDist);
+      var hasMultipleIssues = seg.issues && seg.issues.size > 1;
 
-      (function(s) {
-        tr.addEventListener('click', function() {
-          if (!s.points || s.points.length === 0 || !map) return;
-          fitMapToPoints(s.points, { padding: [40, 40], maxZoom: 16, animate: true });
-          var layers = [];
-          var anomalyLayers = [];
-          var sourceSegs = s.sourceSegments && s.sourceSegments.length > 0 ? s.sourceSegments : [s];
-          for (var k = 0; k < sourceSegs.length; k++) {
-            var src = sourceSegs[k];
-            if (src && src._polyline) layers.push(src._polyline);
-            var srcAnomalies = collectAnomalyLayersForSegment(src, s.issues);
-            for (var a = 0; a < srcAnomalies.length; a++) {
-              if (anomalyLayers.indexOf(srcAnomalies[a]) < 0) anomalyLayers.push(srcAnomalies[a]);
+      for (var ii = 0; ii < issueList.length; ii++) {
+        var pIssue = issueList[ii];
+        var meta = TRACK_ISSUE_META[pIssue] || TRACK_ISSUE_META['NONE'];
+        var color = meta.color;
+
+        var tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        if (hasMultipleIssues) {
+          tr.title = 'Все проблемы сегмента: ' + issuesLabel(seg);
+        }
+
+        var tdColor = document.createElement('td');
+        tdColor.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + color + ';"></span>';
+        tr.appendChild(tdColor);
+
+        var tdTime = document.createElement('td');
+        tdTime.textContent = startStr + ' - ' + endStr;
+        tr.appendChild(tdTime);
+
+        var tdIssues = document.createElement('td');
+        tdIssues.textContent = singleIssueLabel(pIssue, seg);
+        tr.appendChild(tdIssues);
+
+        var tdDuration = document.createElement('td');
+        tdDuration.textContent = formattedDuration(seg.duration);
+        tr.appendChild(tdDuration);
+
+        var tdCount = document.createElement('td');
+        tdCount.textContent = seg.count;
+        tr.appendChild(tdCount);
+
+        var tdSpeed = document.createElement('td');
+        tdSpeed.textContent = st.avgSpeed != null ? st.avgSpeed.toFixed(1) : '';
+        tr.appendChild(tdSpeed);
+
+        var tdVoltage = document.createElement('td');
+        tdVoltage.textContent = st.avgVoltage != null ? st.avgVoltage.toFixed(1) : '';
+        tr.appendChild(tdVoltage);
+
+        var tdSats = document.createElement('td');
+        tdSats.textContent = st.avgSatellites != null ? st.avgSatellites.toFixed(1) : '';
+        tr.appendChild(tdSats);
+
+        var tdDist = document.createElement('td');
+        tdDist.textContent = distVal > 0 ? (distVal / 1000).toFixed(2) : (st.distanceTraveled != null ? (st.distanceTraveled / 1000).toFixed(2) : '0.00');
+        tr.appendChild(tdDist);
+
+        (function(s, issue) {
+          tr.addEventListener('click', function() {
+            if (!s.points || s.points.length === 0 || !map) return;
+            fitMapToPoints(s.points, { padding: [40, 40], maxZoom: 16, animate: true });
+            var layers = [];
+            var anomalyLayers = [];
+            var sourceSegs = s.sourceSegments && s.sourceSegments.length > 0 ? s.sourceSegments : [s];
+            for (var k = 0; k < sourceSegs.length; k++) {
+              var src = sourceSegs[k];
+              if (src && src._polyline) layers.push(src._polyline);
+              var srcAnomalies = collectAnomalyLayersForSegment(src, issue);
+              for (var a = 0; a < srcAnomalies.length; a++) {
+                if (anomalyLayers.indexOf(srcAnomalies[a]) < 0) anomalyLayers.push(srcAnomalies[a]);
+              }
             }
-          }
-          var allLayers = layers.concat(anomalyLayers);
-          blinkAnalysisLayers(allLayers);
-        });
-      })(seg);
+            var allLayers = layers.concat(anomalyLayers);
+            blinkAnalysisLayers(allLayers);
+          });
+        })(seg, pIssue);
 
-      tbody.appendChild(tr);
+        tbody.appendChild(tr);
+      }
     }
 
     container.style.display = 'block';

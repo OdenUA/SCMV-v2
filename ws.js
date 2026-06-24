@@ -613,45 +613,21 @@ function connect() {
              if(anomalies && anomalies.length){
                populateTable(tableBody, tableHead, anomalies);
                updateStatus('Device Track: найдено аномалий: '+anomalies.length, 'green', 6000);
-               // Add click handler for gap highlight
-               setTimeout(function(){
-                 var rows = tableBody.querySelectorAll('tr');
-                 anomalies.forEach(function(anom, idx){
-                   var row = rows[idx];
-                   // Time Gap highlight
-                   if(anom["Anomaly Type"] === "Time Gap" && anom._gapIndex != null && window._rawTrackGapLayers && row){
-                     row.addEventListener('click', function(){
-                       window._rawTrackGapLayers.forEach(function(g){g.setStyle({color:'#ff4136',weight:4,opacity:0.95,dashArray:'8,6'});});
-                       var gapLine = window._rawTrackGapLayers[anom._gapIndex];
-                       if(gapLine){
-                         gapLine.setStyle({color:'#FFD700',weight:7,opacity:1,dashArray:null});
-                         gapLine.bringToFront();
-                         gapLine.openPopup();
-                         setTimeout(function(){gapLine.setStyle({color:'#ff4136',weight:4,opacity:0.95,dashArray:'8,6'});},2000);
-                       }
-                     });
-                   }
-                   // Speed Spike highlight
-                   if(anom["Anomaly Type"] === "Speed Spike" && anom._spikeIndex != null && window._rawTrackSpikeLayers && row){
-                     row.addEventListener('click', function(){
-                       window._rawTrackSpikeLayers.forEach(function(s){s.setStyle({color:'#ffdc00',weight:4,opacity:0.95,dashArray:'6,4'});});
-                       var spikeLine = window._rawTrackSpikeLayers[anom._spikeIndex];
-                       if(spikeLine){
-                         spikeLine.setStyle({color:'#ff4136',weight:7,opacity:1,dashArray:null});
-                         spikeLine.bringToFront();
-                         spikeLine.openPopup();
-                         setTimeout(function(){spikeLine.setStyle({color:'#ffdc00',weight:4,opacity:0.95,dashArray:'6,4'});},2000);
-                       }
-                     });
-                   }
-                 });
-               }, 100);
              } else {
                tableBody.innerHTML = '<tr><td colspan="100%">Аномалий не обнаружено.</td></tr>';
                updateStatus('Device Track: без аномалий', 'green', 5000);
              }
           // drawRawDeviceTrack only, do not draw ordinary track (black lines)
           if(typeof drawRawDeviceTrack === 'function') drawRawDeviceTrack(response);
+          // Link table rows to raw track anomaly layers after they are drawn
+          setTimeout(function(){
+            if(anomalies && anomalies.length && typeof linkAnomalyIndices === 'function'){
+              linkAnomalyIndices(anomalies);
+            }
+            if(typeof attachRawTrackAnomalyClickHandlers === 'function'){
+              attachRawTrackAnomalyClickHandlers(tableBody, anomalies);
+            }
+          }, 100);
         } catch(e){
           console.warn('raw track rendering failed', e);
         }

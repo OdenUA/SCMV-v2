@@ -152,11 +152,19 @@ function addRawTrackAnomalyLayer(type, latlngs, popupHtml, info) {
 function findMatchingRawLayerIndex(type, anomaly) {
   var config = RAW_TRACK_ANOMALY_CONFIG[type];
   var layers = config ? window[config.layersKey] : null;
-  if (!config || !layers) return null;
+  if (!config || !layers || !layers.length) return null;
+  if (!anomaly['Start Time'] || !anomaly['End Time']) return null;
+
+  var startTs = parseTrackDate(anomaly['Start Time']).getTime();
+  var endTs = parseTrackDate(anomaly['End Time']).getTime();
+  if (isNaN(startTs) || isNaN(endTs)) return null;
 
   for (var index = 0; index < layers.length; index++) {
     var info = layers[index][config.infoKey];
-    if (info && info.start.wdate === anomaly['Start Time'] && info.end.wdate === anomaly['End Time']) {
+    if (!info || !info.start || !info.end) continue;
+    var infoStartTs = parseTrackDate(info.start.wdate).getTime();
+    var infoEndTs = parseTrackDate(info.end.wdate).getTime();
+    if (infoStartTs === startTs && infoEndTs === endTs) {
       return index;
     }
   }
@@ -338,4 +346,62 @@ function linkAnomalyIndices(anomalies) {
     anom[config.indexKey] = findMatchingRawLayerIndex(type, anom);
   });
   return anomalies;
+}
+
+// Highlight a raw-track anomaly layer by type and index
+function blinkRawTrackAnomaly(type, index) {
+  var config = RAW_TRACK_ANOMALY_CONFIG[type];
+  if (!config) return;
+  var layers = window[config.layersKey];
+  if (!layers || !layers[index]) return;
+  var layer = layers[index];
+  var highlightColor = '#FFD700';
+  var intervalMs = 250;
+  var cycles = 6;
+  var tick = 0;
+
+  // Reset all layers of this type to base style before blinking
+  layers.forEach(function (l) {
+    try { l.setStyle(config.style); } catch (e) {}
+  });
+
+  try {
+    layer.setStyle({ color: highlightColor, weight: 7, opacity: 1, dashArray: null });
+    layer.bringToFront();
+    if (layer.getBounds && map) {
+      map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    }
+    layer.openPopup();
+  } catch (e) {}
+
+  var timer = setInterval(function () {
+    tick++;
+    var isHighlight = tick % 2 === 0;
+    try {
+      layer.setStyle(isHighlight ? { color: highlightColor, weight: 7, opacity: 1, dashArray: null } : config.style);
+    } catch (e) {}
+    if (tick >= cycles) {
+      clearInterval(timer);
+      try { layer.setStyle(config.style); } catch (e) {}
+    }
+  }, intervalMs);
+}
+
+// Attach click handlers to anomaly table rows for raw-track layers
+function attachRawTrackAnomalyClickHandlers(tbody, anomalies) {
+  if (!tbody || !anomalies || !anomalies.length) return;
+  var rows = tbody.querySelectorAll('tr');
+  anomalies.forEach(function (anom, idx) {
+    var row = rows[idx];
+    if (!row) return;
+    var type = anom['Anomaly Type'];
+    var config = RAW_TRACK_ANOMALY_CONFIG[type];
+    if (!config) return;
+    var index = anom[config.indexKey];
+    if (index == null) return;
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function () {
+      blinkRawTrackAnomaly(type, index);
+    });
+  });
 }
