@@ -545,6 +545,23 @@
       </div>
     </div>
 
+    <!-- Changelog / What's new modal -->
+    <div id="changelogModal" class="modal" data-hidden>
+      <div class="modal-content changelog-modal-content">
+        <span id="changelogCloseBtn" class="close-button">&times;</span>
+        <h2>Что нового</h2>
+        <div class="changelog-body">
+          <h3>Версия <span id="changelogVersion"></span></h3>
+          <ul>
+            <li>Добавлено <strong>«мигание» аномалий на карте</strong> при клике по аномалии из таблиц <em>«Аномалии трека устройства»</em> (Track Raw) и <em>«Анализ маршрута»</em> (Analyze).</li>
+          </ul>
+        </div>
+        <div class="changelog-actions">
+          <button id="changelogOkBtn" class="btn" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modular classic scripts (order matters) -->
     <script src="globals.js"></script>
     <script src="utils.js"></script>

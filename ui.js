@@ -79,6 +79,12 @@ document.addEventListener('keydown', function(e) {
       bulkDeleteMod.style.display = 'none';
       return;
     }
+    // Close changelog modal (Escape only closes, does not mark as read)
+    var changelogMod = document.getElementById('changelogModal');
+    if (changelogMod && changelogMod.style.display !== 'none' && changelogMod.style.display !== '') {
+      changelogMod.style.display = 'none';
+      return;
+    }
     // Close Device Edit overlay
     var deviceEditOv = document.getElementById('deviceEditOverlay');
     if (deviceEditOv && deviceEditOv.style.display !== 'none' && deviceEditOv.style.display !== '') {
@@ -874,6 +880,35 @@ function init() {
       timeInput.addEventListener('change', syncToOriginal);
     });
   })();
+
+  initChangelogModal();
+}
+
+function initChangelogModal(){
+  try{
+    if(!changelogModal || !changelogOkBtn) return;
+    var seenVersion = localStorage.getItem(CHANGELOG_STORAGE_KEY);
+    if(seenVersion === APP_VERSION) return;
+    if(changelogVersionEl) changelogVersionEl.textContent = APP_VERSION;
+    changelogModal.style.display = 'block';
+    function markAsRead(){
+      try{ localStorage.setItem(CHANGELOG_STORAGE_KEY, APP_VERSION); }catch(e){}
+    }
+    function closeChangelog(){
+      changelogModal.style.display = 'none';
+    }
+    if(!changelogOkBtn.dataset.bound){
+      changelogOkBtn.addEventListener('click', function(){
+        markAsRead();
+        closeChangelog();
+      });
+      changelogOkBtn.dataset.bound = '1';
+    }
+    if(changelogCloseBtn && !changelogCloseBtn.dataset.bound){
+      changelogCloseBtn.addEventListener('click', closeChangelog);
+      changelogCloseBtn.dataset.bound = '1';
+    }
+  }catch(e){}
 }
 
 function setAuthInfo(uid, user, pwd) {
