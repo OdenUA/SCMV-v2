@@ -103,6 +103,7 @@
       <div style="display:flex; align-items:center; gap:4px; margin-bottom:2px;">
         <span style="white-space:nowrap;">Дата по</span>
         <button id="copyDateFromToBtn" type="button" class="btn btn-secondary btn-inline" style="font-size:12px; padding:2px 6px; line-height:1; vertical-align:middle;">⇐</button>
+        <button id="dateLockBtn" type="button" class="btn btn-secondary btn-inline" title="Связать даты" aria-pressed="false" style="font-size:12px; padding:2px 6px; line-height:1; vertical-align:middle;">🔓</button>
       </div>
       <label class="date-label-desktop"
         >Дата по
@@ -553,7 +554,7 @@
         <div class="changelog-body">
           <h3>Версия <span id="changelogVersion"></span></h3>
           <ul>
-            <li>Добавлено <strong>«мигание» аномалий на карте</strong> при клике по аномалии из таблиц <em>«Аномалии трека устройства»</em> (Track Raw) и <em>«Анализ маршрута»</em> (Analyze).</li>
+            <li>Добавлена кнопка в виде замка рядом с полями выбора даты. При активации поле <em>«Дата по»</em> автоматически синхронизируется с полем <em>«Дата с»</em>. Состояние кнопки сохраняется в localStorage.</li>
           </ul>
         </div>
         <div class="changelog-actions">

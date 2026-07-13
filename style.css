@@ -495,6 +495,10 @@ h2 {
 /* Filter panel toggle button */
 #filterPanelToggle{background:none;border:none;font-size:14px;cursor:pointer;line-height:1;padding:2px 4px;}
 
+/* Date lock button */
+#dateLockBtn{font-size:12px;cursor:pointer;transition:background-color 0.15s,border-color 0.15s;}
+#dateLockBtn[aria-pressed="true"]{background-color:#0d6efd;border-color:#0d6efd;color:#fff;}
+
 /* Misc extracted */
 #currentIdDisplay{margin-bottom:6px;font-size:13px;color:#555;}
 /* New utility classes from inline cleanup */

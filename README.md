@@ -1,6 +1,6 @@
 # SCMV v2 — локальный инструмент просмотра и анализа треков
 
-Version: v1.0.0 — project baseline (start)
+Version: v1.0.1
 
 Changelog (start): initial baseline commit and README analysis.
 

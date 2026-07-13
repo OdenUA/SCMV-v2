@@ -18,6 +18,51 @@ function syncMobileDateFromOriginal(targetId){
   }catch(e){}
 }
 
+var DATE_LOCK_KEY = 'dateLockEnabled';
+
+function initDateLock(){
+  var lockBtn = document.getElementById('dateLockBtn');
+  var from = document.getElementById('dateFrom');
+  var to = document.getElementById('dateTo');
+  if(!lockBtn || !from || !to) return;
+  if(lockBtn.dataset.bound) return;
+  lockBtn.dataset.bound = '1';
+
+  function applyLockState(enabled){
+    lockBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    lockBtn.textContent = enabled ? '🔒' : '🔓';
+    lockBtn.title = enabled ? 'Даты связаны' : 'Связать даты';
+  }
+
+  function syncDateToFromDateFrom(){
+    if(lockBtn.getAttribute('aria-pressed') !== 'true') return;
+    if(from.value){
+      to.value = from.value;
+      syncMobileDateFromOriginal('dateTo');
+    }
+  }
+
+  lockBtn.addEventListener('click', function(){
+    var enabled = lockBtn.getAttribute('aria-pressed') !== 'true';
+    applyLockState(enabled);
+    try{
+      localStorage.setItem(DATE_LOCK_KEY, enabled ? '1' : '0');
+    }catch(e){}
+    if(enabled) syncDateToFromDateFrom();
+  });
+
+  from.addEventListener('input', syncDateToFromDateFrom);
+  from.addEventListener('change', syncDateToFromDateFrom);
+
+  // Restore saved state after default dates are set
+  var savedState = false;
+  try{
+    savedState = localStorage.getItem(DATE_LOCK_KEY) === '1';
+  }catch(e){}
+  applyLockState(savedState);
+  if(savedState) syncDateToFromDateFrom();
+}
+
 // Button to copy date from dateFrom to dateTo
 document.addEventListener('DOMContentLoaded', function(){
   var btn = document.getElementById('copyDateFromToBtn');
@@ -729,6 +774,7 @@ function init() {
   }
 
   setDefaultDates();
+  initDateLock();
   if(typeof initVehicleColorFilters==='function') initVehicleColorFilters();
   if(typeof initDeviceStatusColorFilters==='function') initDeviceStatusColorFilters();
   ensureVehicleOverlay();
@@ -873,8 +919,15 @@ function init() {
       function syncToOriginal(){
         var d = dateInput.value;
         var t = timeInput.value || '00:00';
+        var oldValue = targetInput.value;
         if(d) targetInput.value = d + 'T' + t;
         else targetInput.value = '';
+        // Notify listeners (e.g. date lock) when value changes programmatically
+        if(targetInput.value !== oldValue){
+          try{
+            targetInput.dispatchEvent(new Event('input', {bubbles:true}));
+          }catch(e){}
+        }
       }
       dateInput.addEventListener('change', syncToOriginal);
       timeInput.addEventListener('change', syncToOriginal);
