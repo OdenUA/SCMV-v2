@@ -37,7 +37,10 @@ function initDateLock(){
   function syncDateToFromDateFrom(){
     if(lockBtn.getAttribute('aria-pressed') !== 'true') return;
     if(from.value){
-      to.value = from.value;
+      var datePart = from.value.split('T')[0];
+      from.value = datePart + 'T00:00';
+      to.value = datePart + 'T23:59';
+      syncMobileDateFromOriginal('dateFrom');
       syncMobileDateFromOriginal('dateTo');
     }
   }
