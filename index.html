@@ -553,9 +553,7 @@
         <h2>Что нового</h2>
         <div class="changelog-body">
           <h3>Версия <span id="changelogVersion"></span></h3>
-          <ul>
-            <li>Добавлена кнопка в виде замка рядом с полями выбора даты. При активации поле <em>«Дата по»</em> автоматически синхронизируется с полем <em>«Дата с»</em>. Состояние кнопки сохраняется в localStorage.</li>
-          </ul>
+          <div id="changelogEntries"></div>
         </div>
         <div class="changelog-actions">
           <button id="changelogOkBtn" class="btn" type="button">OK</button>
@@ -577,6 +575,7 @@
     <script src="device_log.js"></script>
     <!-- SheetJS (XLSX) for client-side XLSX export -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="changelog.js"></script>
     <script src="ui.js"></script>
     <script src="ws.js"></script>
   <script src="audit.js"></script>

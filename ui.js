@@ -939,13 +939,39 @@ function init() {
 
 function initChangelogModal(){
   try{
-    if(!changelogModal || !changelogOkBtn) return;
+    if(!changelogModal || !changelogOkBtn || !window.CHANGELOG || !window.CHANGELOG.length) return;
+    var latest = window.CHANGELOG[0];
     var seenVersion = localStorage.getItem(CHANGELOG_STORAGE_KEY);
-    if(seenVersion === APP_VERSION) return;
-    if(changelogVersionEl) changelogVersionEl.textContent = APP_VERSION;
+    if(seenVersion === latest.version) return;
+
+    if(changelogVersionEl) changelogVersionEl.textContent = latest.version;
+
+    var container = document.getElementById('changelogEntries');
+    if(container){
+      container.innerHTML = '';
+      window.CHANGELOG.slice(0, 2).forEach(function(entry){
+        var wrap = document.createElement('div');
+        wrap.style.marginBottom = '16px';
+
+        var title = document.createElement('strong');
+        title.textContent = 'v' + entry.version + ' (' + entry.date + ')';
+        wrap.appendChild(title);
+
+        var ul = document.createElement('ul');
+        entry.items.forEach(function(item){
+          var li = document.createElement('li');
+          li.innerHTML = item;
+          ul.appendChild(li);
+        });
+        wrap.appendChild(ul);
+        container.appendChild(wrap);
+      });
+    }
+
     changelogModal.style.display = 'block';
+
     function markAsRead(){
-      try{ localStorage.setItem(CHANGELOG_STORAGE_KEY, APP_VERSION); }catch(e){}
+      try{ localStorage.setItem(CHANGELOG_STORAGE_KEY, latest.version); }catch(e){}
     }
     function closeChangelog(){
       changelogModal.style.display = 'none';

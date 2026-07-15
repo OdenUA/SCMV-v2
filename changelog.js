@@ -1,0 +1,26 @@
+// Changelog data: ordered newest-first.
+// The application shows the first two entries in the "What's new" modal.
+// To add a release, prepend a new object here. No other files need updating.
+window.CHANGELOG = [
+  {
+    version: '1.0.2',
+    date: '2026-07-15',
+    items: [
+      'В таблицу Аудита добавлены поля для фильтрации данных, добавлена выозможность сортировки по столбцам, а также возможность экспорта данных в XLSX формате.'
+    ]
+  },
+  {
+    version: '1.0.1',
+    date: '2026-07-13',
+    items: [
+      'Добавлена кнопка в виде замка рядом с полями выбора даты. При активации поле <em>«Дата по»</em> автоматически синхронизируется с полем <em>«Дата с»</em>. Состояние кнопки сохраняется в localStorage.'
+    ]
+  },
+  {
+    version: '1.0.0',
+    date: '2026-06-01',
+    items: [
+      'Базовая версия: просмотр треков, аномалии, отчёты по пробегу.'
+    ]
+  }
+];

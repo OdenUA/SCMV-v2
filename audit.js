@@ -117,38 +117,9 @@
         pkt.res[0].f.forEach(function(r){ rows.push(r); });
       }catch(e){}
     });
-    // sort by sdate descending
-    rows.sort(function(a,b){ try{ return new Date(b.sdate).getTime() - new Date(a.sdate).getTime(); }catch(e){ return 0; }});
 
-    var html = ['<!doctype html><html><head><meta charset="utf-8"><title>Audit Results</title>',
-      '<style>',
-      'body{font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; padding:20px; color:#333; background-color: #f9f9f9;}',
-      'table{border-collapse:collapse; width:100%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: #fff;}',
-      'th,td{border:1px solid #ddd; padding:10px 12px; vertical-align:top; font-size: 14px;}',
-      'th{background:#f1f1f1; text-align:left; font-weight: 600; color: #555;}',
-      'tr:nth-child(even) {background-color: #fcfcfc;}',
-      'tr:hover {background-color: #f1f7ff;}',
-      'button {padding: 8px 16px; cursor: pointer; background: #0078d4; color: white; border: none; border-radius: 4px; font-size: 14px;}',
-      'button:hover {background: #0060aa;}',
-      '.change-list div { white-space: normal; word-break: break-all; }', 
-      '</style>',
-      '</head><body>', 
-      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">',
-      '<h2 style="margin:0;">Audit Results ('+rows.length+' records)</h2>',
-      '<div><button id="downloadCsv">Download CSV</button> <button id="closeBtn" style="background:#888;">Close</button></div>',
-      '</div>',
-      '<table id="auditTable"><thead><tr>',
-      '<th style="width:50px;">ID</th>',
-      '<th style="width:60px;">Record ID</th>',
-      '<th style="width:80px;">Table</th>',
-      '<th style="width:140px;">Date</th>',
-      '<th style="width:120px;">User</th>',
-      '<th style="width:60px;">Action</th>',
-      '<th>Changes</th>',
-      '</tr></thead><tbody>'
-    ];
-
-    rows.forEach(function(r){
+    // Build display row objects once; filtering/sorting works on these
+    var displayRows = rows.map(function(r){
       var id = r.id !== undefined ? String(r.id) : '';
       var orig = r.auditorig || '';
       var neu = r.auditnewd || '';
@@ -168,70 +139,222 @@
 
       var tbl = r.tbl || '';
       var sdate = r.sdate ? (window.formatAnomalyTime ? window.formatAnomalyTime(r.sdate) : r.sdate) : (r.sdate || '');
+      var sdateTime = 0;
+      try {
+        var pd = (window.parseTrackDate && typeof window.parseTrackDate === 'function') ? window.parseTrackDate(r.sdate) : new Date(r.sdate || 0);
+        sdateTime = pd && !isNaN(pd.getTime()) ? pd.getTime() : 0;
+      } catch(e){ sdateTime = 0; }
       var uid = r.uid !== undefined ? String(r.uid) : '';
       var userName = userMap[uid] || uid; // Use name if available
-      
       var act = r.act || '';
-      
-      // Calculate changes
       var changesHtml = formatAuditChanges(orig, neu);
 
-      html.push('<tr>');
-      html.push('<td>'+escapeHtml(id)+'</td>');
-      html.push('<td>'+escapeHtml(recId)+'</td>');
-      html.push('<td>'+escapeHtml(tbl)+'</td>');
-      html.push('<td>'+escapeHtml(sdate)+'</td>');
-      html.push('<td>'+escapeHtml(userName)+'</td>');
-      html.push('<td>'+escapeHtml(act)+'</td>');
-      html.push('<td class="change-list">'+changesHtml+'</td>');
-      html.push('</tr>');
+      return { id: id, recId: recId, tbl: tbl, sdate: sdate, sdateTime: sdateTime, userName: userName, act: act, changesHtml: changesHtml };
     });
 
-    html.push('</tbody></table>');
-    
-    // Add script for CSV
-      var inlineScript = `
-        function downloadCSV(){
-          try{
-            var rows = [];
-            // headers
-            var headers = ["ID", "Record ID", "Table", "Date", "User", "Action", "Changes"];
-            rows.push(headers.join(","));
-            
-            var trs = document.querySelectorAll("#auditTable tbody tr");
-            trs.forEach(function(tr){
-              var cells = [];
-              // Standard cells
-              for(var i=0; i<6; i++) {
-                 var text = tr.children[i].textContent || "";
-                 cells.push('"' + text.replace(/"/g,'""') + '"');
-              }
-              // Changes cell: extract text properly
-              var changeCell = tr.children[6];
-              var changeText = changeCell.innerText || changeCell.textContent || "";
-              changeText = changeText.replace(/\\n/g, " | ").replace(/\\s+/g, ' ').trim();
-              cells.push('"' + changeText.replace(/"/g,'""') + '"');
-              
-              rows.push(cells.join(","));
-            });
-            var csv = rows.join('\\n');
-            var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    // Default sort by sdateTime descending
+    displayRows.sort(function(a,b){ return (b.sdateTime || 0) - (a.sdateTime || 0); });
+
+    var html = ['<!doctype html><html><head><meta charset="utf-8"><title>Audit Results</title>',
+      '<style>',
+      'body{font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; padding:20px; color:#333; background-color: #f9f9f9;}',
+      'table{border-collapse:collapse; width:100%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: #fff;}',
+      'th,td{border:1px solid #ddd; padding:10px 12px; vertical-align:top; font-size: 14px;}',
+      'th{background:#f1f1f1; text-align:left; font-weight: 600; color: #555;}',
+      'tr:nth-child(even) {background-color: #fcfcfc;}',
+      'tr:hover {background-color: #f1f7ff;}',
+      'button {padding: 8px 16px; cursor: pointer; background: #0078d4; color: white; border: none; border-radius: 4px; font-size: 14px;}',
+      'button:hover {background: #0060aa;}',
+      '.change-list div { white-space: normal; word-break: break-all; }',
+      '.audit-filter-row input { width:100%; box-sizing:border-box; padding:4px 6px; border:1px solid #d0d7de; border-radius:3px; font-size:12px; }',
+      '.audit-filter-row input:focus { outline:none; border-color:#0078d4; }',
+      'th.sortable { cursor:pointer; user-select:none; }',
+      'th.sortable:hover { background:#e1e5eb; }',
+      'th.sort-asc::after { content:" ▲"; }',
+      'th.sort-desc::after { content:" ▼"; }',
+      '</style>',
+      '</head><body>',
+      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">',
+      '<h2 style="margin:0;">Audit Results (<span id="auditCount">' + displayRows.length + '</span> records)</h2>',
+      '<div><button id="downloadXlsx">Download XLSX</button> <button id="closeBtn" style="background:#888;">Close</button></div>',
+      '</div>',
+      '<table id="auditTable"><thead>',
+      '<tr>',
+      '<th class="sortable" data-col="id" style="width:50px;">ID</th>',
+      '<th class="sortable" data-col="recId" style="width:60px;">Record ID</th>',
+      '<th class="sortable" data-col="tbl" style="width:80px;">Table</th>',
+      '<th class="sortable" data-col="sdateTime" style="width:140px;">Date</th>',
+      '<th class="sortable" data-col="userName" style="width:120px;">User</th>',
+      '<th class="sortable" data-col="act" style="width:60px;">Action</th>',
+      '<th class="sortable" data-col="changesHtml">Changes</th>',
+      '</tr>',
+      '<tr class="audit-filter-row">',
+      '<th><input type="text" data-col="id" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="recId" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="tbl" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="sdate" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="userName" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="act" placeholder="Фильтр"></th>',
+      '<th><input type="text" data-col="changesHtml" placeholder="Фильтр"></th>',
+      '</tr>',
+      '</thead><tbody></tbody></table>'
+    ];
+
+    var inlineScript = `
+      var auditRows = ` + JSON.stringify(displayRows) + `;
+      var auditFilters = {};
+      var auditSort = { column: 'sdateTime', dir: -1 };
+
+      function stripHtml(html){
+        try {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = html || '';
+          return tmp.textContent || tmp.innerText || '';
+        } catch(e) { return String(html || '').replace(/<[^>]+>/g, ' '); }
+      }
+
+      function renderAuditBody(){
+        var filtered = auditRows.slice();
+
+        // Apply per-column filters
+        Object.keys(auditFilters).forEach(function(col){
+          var val = auditFilters[col];
+          if(val == null || val === '') return;
+          var needle = String(val).toLowerCase();
+          filtered = filtered.filter(function(row){
+            var s = '';
+            if(col === 'changesHtml') s = stripHtml(row.changesHtml);
+            else s = row[col] || '';
+            return String(s).toLowerCase().indexOf(needle) !== -1;
+          });
+        });
+
+        // Apply sort
+        if(auditSort.column){
+          var col = auditSort.column;
+          var dir = auditSort.dir;
+          filtered.sort(function(a,b){
+            var av = a[col], bv = b[col];
+            if(col === 'sdateTime'){
+              return ((a.sdateTime || 0) - (b.sdateTime || 0)) * dir;
+            }
+            if(av == null && bv == null) return 0;
+            if(av == null) return 1 * dir;
+            if(bv == null) return -1 * dir;
+            var as = String(av).trim(), bs = String(bv).trim();
+            if(as !== '' && bs !== '' && !isNaN(parseFloat(as)) && !isNaN(parseFloat(bs))){
+              return (parseFloat(as) - parseFloat(bs)) * dir;
+            }
+            return String(av).localeCompare(String(bv), 'ru', { numeric: true }) * dir;
+          });
+        }
+
+        // Update count label
+        var countEl = document.getElementById('auditCount');
+        if(countEl) countEl.textContent = String(filtered.length);
+
+        // Render tbody
+        var tbody = document.querySelector('#auditTable tbody');
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        filtered.forEach(function(row){
+          var tr = document.createElement('tr');
+          ['id','recId','tbl','sdate','userName','act'].forEach(function(col){
+            var td = document.createElement('td');
+            td.textContent = row[col] || '';
+            tr.appendChild(td);
+          });
+          var tdChanges = document.createElement('td');
+          tdChanges.className = 'change-list';
+          tdChanges.innerHTML = row.changesHtml || '';
+          tr.appendChild(tdChanges);
+          tbody.appendChild(tr);
+        });
+      }
+
+      function updateSortIndicators(){
+        document.querySelectorAll('#auditTable thead th.sortable').forEach(function(th){
+          th.classList.remove('sort-asc','sort-desc');
+          if(th.dataset.col === auditSort.column){
+            th.classList.add(auditSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+          }
+        });
+      }
+
+      document.querySelectorAll('#auditTable thead th.sortable').forEach(function(th){
+        th.addEventListener('click', function(){
+          var col = th.dataset.col;
+          if(auditSort.column === col) auditSort.dir = -auditSort.dir;
+          else { auditSort.column = col; auditSort.dir = 1; }
+          updateSortIndicators();
+          renderAuditBody();
+        });
+      });
+
+      document.querySelectorAll('#auditTable .audit-filter-row input').forEach(function(inp){
+        inp.addEventListener('input', function(){
+          auditFilters[inp.dataset.col] = inp.value;
+          renderAuditBody();
+        });
+      });
+
+      function downloadXLSX(){
+        try{
+          var headers = ["ID", "Record ID", "Table", "Date", "User", "Action", "Changes"];
+          var ws_data = [headers];
+          var trs = document.querySelectorAll("#auditTable tbody tr");
+          trs.forEach(function(tr){
+            var row = [];
+            for(var i=0; i<6; i++) {
+               row.push(tr.children[i].textContent || "");
+            }
+            var changeCell = tr.children[6];
+            var changeText = changeCell.innerText || changeCell.textContent || "";
+            changeText = changeText.replace(/\\n/g, " | ").replace(/\\s+/g, ' ').trim();
+            row.push(changeText);
+            ws_data.push(row);
+          });
+
+          // Try to use SheetJS loaded in parent window
+          var XLSX = window.opener && window.opener.XLSX;
+          if(typeof XLSX !== 'undefined' && XLSX && typeof XLSX.utils !== 'undefined'){
+            var wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.aoa_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, 'Audit');
+            var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            var blob = new Blob([wbout], { type: 'application/octet-stream' });
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
-            a.href = url;
-            a.download = "audit_results.csv";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
-          }catch(e){ alert("CSV export failed: " + e); }
-        }
-        document.getElementById('downloadCsv').addEventListener('click', downloadCSV);
-        document.getElementById('closeBtn').addEventListener('click', function(){ window.close(); });
-      `;
-      html.push('<script>' + inlineScript + '<' + '/script>');
+            var fname = 'audit_results_' + (new Date()).toISOString().replace(/[:\.]/g,'-') + '.xlsx';
+            a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+            setTimeout(function(){ try{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }catch(_){} }, 2000);
+            return;
+          }
 
+          // Fallback to CSV if SheetJS is not available
+          var csvRows = ws_data.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g,'""') + '"'; }).join(","); });
+          var csv = csvRows.join('\\n');
+          var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = "audit_results.csv";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+        }catch(e){ alert("XLSX export failed: " + e); }
+      }
+
+      document.getElementById('downloadXlsx').addEventListener('click', downloadXLSX);
+      document.getElementById('closeBtn').addEventListener('click', function(){ window.close(); });
+
+      renderAuditBody();
+      updateSortIndicators();
+    `;
+    html.push('<script>' + inlineScript + '<' + '/script>');
     html.push('</body></html>');
+
     var w = window.open('about:blank','_blank');
     if(!w){ alert('Popup blocked. Allow popups for this site to view audit results.'); return; }
     w.document.open(); w.document.write(html.join('\n')); w.document.close();

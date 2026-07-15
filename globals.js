@@ -47,7 +47,6 @@ var changelogModal = document.getElementById('changelogModal');
 var changelogCloseBtn = document.getElementById('changelogCloseBtn');
 var changelogOkBtn = document.getElementById('changelogOkBtn');
 var changelogVersionEl = document.getElementById('changelogVersion');
-var APP_VERSION = '1.0.1';
 var CHANGELOG_STORAGE_KEY = 'changelogSeenVersion';
 var toggleVehicleBtn = document.getElementById('toggleVehicleBtn');
 var lineWidthSlider = document.getElementById('lineWidthSlider');
