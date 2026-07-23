@@ -608,31 +608,23 @@ function connect() {
         }
         tableHead.innerHTML = "";
         try {
+          // Single pipeline: analysis-only (no black draw) → one chunked map render path
           var anomalies = processDeviceTrack(response);
           window._lastTrackAnomalies = anomalies || [];
-             if(anomalies && anomalies.length){
-               populateTable(tableBody, tableHead, anomalies);
-               updateStatus('Device Track: найдено аномалий: '+anomalies.length, 'green', 6000);
-             } else {
-               tableBody.innerHTML = '<tr><td colspan="100%">Аномалий не обнаружено.</td></tr>';
-               updateStatus('Device Track: без аномалий', 'green', 5000);
-             }
-          // drawRawDeviceTrack only, do not draw ordinary track (black lines)
-          if(typeof drawRawDeviceTrack === 'function') drawRawDeviceTrack(response);
-          // Link table rows to raw track anomaly layers after they are drawn
-          setTimeout(function(){
-            if(anomalies && anomalies.length && typeof linkAnomalyIndices === 'function'){
-              linkAnomalyIndices(anomalies);
-            }
-            if(typeof attachRawTrackAnomalyClickHandlers === 'function'){
-              attachRawTrackAnomalyClickHandlers(tableBody, anomalies);
-            }
-          }, 100);
-        } catch(e){
-          console.warn('raw track rendering failed', e);
+          if (anomalies && anomalies.length) {
+            populateTable(tableBody, tableHead, anomalies);
+            updateStatus('Device Track: найдено аномалий: ' + anomalies.length + ', отрисовка...', 'blue');
+          } else {
+            tableBody.innerHTML = '<tr><td colspan="100%">Аномалий не обнаружено.</td></tr>';
+            updateStatus('Device Track: без аномалий, отрисовка...', 'blue');
+          }
+          // Sole map render path (progressive batches); links anomalies when finished
+          if (typeof drawRawDeviceTrack === 'function') drawRawDeviceTrack(response);
+        } catch (e) {
+          console.warn('Vehicle Track pipeline failed', e);
         }
-  // Allow displaying parkings for future requests (if needed)
-        setTimeout(function(){ window._suppressRawTrackStops = false; }, 50);
+        // Allow displaying parkings for future requests (if needed)
+        setTimeout(function () { window._suppressRawTrackStops = false; }, 50);
       }
     } else {
       tableBody.innerHTML = '<tr><td colspan="100%">Нет данных.</td></tr>';

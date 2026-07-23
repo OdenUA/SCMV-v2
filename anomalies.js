@@ -270,8 +270,8 @@ function addOutOfBoundsAnomaly(group, allPoints, anomalies) {
   var anomalyLatLngs = visualPoints.map(function (p) {
     return [p.latitude, p.longitude];
   });
+  // Create layer without adding yet — drawRawDeviceTrack attaches after its single clearLayers()
   var poly = L.polyline(anomalyLatLngs, { color: "#800080", weight: 4 })
-    .addTo(trackLayerGroup)
     .bindPopup(
       "<b>Аномалия: Вне границ</b><br>С: " +
       formatDate(group.startTime) +

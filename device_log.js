@@ -359,14 +359,77 @@ function buildLogRequest(deviceId, fromIso, toIso) {
 }
 
 function clearTable(thead, tbody) {
+  try {
+    if (tbody && tbody.__virtualTable && tbody.__virtualTable.destroy) {
+      tbody.__virtualTable.destroy();
+      tbody.__virtualTable = null;
+    }
+  } catch (_) {}
   if (thead) thead.innerHTML = '';
   if (tbody) tbody.innerHTML = '';
+}
+
+function escapeLogCellHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatLogCellValue(v) {
+  if (v == null) return '';
+  if (typeof v !== 'string') return String(v);
+  if (v.indexOf('<') !== -1) {
+    return v
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+      .replace(/on\w+\s*=\s*'[^']*'/gi, '')
+      .replace(/on\w+\s*=\s*[^'\s>]+/gi, '');
+  }
+  if (v.indexOf('\n') !== -1) {
+    return escapeLogCellHtml(v).replace(/\n/g, '<br>');
+  }
+  return v;
+}
+
+function alarmRowClass(row, headers) {
+  try {
+    var txtIdx = -1;
+    for (var i = 0; i < headers.length; i++) {
+      var lh = String(headers[i] || '').toLowerCase();
+      if (lh.indexOf('txt') !== -1 || lh.indexOf('text') !== -1 || lh.indexOf('msg') !== -1 ||
+          lh.indexOf('message') !== -1 || lh.indexOf('description') !== -1) {
+        txtIdx = i;
+        break;
+      }
+    }
+    if (txtIdx === -1) return '';
+    var msg = row[headers[txtIdx]] != null ? String(row[headers[txtIdx]]) : '';
+    if (!msg) return '';
+    var stripped = msg.replace(/<[^>]*>/g, '').toLowerCase();
+    if (stripped.indexOf('батарея полностью разряжена') !== -1 ||
+        (stripped.indexOf('выключение') !== -1 && stripped.indexOf('батарея') !== -1)) {
+      return 'dalarm-danger';
+    }
+    if (stripped.indexOf('батарея разряжена') !== -1) return 'dalarm-warning';
+    if (stripped.indexOf('основное питание') !== -1 && /выключ/.test(stripped)) return 'dalarm-warning';
+    if (stripped.indexOf('основное питание') !== -1 && /включ/.test(stripped)) return 'dalarm-success';
+  } catch (e) {}
+  return '';
 }
 
 function fillTable(thead, tbody, rows) {
   if (!thead || !tbody) {
     return;
   }
+  try {
+    if (tbody.__virtualTable && tbody.__virtualTable.destroy) {
+      tbody.__virtualTable.destroy();
+      tbody.__virtualTable = null;
+    }
+  } catch (_) {}
   thead.innerHTML = '';
   tbody.innerHTML = '';
   if (!rows || !rows.length) {
@@ -394,66 +457,48 @@ function fillTable(thead, tbody, rows) {
     tr.appendChild(th);
   });
   thead.appendChild(tr);
-  var frag = document.createDocumentFragment();
-  rows.forEach(function (r) {
-    var trR = document.createElement('tr');
-    headers.forEach(function (h) {
-      var td = document.createElement('td');
-      var v = r[h];
-      if (v == null) v = '';
-      // Escape plain text and convert newlines to <br> so durations inserted as \n become visible
-      function escapeHtml(str){ return String(str)
-          .replace(/&/g,'&amp;')
-          .replace(/</g,'&lt;')
-          .replace(/>/g,'&gt;')
-          .replace(/"/g,'&quot;')
-          .replace(/'/g,'&#39;'); }
-      if (typeof v === 'string') {
-        if (v.indexOf('<') !== -1) {
-          // allow simple HTML but strip scripts and inline event handlers
-          var safe = v
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
-            .replace(/on\w+\s*=\s*'[^']*'/gi, '')
-            .replace(/on\w+\s*=\s*[^'\s>]+/gi, '');
-          td.innerHTML = safe;
-        } else if (v.indexOf('\n') !== -1) {
-          // plain text containing newline(s): escape then convert to <br>
-          td.innerHTML = escapeHtml(v).replace(/\n/g,'<br>');
-        } else {
-          td.textContent = v;
-        }
-      } else {
-        td.textContent = v;
+
+  var isAlarmTable = !!(tbody && tbody.id === 'deviceAlarmTbody');
+  var scrollEl = null;
+  try {
+    scrollEl = tbody.closest ? tbody.closest('.table-scroll') : null;
+  } catch (_) {}
+
+  if (typeof window.mountTableBody === 'function') {
+    window.mountTableBody({
+      tbody: tbody,
+      thead: thead,
+      scrollEl: scrollEl,
+      headers: headers,
+      rows: rows,
+      emptyMessage: 'Нет данных',
+      renderCell: function (row, key) {
+        return formatLogCellValue(row[key]);
+      },
+      getRowClass: function (row) {
+        return isAlarmTable ? alarmRowClass(row, headers) : '';
       }
-      trR.appendChild(td);
     });
-    // Highlight specific alarm messages (only for Device Alarm table)
-    try {
-      // find text/message column (headers like 'txt','text','msg','message','description')
-      var txtIdx = headers.findIndex(function(h){ if(!h) return false; var lh = h.toLowerCase(); return lh.indexOf('txt')!==-1 || lh.indexOf('text')!==-1 || lh.indexOf('msg')!==-1 || lh.indexOf('message')!==-1 || lh.indexOf('description')!==-1; });
-      var msg = null;
-      if (txtIdx !== -1) {
-        var key = headers[txtIdx];
-        msg = (r[key] != null) ? String(r[key]) : '';
+  } else {
+    // Fallback without virtual_table.js
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (r) {
+      var trR = document.createElement('tr');
+      headers.forEach(function (h) {
+        var td = document.createElement('td');
+        var formatted = formatLogCellValue(r[h]);
+        if (typeof formatted === 'string' && formatted.indexOf('<') !== -1) td.innerHTML = formatted;
+        else td.textContent = formatted;
+        trR.appendChild(td);
+      });
+      if (isAlarmTable) {
+        var cls = alarmRowClass(r, headers);
+        if (cls) trR.classList.add(cls);
       }
-      if (msg) {
-        // normalize: strip HTML tags for matching, perform case-insensitive checks
-        var stripped = String(msg).replace(/<[^>]*>/g,'').toLowerCase();
-        if (stripped.indexOf('батарея полностью разряжена') !== -1 || stripped.indexOf('выключение')!==-1 && stripped.indexOf('батарея')!==-1) {
-          trR.classList.add('dalarm-danger');
-        } else if (stripped.indexOf('батарея разряжена') !== -1) {
-          trR.classList.add('dalarm-warning');
-        } else if (stripped.indexOf('основное питание') !== -1 && /выключ/.test(stripped)) {
-          trR.classList.add('dalarm-warning');
-        } else if (stripped.indexOf('основное питание') !== -1 && /включ/.test(stripped)) {
-          trR.classList.add('dalarm-success');
-        }
-      }
-    } catch (e) { console.warn('Highlight alarms failed', e); }
-    frag.appendChild(trR);
-  });
-  tbody.appendChild(frag);
+      frag.appendChild(trR);
+    });
+    tbody.appendChild(frag);
+  }
 
   // Update table title with IMEI if available
   if (imeiVal) {

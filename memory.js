@@ -46,13 +46,22 @@
         window._mileageData = [];
       }
 
-      // 2. Clear full track cache
+      // 2. Clear full track cache + virtualized table controllers
       if (typeof window._fullTrackCache !== 'undefined') {
         if (window._fullTrackCache && window._fullTrackCache.length > 0) {
           freed += window._fullTrackCache.length;
         }
         window._fullTrackCache = null;
       }
+      try {
+        ['fullDeviceTrackTbody', 'deviceLogTbody', 'deviceAlarmTbody'].forEach(function (id) {
+          var tb = document.getElementById(id);
+          if (tb && tb.__virtualTable && tb.__virtualTable.destroy) {
+            tb.__virtualTable.destroy();
+            tb.__virtualTable = null;
+          }
+        });
+      } catch (_) {}
 
       // 3. Clear intervals cache
       if (typeof window._fullIntervals !== 'undefined') {
@@ -187,22 +196,49 @@
     var cleaned = 0;
 
     try {
-      // Device Alarm & Device Log tables
+      // Prefer data-length for virtualized tables (DOM only holds a window of rows)
+      function rowCountFor(tbody, dataHint) {
+        if (dataHint && dataHint.length) return dataHint.length;
+        try {
+          if (tbody && tbody.__virtualTable && typeof tbody.__virtualTable.getRows === 'function') {
+            var rows = tbody.__virtualTable.getRows();
+            if (rows && rows.length) return rows.length;
+          }
+        } catch (_) {}
+        return tbody && tbody.children ? tbody.children.length : 0;
+      }
+
+      function wipeTbody(tbody, count, name) {
+        try {
+          if (tbody && tbody.__virtualTable && tbody.__virtualTable.destroy) {
+            tbody.__virtualTable.destroy();
+            tbody.__virtualTable = null;
+          }
+        } catch (_) {}
+        if (tbody) {
+          tbody.innerHTML = '<tr><td>Очищено для экономии памяти (было ' + count + ' строк)</td></tr>';
+        }
+        console.log('[Memory] Table ' + name + ' exceeded limit: ' + count);
+        cleaned += count;
+      }
+
       var tables = [
-        { head: 'deviceAlarmThead', body: 'deviceAlarmTbody', name: 'Device Alarm' },
-        { head: 'deviceLogThead', body: 'deviceLogTbody', name: 'Device Log' },
-        { head: 'fullHead', body: 'fullBody', name: 'Full Track' }
+        { head: 'deviceAlarmThead', body: 'deviceAlarmTbody', id: 'deviceAlarmTbody', name: 'Device Alarm' },
+        { head: 'deviceLogThead', body: 'deviceLogTbody', id: 'deviceLogTbody', name: 'Device Log' },
+        { head: 'fullDeviceTrackThead', body: 'fullDeviceTrackTbody', id: 'fullDeviceTrackTbody', name: 'Full Track', data: window._fullTrackCache }
       ];
 
       tables.forEach(function(tbl) {
         try {
-          var tbody = window[tbl.body] || document.getElementById(tbl.body);
-          if (tbody && tbody.children && tbody.children.length > LIMITS.tableRows) {
-            console.log('[Memory] Table ' + tbl.name + ' exceeded limit: ' + tbody.children.length);
-            cleaned += tbody.children.length;
-            tbody.innerHTML = '<tr><td>Очищено для экономии памяти (было ' + tbody.children.length + ' строк)</td></tr>';
+          var tbody = document.getElementById(tbl.id) || window[tbl.body];
+          var count = rowCountFor(tbody, tbl.data);
+          if (count > LIMITS.tableRows) {
+            wipeTbody(tbody, count, tbl.name);
+            if (tbl.name === 'Full Track') {
+              try { window._fullTrackCache = null; } catch (_) {}
+            }
           }
-        } catch(e) {}
+        } catch (e) {}
       });
 
       if (cleaned > 0) {

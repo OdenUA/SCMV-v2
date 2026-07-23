@@ -5,6 +5,10 @@
 // --- Adaptive full-track chunking: server caps responses at 14000 rows ---
 var FULL_TRACK_ROW_LIMIT = 14000;
 
+// Batch size for progressive map rendering (points / polyline segments per frame)
+var TRACK_RENDER_BATCH = 750;
+window._trackRenderToken = 0;
+
 function pad2(n){ return n < 10 ? '0' + n : '' + n; }
 function formatDateTimeLocal(d){
   if(!d || isNaN(d.getTime())) return '';
@@ -29,383 +33,254 @@ function findOldestTimestamp(rows){
   return minTs;
 }
 
+// Ensure #fullDeviceTrackCount styling stays in sync with text content
+function ensureFullCountObserver(){
+  try{
+    var el = document.getElementById('fullDeviceTrackCount');
+    if(!el) return;
+    if(el.__ftObserver) return;
+    var applyStyleBasedOnText = function(){
+      try{
+        var txt = (el.textContent||'').trim();
+        var m = txt.match(/(\d+[\d\s]*)/);
+        var num = null;
+        if(m && m[1]){
+          num = parseInt(m[1].replace(/\s+/g,''), 10);
+        }
+        var wasChunked = /\(частями\)/.test(txt);
+        if(num === 14000 && !wasChunked) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
+      }catch(_){ try{ el.style.backgroundColor = ''; }catch(_2){} }
+    };
+    applyStyleBasedOnText();
+    var obs = new MutationObserver(function(){ applyStyleBasedOnText(); });
+    obs.observe(el, { childList: true, characterData: true, subtree: true });
+    el.__ftObserver = obs;
+  }catch(e){ /* ignore */ }
+}
+try{ if(document && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureFullCountObserver); else ensureFullCountObserver(); }catch(_){ }
+
+/**
+ * Analysis-only: detect track anomalies for the table.
+ * Does NOT draw black polylines / decorators / fitBounds — map render is sole responsibility of drawRawDeviceTrack.
+ * Out-of-bounds layers are created and re-attached after the single clear in drawRawDeviceTrack.
+ */
 function processDeviceTrack(points) {
-  // Use global _trackData if available
   if (Array.isArray(window._trackData) && window._trackData.length > 0) {
     points = window._trackData;
   }
 
-  // Ensure any external assignments to #fullDeviceTrackCount update the inline style correctly.
-  function ensureFullCountObserver(){
-    try{
-      var el = document.getElementById('fullDeviceTrackCount');
-      if(!el) return;
-  if(el.__ftObserver) return; // already observing
-      var applyStyleBasedOnText = function(){
-        try{
-          var txt = (el.textContent||'').trim();
-          // extract number from text like '14000 records' or '14000 (..)'
-          var m = txt.match(/(\d+[\d\s]*)/);
-          var num = null;
-          if(m && m[1]){
-            num = parseInt(m[1].replace(/\s+/g,''), 10);
-          }
-          var wasChunked = /\(частями\)/.test(txt);
-          if(num === 14000 && !wasChunked) el.style.backgroundColor = 'red'; else el.style.backgroundColor = '';
-        }catch(_){ try{ el.style.backgroundColor = ''; }catch(_2){} }
-      };
-      // run once to sync state
-      applyStyleBasedOnText();
-      var obs = new MutationObserver(function(muts){ applyStyleBasedOnText(); });
-      obs.observe(el, { childList: true, characterData: true, subtree: true });
-      el.__ftObserver = obs;
-    }catch(e){ /* ignore */ }
-  }
-  try{ if(document && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureFullCountObserver); else ensureFullCountObserver(); }catch(_){ }
   var anomalies = [];
   outOfBoundsGroups = [];
   window._outOfBoundsLayers = [];
-  if(boundsDebugContainer) boundsDebugContainer.style.display = 'none';
-  if(boundsDebugOutput) boundsDebugOutput.textContent = '';
-  // generateSqlBtn removed; SQL button for anomalies is created in report when needed
-  if (points.length < 2) {
-    if (points.length === 1) {
-      L.marker([points[0].latitude, points[0].longitude], {
-        icon: startIcon,
-      }).addTo(trackLayerGroup);
-    }
+  if (boundsDebugContainer) boundsDebugContainer.style.display = 'none';
+  if (boundsDebugOutput) boundsDebugOutput.textContent = '';
+
+  if (!points || points.length < 2) {
     return anomalies;
   }
+
   var parseDate = parseTrackDate;
-  var sortedPoints = points.sort(function (a, b) {
+  // Do not mutate the server payload — sort a shallow copy
+  var sortedPoints = points.slice().sort(function (a, b) {
     return parseDate(a.wdate) - parseDate(b.wdate);
   });
-  if (directionDecorator) {
-    directionDecorator.clearLayers();
-  } else {
-    directionDecorator = L.layerGroup();
-  }
-  var isValidCoord = function (lat, lon) {
-    return (
-      isFinite(lat) &&
-      isFinite(lon) &&
-      Math.abs(lat) <= 90 &&
-      Math.abs(lon) <= 180
-    );
-  };
-  var sequences = [],
-    sequencesMeta = [],
-    currentSeq = [],
-    currentSeqMeta = [];
-  sortedPoints.forEach(function (pt) {
-    var lat = Number(pt.latitude),
-      lon = Number(pt.longitude);
-    if (isValidCoord(lat, lon)) {
-      currentSeq.push([lat, lon]);
-      currentSeqMeta.push({ lat: lat, lng: lon, wdate: pt.wdate });
-    } else {
-      if (currentSeq.length > 1) {
-        sequences.push(currentSeq);
-        sequencesMeta.push(currentSeqMeta);
-      }
-      currentSeq = [];
-      currentSeqMeta = [];
+
+  // Pre-parse timestamps once
+  for (var pi = 0; pi < sortedPoints.length; pi++) {
+    var pt0 = sortedPoints[pi];
+    if (pt0._ts == null) {
+      try { pt0._ts = parseDate(pt0.wdate).getTime(); } catch (_) { pt0._ts = NaN; }
     }
-  });
-  if (currentSeq.length > 1) {
-    sequences.push(currentSeq);
-    sequencesMeta.push(currentSeqMeta);
   }
-  sequences.forEach(function (seq, idx) {
-    var pl = L.polyline(seq, {
-      color: "black",
-      weight: 3,
-      opacity: 0.85,
-    }).addTo(trackLayerGroup);
-    pl._dtPoints = sequencesMeta[idx];
-    attachRouteAwareClick(pl);
-    var deco = L.polylineDecorator(pl, {
-      patterns: [
-        {
-          offset: 25,
-          repeat: 50,
-          symbol: L.Symbol.arrowHead({
-            pixelSize: 6,
-            pathOptions: { fillOpacity: 1, weight: 0, color: "black" },
-          }),
-        },
-      ],
-    });
-    directionDecorator.addLayer(deco);
-  });
-  // Use global constants from globals.js
-  var currentSegmentLatLngs = [
-    [sortedPoints[0].latitude, sortedPoints[0].longitude],
-  ];
+
   var currentOutOfBoundsGroup = null;
   for (var i = 1; i < sortedPoints.length; i++) {
-    var prevPoint = sortedPoints[i - 1],
-      currentPoint = sortedPoints[i];
-  var prevLL = L.latLng(prevPoint.latitude, prevPoint.longitude);
-  var currLL = L.latLng(currentPoint.latitude, currentPoint.longitude);
-  var timeDiffMs = parseDate(currentPoint.wdate) - parseDate(prevPoint.wdate);
+    var prevPoint = sortedPoints[i - 1];
+    var currentPoint = sortedPoints[i];
+    var prevLL = L.latLng(prevPoint.latitude, prevPoint.longitude);
+    var currLL = L.latLng(currentPoint.latitude, currentPoint.longitude);
+    var prevTs = prevPoint._ts;
+    var currTs = currentPoint._ts;
+    var timeDiffMs = (isFinite(currTs) && isFinite(prevTs)) ? (currTs - prevTs) : (parseDate(currentPoint.wdate) - parseDate(prevPoint.wdate));
     var distanceM = prevLL.distanceTo(currLL);
     var isGap = false;
     var speedKph = 0;
-    var anomalyType = "";
+    var anomalyType = '';
+
     if (isOutOfBounds(currentPoint.latitude, currentPoint.longitude)) {
-      // Log visually disabled
       isGap = true;
-      anomalyType = "Out of Bounds";
+      anomalyType = 'Out of Bounds';
       if (!currentOutOfBoundsGroup) {
         currentOutOfBoundsGroup = {
-          startTime: parseDate(currentPoint.wdate),
-          endTime: parseDate(currentPoint.wdate),
+          startTime: isFinite(currTs) ? new Date(currTs) : parseDate(currentPoint.wdate),
+          endTime: isFinite(currTs) ? new Date(currTs) : parseDate(currentPoint.wdate)
         };
       } else {
-        currentOutOfBoundsGroup.endTime = parseDate(currentPoint.wdate);
+        currentOutOfBoundsGroup.endTime = isFinite(currTs) ? new Date(currTs) : parseDate(currentPoint.wdate);
       }
     } else {
       if (currentOutOfBoundsGroup) {
-        currentOutOfBoundsGroup.endTime = parseDate(prevPoint.wdate);
+        currentOutOfBoundsGroup.endTime = isFinite(prevTs) ? new Date(prevTs) : parseDate(prevPoint.wdate);
         outOfBoundsGroups.push(currentOutOfBoundsGroup);
         addOutOfBoundsAnomaly(currentOutOfBoundsGroup, sortedPoints, anomalies);
         currentOutOfBoundsGroup = null;
       }
       if (timeDiffMs > ANOMALY_GAP_THRESHOLD_MS) {
         isGap = true;
-        anomalyType = "Time Gap";
+        anomalyType = 'Time Gap';
       } else if (timeDiffMs > 0) {
         speedKph = distanceM / 1000 / (timeDiffMs / 3600000);
         if (speedKph > ANOMALY_SPEED_THRESHOLD_KPH) {
           isGap = true;
-          anomalyType = "Speed Spike";
+          anomalyType = 'Speed Spike';
         } else if (speedKph > ANOMALY_JUMP_SPEED_THRESHOLD_KPH && currentPoint.speed < ANOMALY_REAL_SPEED_THRESHOLD_KPH) {
           isGap = true;
-          anomalyType = "Position Jump";
+          anomalyType = 'Position Jump';
         }
       }
-      // Distance-based Position Jump (distance > 1km regardless of speed/time)
       if (!isGap && distanceM >= ANOMALY_POSITION_JUMP_DISTANCE_M) {
         isGap = true;
-        anomalyType = "Position Jump";
+        anomalyType = 'Position Jump';
         if (timeDiffMs > 0) {
           speedKph = distanceM / 1000 / (timeDiffMs / 3600000);
         }
       }
-      if (isGap) {
-        if (currentSegmentLatLngs.length > 1) {
-          var segPolyline = L.polyline(currentSegmentLatLngs, { color: "black" }).addTo(trackLayerGroup);
-          attachRouteAwareClick(segPolyline);
-          var segDeco = L.polylineDecorator(segPolyline, {
-            patterns: [
-              {
-                offset: 25,
-                repeat: 50,
-                symbol: L.Symbol.arrowHead({ pixelSize: 6, pathOptions: { fillOpacity: 1, weight: 0, color: "black" } }),
-              },
-            ],
+      if (isGap && anomalyType !== 'Out of Bounds') {
+        var includeInTable = distanceM >= ANOMALY_TABLE_MIN_DISTANCE_M;
+        if (includeInTable) {
+          var durSec = timeDiffMs / 1000;
+          var durDisplay = durSec >= 3600 ? (durSec / 3600).toFixed(2) + ' h' : durSec >= 60 ? (durSec / 60).toFixed(1) + ' m' : Math.round(durSec) + ' s';
+          anomalies.push({
+            'Start Time': formatAnomalyTime(prevPoint.wdate),
+            'End Time': formatAnomalyTime(currentPoint.wdate),
+            'Anomaly Type': anomalyType,
+            'Calculated Speed (km/h)': speedKph.toFixed(2),
+            'Reported Speed (km/h)': currentPoint.speed,
+            'Duration': durDisplay,
+            'Distance (km)': (distanceM / 1000).toFixed(2),
+            layer: null // linked to raw map layers after drawRawDeviceTrack
           });
-          directionDecorator.addLayer(segDeco);
         }
-        if (anomalyType !== "Out of Bounds") {
-          var popupContent = "<b>Аномалия: " + anomalyType + "</b><br>С: " + prevPoint.wdate + "<br>По: " + currentPoint.wdate;
-          if (anomalyType === "Position Jump") {
-            popupContent += "<br>Расстояние: " + (distanceM / 1000).toFixed(2) + " км";
-          } else {
-            popupContent += "<br>Скорость: " + speedKph.toFixed(2) + " км/ч";
-          }
-          var lineStyle = anomalyType === "Position Jump" ? { color: "red", weight: 3, dashArray: "10,5" } : { color: "red", weight: 3 };
-          var gapPolyline = L.polyline([prevLL, currLL], lineStyle).addTo(trackLayerGroup).bindPopup(popupContent);
-          attachRouteAwareClick(gapPolyline);
-          var gapDeco = L.polylineDecorator(gapPolyline, {
-            patterns: [
-              { offset: 25, repeat: 50, symbol: L.Symbol.arrowHead({ pixelSize: 6, pathOptions: { fillOpacity: 1, weight: 0, color: "red" } }) },
-            ],
-          });
-          directionDecorator.addLayer(gapDeco);
-          var includeInTable = distanceM >= ANOMALY_TABLE_MIN_DISTANCE_M;
-          if (includeInTable) {
-            var durSec = timeDiffMs / 1000;
-            var durDisplay = durSec >= 3600 ? (durSec / 3600).toFixed(2) + " h" : durSec >= 60 ? (durSec / 60).toFixed(1) + " m" : Math.round(durSec) + " s";
-            anomalies.push({
-              "Start Time": formatAnomalyTime(prevPoint.wdate),
-              "End Time": formatAnomalyTime(currentPoint.wdate),
-              "Anomaly Type": anomalyType,
-              "Calculated Speed (km/h)": speedKph.toFixed(2),
-              "Reported Speed (km/h)": currentPoint.speed,
-              "Duration": durDisplay,
-              "Distance (km)": (distanceM / 1000).toFixed(2),
-              layer: gapPolyline,
-            });
-          }
-        }
-        currentSegmentLatLngs = [];
       }
-      currentSegmentLatLngs = [];
     }
-    currentSegmentLatLngs.push(currLL);
   }
   if (currentOutOfBoundsGroup) {
     var lastPoint = sortedPoints[sortedPoints.length - 1];
-    currentOutOfBoundsGroup.endTime = parseDate(lastPoint.wdate);
+    var lastTs = lastPoint._ts;
+    currentOutOfBoundsGroup.endTime = isFinite(lastTs) ? new Date(lastTs) : parseDate(lastPoint.wdate);
     outOfBoundsGroups.push(currentOutOfBoundsGroup);
     addOutOfBoundsAnomaly(currentOutOfBoundsGroup, sortedPoints, anomalies);
   }
-  if (outOfBoundsGroups.length > 0) {
-    // Previously we showed a global generateSqlBtn in Device Track Details; that button has been removed.
-    // SQL generation is now handled from the Intervals report when Type4 anomalies are present.
-  }
-  if (currentSegmentLatLngs.length > 1) {
-    var lastSeg = L.polyline(currentSegmentLatLngs, { color: "black" }).addTo(
-      trackLayerGroup
-    );
-    attachRouteAwareClick(lastSeg);
-    var decoLast = L.polylineDecorator(lastSeg, {
-      patterns: [
-        {
-          offset: 25,
-          repeat: 50,
-          symbol: L.Symbol.arrowHead({
-            pixelSize: 6,
-            pathOptions: { fillOpacity: 1, weight: 0, color: "black" },
-          }),
-        },
-      ],
-    });
-    directionDecorator.addLayer(decoLast);
-  }
-  if (directionsVisible) {
-    directionDecorator.addTo(trackLayerGroup);
-  }
-  var allLatLngs = [];
-  sequences.forEach(function (seq) {
-    seq.forEach(function (ll) {
-      allLatLngs.push(ll);
-    });
-  });
-  if (allLatLngs.length > 0) {
-    map.fitBounds(L.polyline(allLatLngs).getBounds());
-    L.marker(allLatLngs[0], { icon: startIcon })
-      .addTo(trackLayerGroup)
-      .bindPopup("<b>Старт</b><br>" + sortedPoints[0].wdate);
-    L.marker(allLatLngs[allLatLngs.length - 1], { icon: endIcon })
-      .addTo(trackLayerGroup)
-      .bindPopup(
-        "<b>Финиш</b><br>" + sortedPoints[sortedPoints.length - 1].wdate
-      );
-  }
-  // Link anomaly indices for highlighting (function from anomalies.js)
-  linkAnomalyIndices(anomalies);
   return anomalies;
 }
 
-// --- Simplified raw track rendering (refactored requirement) ---
-// Draws continuous polyline from raw points; clicking the polyline shows time of nearest recorded point.
-// Does NOT display stops, anomalies, or extra decorations beyond start/end markers and fit bounds.
+// --- Single map render path for Vehicle Track ---
+// Progressive (chunked) drawing of polyline segments or point markers.
 // Usage: drawRawDeviceTrack(rawResponseArray)
 var _rawTrackNearestMarker = null;
-function drawRawDeviceTrack(points){
-    if(!Array.isArray(points) || !points.length){ updateStatus('Device Track: нет данных', '#dc3545', 6000); return; }
-    // Clear layer group (ws.js already does but be defensive)
-    if(trackLayerGroup){ trackLayerGroup.clearLayers(); }
-    // Restore Out of Bounds polylines drawn by processDeviceTrack
-    if(window._outOfBoundsLayers && window._outOfBoundsLayers.length){
-      window._outOfBoundsLayers.forEach(function(l){ try{ trackLayerGroup.addLayer(l); }catch(e){} });
-    }
-    window._trackMarkersByTs = {};
-    var parsed=[]; var latlngs=[];
-    for(var i=0;i<points.length;i++){
-      var p=points[i];
-      var lat=Number(p.latitude!=null?p.latitude:p.LATITUDE||p.lat||p.Latitude);
-      var lon=Number(p.longitude!=null?p.longitude:p.LONGITUDE||p.lon||p.Longitude||p.lng);
-      if(!isFinite(lat)||!isFinite(lon)) continue;
-      if(Math.abs(lat)>90||Math.abs(lon)>180) continue;
-      var wdate=p.wdate||p.WDATE||p.date||p.Date||p.ts||'';
-  // Normalize wdate to string for popup and keep original index
-  parsed.push({lat:lat,lng:lon,wdate:wdate, idx: i});
-      latlngs.push([lat,lon]);
-    }
-    if(latlngs.length<2){
-      if(latlngs.length===1){
-        var m0 = L.marker(latlngs[0],{icon:startIcon}).addTo(trackLayerGroup);
-        try {
-          var popupStart = document.createElement('div');
-          popupStart.innerHTML = '<b>Старт</b><br>' + (parsed[0].wdate||'');
-          if (typeof createTrackCutButton === 'function') {
-            var cutBtnStart = createTrackCutButton(parsed[0].lat, parsed[0].lng, parsed[0].wdate);
-            if (cutBtnStart) {
-              cutBtnStart.classList.add('track-cut-popup-btn');
-              popupStart.appendChild(cutBtnStart);
-            }
-          }
-          m0.bindPopup(popupStart);
-        } catch(_){ m0.bindPopup(parsed[0].wdate||''); }
-        m0.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:m0.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ m0.openPopup(); }catch(_){} } });
+
+function _bindRawTrackClick(poly, parsed) {
+  if (!poly || typeof poly.on !== 'function') return;
+  poly._rawPoints = parsed;
+  poly.on('click', function (ev) {
+    if (routeModeActive) {
+      var llR = ev && ev.latlng ? ev.latlng : null;
+      if (!llR && ev && ev.layer && ev.layer.getLatLng) llR = ev.layer.getLatLng();
+      if (llR && typeof onRouteMapClick === 'function') {
+        try { onRouteMapClick({ latlng: llR }); } catch (_) {}
       }
-      updateStatus('Device Track: недостаточно точек ('+latlngs.length+')', '#dc3545', 6000); return;
+      if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
+      return;
     }
-    // Decide rendering mode: 'polyline' (default) or 'points'
-    var renderMode = window.rawTrackRenderMode || 'polyline';
-    var poly = null;
-    if(renderMode === 'polyline'){
-      // Draw main polyline (blue)
-      poly = L.polyline(latlngs,{color:'#0074D9', weight:4, opacity:.9}).addTo(trackLayerGroup);
-      poly._rawPoints = parsed; // attach for click logic
-    } else {
-      // Points-only: draw small circle markers for each raw point
-      poly = { _rawPoints: parsed, _isPointMode: true };
-      for(var pi=0; pi<parsed.length; pi++){
-        (function(pt, idx){
-          var m = L.circleMarker([pt.lat, pt.lng], {radius:3, color:'#0074D9', weight:1, fillColor:'#0074D9', fillOpacity:0.9}).addTo(trackLayerGroup);
-          // compute speed for this point
-          var speed = null;
-          try{ speed = (function(){ if(parsed.length<2) return null; var t = parseTrackDate(pt.wdate); var prev = idx>0?parsed[idx-1]:null; var next = idx<parsed.length-1?parsed[idx+1]:null; if(prev){ var dt = t - parseTrackDate(prev.wdate); if(dt>0){ var dist = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(pt.lat, pt.lng)); return dist/1000/(dt/3600000); } } if(next){ var dt2 = parseTrackDate(next.wdate) - t; if(dt2>0){ var dist2 = L.latLng(pt.lat, pt.lng).distanceTo(L.latLng(next.lat, next.lng)); return dist2/1000/(dt2/3600000); } } return null; })(); }catch(e){}
-          var speedHtml = speed==null ? '' : '<br>Скорость: '+speed.toFixed(1)+' км/ч';
-          // Build popup DOM to avoid quotation/attribute issues
-          try {
-            var container = document.createElement('div');
-            container.innerHTML = '<b>' + (pt.wdate||'') + '</b>' + speedHtml;
-            var _fullTbody = document.getElementById('fullDeviceTrackTbody');
-            if (_fullTbody && _fullTbody.children && _fullTbody.children.length > 0) {
-              var btn = document.createElement('button');
-              // use a dedicated class so popup injector can detect existing button and avoid duplicates
-              btn.className = 'btn btn-link ft-show-btn';
-              btn.setAttribute('title', 'Показать в Full');
-              // small magnifier SVG icon
-              btn.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
-              (function(ts){ btn.addEventListener('click', function(e){ try{ e.preventDefault(); e.stopPropagation(); if(window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(ts); }catch(err){console.warn(err);} }); })(timeMatch ? timeMatch[1] : (pt.wdate||''));
-              container.appendChild(btn);
-            }
-            if (typeof createTrackCutButton === 'function') {
-              var cutBtn = createTrackCutButton(pt.lat, pt.lng, pt.wdate);
-              if (cutBtn) {
-                cutBtn.classList.add('track-cut-popup-btn');
-                container.appendChild(cutBtn);
-              }
-            }
-            m.bindPopup(container);
-            // Store marker by time part for cross-linking
-            var timeMatch = String(pt.wdate).match(/(\d{2}:\d{2}:\d{2})/);
-            if(timeMatch) window._trackMarkersByTs[timeMatch[1]] = m;
-          } catch (e) {
-            // fallback to safe string if DOM creation fails
-            var popupHtml = '<b>' + (pt.wdate||'') + '</b>' + speedHtml;
-            m.bindPopup(popupHtml);
-            // Store marker by time part for cross-linking
-            var timeMatch = String(pt.wdate).match(/(\d{2}:\d{2}:\d{2})/);
-            if(timeMatch) window._trackMarkersByTs[timeMatch[1]] = m;
-          }
-        })(parsed[pi], pi);
+    var ll = ev.latlng;
+    if (!ll) return;
+    var pts = poly._rawPoints || parsed || [];
+    if (!pts.length) return;
+    var minD = Infinity, nearest = null, nearestIdx = -1;
+    for (var j = 0; j < pts.length; j++) {
+      var d = map.distance(ll, L.latLng(pts[j].lat, pts[j].lng));
+      if (d < minD) {
+        minD = d;
+        nearest = pts[j];
+        nearestIdx = j;
+        if (d < 3) break;
       }
     }
-    // Detect raw track anomalies (function from anomalies.js)
-    detectRawTrackAnomalies(parsed);
-    // Start/End markers
-  var mStart = L.marker(latlngs[0],{icon:startIcon}).addTo(trackLayerGroup);
+    if (!nearest) return;
+    if (_rawTrackNearestMarker) {
+      try { trackLayerGroup.removeLayer(_rawTrackNearestMarker); } catch (_) {}
+    }
+    function computeSpeedAtIndex(points, idx) {
+      if (!points || points.length < 2 || idx == null || idx < 0) return null;
+      var curr = points[idx];
+      var prev = idx > 0 ? points[idx - 1] : null;
+      var next = idx < points.length - 1 ? points[idx + 1] : null;
+      var tCurr = parseTrackDate(curr.wdate);
+      if (prev) {
+        var tPrev = parseTrackDate(prev.wdate);
+        var dt = tCurr - tPrev;
+        if (dt > 0) {
+          var dist = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(curr.lat, curr.lng));
+          return dist / 1000 / (dt / 3600000);
+        }
+      }
+      if (next) {
+        var tNext = parseTrackDate(next.wdate);
+        var dt2 = tNext - tCurr;
+        if (dt2 > 0) {
+          var dist2 = L.latLng(curr.lat, curr.lng).distanceTo(L.latLng(next.lat, next.lng));
+          return dist2 / 1000 / (dt2 / 3600000);
+        }
+      }
+      return null;
+    }
+    var speedKph = computeSpeedAtIndex(pts, nearestIdx >= 0 ? nearestIdx : nearest.idx);
+    var speedHtml = speedKph == null ? '' : '<br>Скорость: ' + (speedKph >= 0 ? speedKph.toFixed(1) : '0.0') + ' км/ч';
+    try {
+      var container2 = document.createElement('div');
+      container2.innerHTML = '<b>' + (nearest.wdate || '') + '</b>' + speedHtml;
+      var hasFull = !!(window._fullTrackCache && window._fullTrackCache.length);
+      if (hasFull) {
+        var btn2 = document.createElement('button');
+        btn2.className = 'btn btn-link ft-show-btn';
+        btn2.setAttribute('title', 'Показать в Full');
+        btn2.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
+        var timeMatch2 = String(nearest.wdate).match(/(\d{2}:\d{2}:\d{2})/);
+        (function (ts) {
+          btn2.addEventListener('click', function (e) {
+            try {
+              e.preventDefault();
+              e.stopPropagation();
+              if (window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(ts);
+            } catch (err) { console.warn(err); }
+          });
+        })(timeMatch2 ? timeMatch2[1] : (nearest.wdate || ''));
+        container2.appendChild(btn2);
+      }
+      if (typeof createTrackCutButton === 'function') {
+        var cutBtn2 = createTrackCutButton(nearest.lat, nearest.lng, nearest.wdate);
+        if (cutBtn2) {
+          cutBtn2.classList.add('track-cut-popup-btn');
+          container2.appendChild(cutBtn2);
+        }
+      }
+      _rawTrackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {
+        radius: 7, color: '#ff4136', weight: 2, fillColor: '#ff4136', fillOpacity: 0.9
+      }).addTo(trackLayerGroup).bindPopup(container2);
+    } catch (e) {
+      _rawTrackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {
+        radius: 7, color: '#ff4136', weight: 2, fillColor: '#ff4136', fillOpacity: 0.9
+      }).addTo(trackLayerGroup).bindPopup('<b>' + (nearest.wdate || '') + '</b>' + speedHtml);
+    }
+    _rawTrackNearestMarker.openPopup();
+  });
+}
+
+function _bindStartEndMarkers(latlngs, parsed) {
+  var mStart = L.marker(latlngs[0], { icon: startIcon }).addTo(trackLayerGroup);
   try {
     var startPopup = document.createElement('div');
-    startPopup.innerHTML = '<b>Старт</b><br>'+ (parsed[0].wdate||'');
+    startPopup.innerHTML = '<b>Старт</b><br>' + (parsed[0].wdate || '');
     if (typeof createTrackCutButton === 'function') {
       var startCutBtn = createTrackCutButton(parsed[0].lat, parsed[0].lng, parsed[0].wdate);
       if (startCutBtn) {
@@ -414,143 +289,251 @@ function drawRawDeviceTrack(points){
       }
     }
     mStart.bindPopup(startPopup);
-  } catch(_){ mStart.bindPopup('<b>Старт</b><br>'+ (parsed[0].wdate||'')); }
-  mStart.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:mStart.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ mStart.openPopup(); }catch(_){} } });
-  var mEnd = L.marker(latlngs[latlngs.length-1],{icon:endIcon}).addTo(trackLayerGroup);
+  } catch (_) {
+    mStart.bindPopup('<b>Старт</b><br>' + (parsed[0].wdate || ''));
+  }
+  mStart.on('click', function (ev) {
+    if (routeModeActive) {
+      var ll = ev && ev.latlng ? ev.latlng : mStart.getLatLng();
+      if (ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll });
+      if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
+    } else {
+      try { mStart.openPopup(); } catch (_) {}
+    }
+  });
+
+  var mEnd = L.marker(latlngs[latlngs.length - 1], { icon: endIcon }).addTo(trackLayerGroup);
   try {
     var endPopup = document.createElement('div');
-    endPopup.innerHTML = '<b>Финиш</b><br>'+ (parsed[parsed.length-1].wdate||'');
+    endPopup.innerHTML = '<b>Финиш</b><br>' + (parsed[parsed.length - 1].wdate || '');
     if (typeof createTrackCutButton === 'function') {
-      var endCutBtn = createTrackCutButton(parsed[parsed.length-1].lat, parsed[parsed.length-1].lng, parsed[parsed.length-1].wdate);
+      var endCutBtn = createTrackCutButton(parsed[parsed.length - 1].lat, parsed[parsed.length - 1].lng, parsed[parsed.length - 1].wdate);
       if (endCutBtn) {
         endCutBtn.classList.add('track-cut-popup-btn');
         endPopup.appendChild(endCutBtn);
       }
     }
     mEnd.bindPopup(endPopup);
-  } catch(_){ mEnd.bindPopup('<b>Финиш</b><br>'+ (parsed[parsed.length-1].wdate||'')); }
-  mEnd.on('click', function(ev){ if (routeModeActive){ var ll = ev && ev.latlng?ev.latlng:mEnd.getLatLng(); if(ll && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll }); if(ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation(); } else { try{ mEnd.openPopup(); }catch(_){} } });
-    // Fit bounds
-      if (poly && typeof poly.getBounds === 'function') {
-        map.fitBounds(poly.getBounds(), { padding: [20, 20] });
-      } else {
-        // points-only mode: use latlngs array to compute bounds
-        map.fitBounds(L.latLngBounds(latlngs), { padding: [20, 20] });
-      }
-    // Click handler: find nearest point and show its timestamp (only for polyline)
-    if (poly && typeof poly.on === 'function') {
-      poly.on('click', function(ev){
-        // If route mode active, delegate to route click handler and prevent popups
-        if (routeModeActive) {
-          var ll = ev && ev.latlng ? ev.latlng : null;
-          if (!ll && ev && ev.layer && ev.layer.getLatLng) ll = ev.layer.getLatLng();
-          if (ll && typeof onRouteMapClick === 'function') {
-            try { onRouteMapClick({ latlng: ll }); } catch(_) {}
-          }
-          if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
-          return;
-        }
-        var ll = ev.latlng; if(!ll) return;
-        var pts = poly._rawPoints||[]; if(!pts.length) return;
-        var minD=Infinity, nearest=null;
-        for(var j=0;j<pts.length;j++){
-          var d = map.distance(ll, L.latLng(pts[j].lat, pts[j].lng));
-          if(d<minD){ minD=d; nearest=pts[j]; if(d<3) break; }
-        }
-        if(!nearest) return;
-        if(_rawTrackNearestMarker){ try{ trackLayerGroup.removeLayer(_rawTrackNearestMarker);}catch(_){}};
-        // compute approximate speed around this point (km/h)
-        function computeSpeedAtIndex(points, idx){
-          if(!points || points.length<2 || idx==null) return null;
-          var curr = points[idx];
-          // prefer previous->current interval
-          var prev = idx>0 ? points[idx-1] : null;
-          var next = idx < points.length-1 ? points[idx+1] : null;
-          var tCurr = parseTrackDate(curr.wdate);
-          if(prev){
-            var tPrev = parseTrackDate(prev.wdate);
-            var dt = tCurr - tPrev; // ms
-            if(dt>0){
-              var dist = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(curr.lat, curr.lng));
-              return dist/1000/(dt/3600000);
-            }
-          }
-          if(next){
-            var tNext = parseTrackDate(next.wdate);
-            var dt2 = tNext - tCurr;
-            if(dt2>0){
-              var dist2 = L.latLng(curr.lat, curr.lng).distanceTo(L.latLng(next.lat, next.lng));
-              return dist2/1000/(dt2/3600000);
-            }
-          }
-          return null;
-        }
-
-        var speedKph = computeSpeedAtIndex(pts, nearest.idx);
-        var speedHtml = speedKph==null ? '' : '<br>Скорость: ' + (speedKph>=0 ? speedKph.toFixed(1) : '0.0') + ' км/ч';
-        try {
-          var container2 = document.createElement('div');
-          container2.innerHTML = '<b>'+ (nearest.wdate||'') +'</b>' + speedHtml;
-    var _fullTbody2 = document.getElementById('fullDeviceTrackTbody');
-    if (_fullTbody2 && _fullTbody2.children && _fullTbody2.children.length > 0) {
-            var btn2 = document.createElement('button');
-            btn2.className = 'btn btn-link ft-show-btn';
-            btn2.setAttribute('title', 'Показать в Full');
-            btn2.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
-            var timeMatch2 = String(nearest.wdate).match(/(\d{2}:\d{2}:\d{2})/);
-            (function(ts){ btn2.addEventListener('click', function(e){ try{ e.preventDefault(); e.stopPropagation(); if(window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(ts); }catch(err){console.warn(err);} }); })(timeMatch2 ? timeMatch2[1] : (nearest.wdate||''));
-            container2.appendChild(btn2);
-          }
-          if (typeof createTrackCutButton === 'function') {
-            var cutBtn2 = createTrackCutButton(nearest.lat, nearest.lng, nearest.wdate);
-            if (cutBtn2) {
-              cutBtn2.classList.add('track-cut-popup-btn');
-              container2.appendChild(cutBtn2);
-            }
-          }
-          _rawTrackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {radius:7, color:'#ff4136', weight:2, fillColor:'#ff4136', fillOpacity:0.9}).addTo(trackLayerGroup).bindPopup(container2);
-        } catch (e) {
-          _rawTrackNearestMarker = L.circleMarker([nearest.lat, nearest.lng], {radius:7, color:'#ff4136', weight:2, fillColor:'#ff4136', fillOpacity:0.9}).addTo(trackLayerGroup).bindPopup('<b>'+ (nearest.wdate||'') +'</b>' + speedHtml);
-        }
-        _rawTrackNearestMarker.openPopup();
-      });
+  } catch (_) {
+    mEnd.bindPopup('<b>Финиш</b><br>' + (parsed[parsed.length - 1].wdate || ''));
+  }
+  mEnd.on('click', function (ev) {
+    if (routeModeActive) {
+      var ll2 = ev && ev.latlng ? ev.latlng : mEnd.getLatLng();
+      if (ll2 && typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: ll2 });
+      if (ev && ev.originalEvent && ev.originalEvent.stopPropagation) ev.originalEvent.stopPropagation();
+    } else {
+      try { mEnd.openPopup(); } catch (_) {}
     }
-    updateStatus('Device Track: точек '+latlngs.length, 'green', 6000);
-    // Bind a global popupopen handler once so that if the Full table is loaded later
-  // we can inject the "Show in Full" button into existing popups.
-      if (!window._rawPopupOpenBound && typeof map !== 'undefined' && map && map.on) {
-        map.on('popupopen', function(e){
-          try {
-            var popup = e.popup || (e.layer && e.layer.getPopup && e.layer.getPopup());
-            if(!popup) return;
-            var node = popup._contentNode || null;
-            // if Leaflet created content as string, getContent may return string
-            if(!node && typeof popup.getContent === 'function') {
-              var c = popup.getContent();
-              if(c && typeof c === 'object' && c.nodeType) node = c;
-            }
-            if(!node) return;
-            // avoid adding button twice
-            if(node.querySelector && node.querySelector('.ft-show-btn')) return;
-            var tbody = document.getElementById('fullDeviceTrackTbody');
-            if(!tbody || !tbody.children || tbody.children.length===0) return;
-            var txt = (node.textContent || (typeof popup.getContent === 'function' ? popup.getContent() : '') || '').toString();
-            var m = txt.match(/(\d{2}:\d{2}:\d{2})/);
-            var timePart = m ? m[1] : null;
-            if(!timePart) return;
-            var btn = document.createElement('button');
-            btn.className = 'btn btn-link ft-show-btn';
-            btn.setAttribute('title', 'Показать в Full');
-            btn.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
-            btn.addEventListener('click', function(ev){
-              try{ ev.preventDefault(); ev.stopPropagation(); if(window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(txt); }catch(e){console.warn(e);} 
-            });
-            node.appendChild(btn);
-          } catch(err) { console.warn('popupopen inject failed', err); }
-        });
-        window._rawPopupOpenBound = true;
-      }
+  });
 }
+
+function _ensureRawPopupOpenHandler() {
+  if (window._rawPopupOpenBound || typeof map === 'undefined' || !map || !map.on) return;
+  map.on('popupopen', function (e) {
+    try {
+      var popup = e.popup || (e.layer && e.layer.getPopup && e.layer.getPopup());
+      if (!popup) return;
+      var node = popup._contentNode || null;
+      if (!node && typeof popup.getContent === 'function') {
+        var c = popup.getContent();
+        if (c && typeof c === 'object' && c.nodeType) node = c;
+      }
+      if (!node) return;
+      if (node.querySelector && node.querySelector('.ft-show-btn')) return;
+      if (!(window._fullTrackCache && window._fullTrackCache.length)) return;
+      var txt = (node.textContent || (typeof popup.getContent === 'function' ? popup.getContent() : '') || '').toString();
+      var m = txt.match(/(\d{2}:\d{2}:\d{2})/);
+      var timePart = m ? m[1] : null;
+      if (!timePart) return;
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-link ft-show-btn';
+      btn.setAttribute('title', 'Показать в Full');
+      btn.innerHTML = '<svg class="ft-icon" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM10 14a4 4 0 110-8 4 4 0 010 8z"/></svg>';
+      btn.addEventListener('click', function (ev) {
+        try {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (window.focusFullDeviceTrackAtTimestamp) window.focusFullDeviceTrackAtTimestamp(txt);
+        } catch (err) { console.warn(err); }
+      });
+      node.appendChild(btn);
+    } catch (err) { console.warn('popupopen inject failed', err); }
+  });
+  window._rawPopupOpenBound = true;
+}
+
+function drawRawDeviceTrack(points) {
+  if (!Array.isArray(points) || !points.length) {
+    updateStatus('Device Track: нет данных', '#dc3545', 6000);
+    return;
+  }
+
+  // Invalidate any in-flight progressive render
+  var token = ++window._trackRenderToken;
+
+  if (trackLayerGroup) {
+    try { trackLayerGroup.clearLayers(); } catch (_) {}
+  }
+  // Restore Out of Bounds layers prepared by processDeviceTrack (analysis-only)
+  if (window._outOfBoundsLayers && window._outOfBoundsLayers.length) {
+    window._outOfBoundsLayers.forEach(function (l) {
+      try { trackLayerGroup.addLayer(l); } catch (e) {}
+    });
+  }
+  window._trackMarkersByTs = {};
+
+  var parsed = [];
+  var latlngs = [];
+  for (var i = 0; i < points.length; i++) {
+    var p = points[i];
+    var lat = Number(p.latitude != null ? p.latitude : p.LATITUDE || p.lat || p.Latitude);
+    var lon = Number(p.longitude != null ? p.longitude : p.LONGITUDE || p.lon || p.Longitude || p.lng);
+    if (!isFinite(lat) || !isFinite(lon)) continue;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
+    var wdate = p.wdate || p.WDATE || p.date || p.Date || p.ts || '';
+    parsed.push({ lat: lat, lng: lon, wdate: wdate, idx: i });
+    latlngs.push([lat, lon]);
+  }
+
+  if (latlngs.length < 2) {
+    if (latlngs.length === 1) {
+      var m0 = L.marker(latlngs[0], { icon: startIcon }).addTo(trackLayerGroup);
+      try {
+        var popupStart = document.createElement('div');
+        popupStart.innerHTML = '<b>Старт</b><br>' + (parsed[0].wdate || '');
+        if (typeof createTrackCutButton === 'function') {
+          var cutBtnStart = createTrackCutButton(parsed[0].lat, parsed[0].lng, parsed[0].wdate);
+          if (cutBtnStart) {
+            cutBtnStart.classList.add('track-cut-popup-btn');
+            popupStart.appendChild(cutBtnStart);
+          }
+        }
+        m0.bindPopup(popupStart);
+      } catch (_) { m0.bindPopup(parsed[0].wdate || ''); }
+    }
+    updateStatus('Device Track: недостаточно точек (' + latlngs.length + ')', '#dc3545', 6000);
+    return;
+  }
+
+  // Early fitBounds so user sees the area while chunks load
+  try {
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [20, 20] });
+  } catch (_) {}
+
+  _bindStartEndMarkers(latlngs, parsed);
+  _ensureRawPopupOpenHandler();
+
+  var renderMode = window.rawTrackRenderMode || 'polyline';
+  var batch = TRACK_RENDER_BATCH;
+  var total = latlngs.length;
+
+  function finishRender() {
+    if (token !== window._trackRenderToken) return;
+    try { detectRawTrackAnomalies(parsed); } catch (e) { console.warn('detectRawTrackAnomalies failed', e); }
+    try {
+      if (window._lastTrackAnomalies && window._lastTrackAnomalies.length && typeof linkAnomalyIndices === 'function') {
+        linkAnomalyIndices(window._lastTrackAnomalies);
+      }
+      if (typeof attachRawTrackAnomalyClickHandlers === 'function' && tableBody && window._lastTrackAnomalies) {
+        attachRawTrackAnomalyClickHandlers(tableBody, window._lastTrackAnomalies);
+      }
+    } catch (e) { console.warn('link anomalies after render failed', e); }
+    updateStatus('Device Track: точек ' + total, 'green', 6000);
+    try { if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay(); } catch (_) {}
+  }
+
+  if (renderMode === 'points') {
+    updateStatus('Device Track: отрисовка точек 0/' + total + '...', 'blue');
+    var pi = 0;
+    function renderPointsBatch() {
+      if (token !== window._trackRenderToken) return;
+      var end = Math.min(pi + batch, total);
+      for (; pi < end; pi++) {
+        (function (pt, idx) {
+          var m = L.circleMarker([pt.lat, pt.lng], {
+            radius: 3, color: '#0074D9', weight: 1, fillColor: '#0074D9', fillOpacity: 0.9
+          }).addTo(trackLayerGroup);
+          var speed = null;
+          try {
+            if (parsed.length >= 2) {
+              var t = parseTrackDate(pt.wdate);
+              var prev = idx > 0 ? parsed[idx - 1] : null;
+              var next = idx < parsed.length - 1 ? parsed[idx + 1] : null;
+              if (prev) {
+                var dt = t - parseTrackDate(prev.wdate);
+                if (dt > 0) {
+                  var dist = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(pt.lat, pt.lng));
+                  speed = dist / 1000 / (dt / 3600000);
+                }
+              } else if (next) {
+                var dt2 = parseTrackDate(next.wdate) - t;
+                if (dt2 > 0) {
+                  var dist2 = L.latLng(pt.lat, pt.lng).distanceTo(L.latLng(next.lat, next.lng));
+                  speed = dist2 / 1000 / (dt2 / 3600000);
+                }
+              }
+            }
+          } catch (e) {}
+          var speedHtml = speed == null ? '' : '<br>Скорость: ' + speed.toFixed(1) + ' км/ч';
+          try {
+            var container = document.createElement('div');
+            container.innerHTML = '<b>' + (pt.wdate || '') + '</b>' + speedHtml;
+            if (typeof createTrackCutButton === 'function') {
+              var cutBtn = createTrackCutButton(pt.lat, pt.lng, pt.wdate);
+              if (cutBtn) {
+                cutBtn.classList.add('track-cut-popup-btn');
+                container.appendChild(cutBtn);
+              }
+            }
+            m.bindPopup(container);
+            var timeMatch = String(pt.wdate).match(/(\d{2}:\d{2}:\d{2})/);
+            if (timeMatch) window._trackMarkersByTs[timeMatch[1]] = m;
+          } catch (e) {
+            m.bindPopup('<b>' + (pt.wdate || '') + '</b>' + speedHtml);
+            var timeMatch2 = String(pt.wdate).match(/(\d{2}:\d{2}:\d{2})/);
+            if (timeMatch2) window._trackMarkersByTs[timeMatch2[1]] = m;
+          }
+        })(parsed[pi], pi);
+      }
+      if (pi < total) {
+        if (pi % (batch * 4) === 0) {
+          updateStatus('Device Track: отрисовка точек ' + pi + '/' + total + '...', 'blue');
+        }
+        requestAnimationFrame(renderPointsBatch);
+      } else {
+        finishRender();
+      }
+    }
+    requestAnimationFrame(renderPointsBatch);
+    return;
+  }
+
+  // Polyline mode: add segments of TRACK_RENDER_BATCH points per frame (shared endpoint for continuity)
+  updateStatus('Device Track: отрисовка линии 0/' + total + '...', 'blue');
+  var segStart = 0;
+  function renderPolylineBatch() {
+    if (token !== window._trackRenderToken) return;
+    var from = segStart === 0 ? 0 : segStart - 1;
+    var to = Math.min(segStart + batch, total);
+    if (to - from >= 2) {
+      var slice = latlngs.slice(from, to);
+      var poly = L.polyline(slice, { color: '#0074D9', weight: 4, opacity: 0.9 }).addTo(trackLayerGroup);
+      _bindRawTrackClick(poly, parsed);
+    }
+    segStart = to;
+    if (segStart < total) {
+      if (segStart % (batch * 4) === 0) {
+        updateStatus('Device Track: отрисовка линии ' + segStart + '/' + total + '...', 'blue');
+      }
+      requestAnimationFrame(renderPolylineBatch);
+    } else {
+      finishRender();
+    }
+  }
+  requestAnimationFrame(renderPolylineBatch);
+}
+
 // Functions addOutOfBoundsAnomaly, formatAnomalyTime moved to anomalies.js
 
 // original generateSql removed; SQL generation is handled from report-specific actions now
@@ -599,7 +582,24 @@ function drawRawDeviceTrack(points){
   var _fullIntervals = []; // cache intervals after filtering
   var _focusedIntervalIndex = null;
 
-  function clearFull(){ if(fullHead) fullHead.innerHTML=''; if(fullBody) fullBody.innerHTML=''; }
+  // Virtual table state for Full Device Track
+  var _fullTrackVt = null;
+  var _fullTrackRowMeta = {}; // idx -> { classes: string, ts: string }
+  var _fullTrackHighlighted = {}; // idx -> true
+
+  function clearFull(){
+    try {
+      if (_fullTrackVt && _fullTrackVt.destroy) _fullTrackVt.destroy();
+    } catch (_) {}
+    _fullTrackVt = null;
+    _fullTrackRowMeta = {};
+    _fullTrackHighlighted = {};
+    if (fullHead) fullHead.innerHTML = '';
+    if (fullBody) {
+      try { if (fullBody.__virtualTable) fullBody.__virtualTable = null; } catch (_) {}
+      fullBody.innerHTML = '';
+    }
+  }
   function updateFullCount(n){
     try{
       var el = document.getElementById('fullDeviceTrackCount');
@@ -642,7 +642,7 @@ function drawRawDeviceTrack(points){
   // Public clear function for external triggers (device change)
   window.clearFullDeviceTrackTable = function(){
     try { clearFull(); if(fullBody) fullBody.innerHTML = '<tr><td>Очищено из-за смены устройства</td></tr>'; updateFullCount(0); } catch(_){ }
-    _fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null;
+    _fullTrackCache = null; window._fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null;
     try { window._fullTrackIndexByTs = {}; } catch(_){ }
     try { window._devLogRequestedFull = false; } catch(_){ }
     try { window._awaitingFullTrackSetupSegments = null; } catch(_){}
@@ -799,38 +799,105 @@ function drawRawDeviceTrack(points){
     if(!fullHead || !fullBody){ return; }
     console.log('[populateFull] вызов, строк: ' + (rows && rows.length ? rows.length : 0));
     clearFull();
-    if(!rows || !rows.length){ fullBody.innerHTML='<tr><td>Нет данных</td></tr>'; try{ updateFullCount(0); }catch(_){}; return; }
+    if(!rows || !rows.length){
+      fullBody.innerHTML='<tr><td>Нет данных</td></tr>';
+      try{ updateFullCount(0); }catch(_){};
+      _fullTrackCache = [];
+      window._fullTrackCache = _fullTrackCache;
+      return;
+    }
     try{ updateFullCount(rows.length); } catch(_){}
-    _fullTrackCache = rows.slice();
-    // Build index by normalized timestamp strings for quick lookup
+    _fullTrackCache = rows;
+    window._fullTrackCache = _fullTrackCache;
+    // Build index by time part HH:MM:SS -> row indices (virtual-table safe)
     try { window._fullTrackIndexByTs = {}; } catch(_){}
+    _fullTrackRowMeta = {};
+    _fullTrackHighlighted = {};
     var headers = Object.keys(rows[0]);
     var trHead=document.createElement('tr');
     headers.forEach(function(h){ var th=document.createElement('th'); th.textContent=h; trHead.appendChild(th); });
     fullHead.appendChild(trHead);
-    var frag=document.createDocumentFragment();
-    rows.forEach(function(r, ridx){ var tr=document.createElement('tr'); headers.forEach(function(h){ var td=document.createElement('td'); var v=r[h]; if(v==null) v=''; td.textContent=v; tr.appendChild(td); });
-  // If row contains a timestamp-like column, store mapping to this TR for focusing
+
+    for (var ridx = 0; ridx < rows.length; ridx++) {
+      var r = rows[ridx];
       try {
         var ts = (r.wdate || r.WDATE || r.date || r.Date || r.ts || null);
-        if(ts) {
+        if (ts) {
           var timeMatch = String(ts).match(/(\d{2}:\d{2}:\d{2})/);
-          if(timeMatch) {
+          if (timeMatch) {
             var timePart = timeMatch[1];
-            var norm = String(ts);
-            window._fullTrackIndexByTs[norm] = window._fullTrackIndexByTs[norm] || [];
-            window._fullTrackIndexByTs[norm].push({ tr: tr, idx: ridx });
-            tr.dataset.ts = timePart;
+            window._fullTrackIndexByTs[timePart] = window._fullTrackIndexByTs[timePart] || [];
+            window._fullTrackIndexByTs[timePart].push(ridx);
+            _fullTrackRowMeta[ridx] = { ts: timePart, classes: '' };
           }
         }
-      } catch(_){}
-      frag.appendChild(tr);
-  // Add click listener to focus map
-      tr.addEventListener('click', function(){
-        if(window.focusMapAtTimestamp) window.focusMapAtTimestamp(tr.dataset.ts);
+      } catch (_) {}
+    }
+
+    var scrollEl = document.getElementById('fullDeviceTrackScroll');
+    if (typeof window.mountTableBody === 'function') {
+      _fullTrackVt = window.mountTableBody({
+        tbody: fullBody,
+        thead: fullHead,
+        scrollEl: scrollEl,
+        headers: headers,
+        rows: rows,
+        emptyMessage: 'Нет данных',
+        renderCell: function (row, key) {
+          var v = row[key];
+          return v == null ? '' : String(v);
+        },
+        getRowClass: function (row, idx) {
+          var parts = [];
+          if (_fullTrackRowMeta[idx] && _fullTrackRowMeta[idx].classes) {
+            parts.push(_fullTrackRowMeta[idx].classes);
+          }
+          if (_fullTrackHighlighted[idx]) parts.push('highlighted');
+          if (_focusedIntervalIndex != null && _fullIntervals[_focusedIntervalIndex]) {
+            var iv = _fullIntervals[_focusedIntervalIndex];
+            if (iv.rows && iv.rows.indexOf(idx) !== -1) parts.push('fdt-focused-row');
+          }
+          return parts.join(' ');
+        },
+        decorateRow: function (row, idx, tr) {
+          if (_fullTrackRowMeta[idx] && _fullTrackRowMeta[idx].ts) {
+            tr.dataset.ts = _fullTrackRowMeta[idx].ts;
+          }
+        },
+        onRowClick: function (row, idx) {
+          var ts = (_fullTrackRowMeta[idx] && _fullTrackRowMeta[idx].ts) || null;
+          if (!ts) {
+            try {
+              var raw = row.wdate || row.WDATE || row.date || row.Date || row.ts || '';
+              var m = String(raw).match(/(\d{2}:\d{2}:\d{2})/);
+              ts = m ? m[1] : null;
+            } catch (_) {}
+          }
+          if (ts && window.focusMapAtTimestamp) window.focusMapAtTimestamp(ts);
+        }
       });
-    });
-    fullBody.appendChild(frag);
+    } else {
+      // Fallback without virtual_table.js
+      var frag = document.createDocumentFragment();
+      rows.forEach(function (r, ridx2) {
+        var tr = document.createElement('tr');
+        headers.forEach(function (h) {
+          var td = document.createElement('td');
+          var v = r[h];
+          if (v == null) v = '';
+          td.textContent = v;
+          tr.appendChild(td);
+        });
+        if (_fullTrackRowMeta[ridx2] && _fullTrackRowMeta[ridx2].ts) {
+          tr.dataset.ts = _fullTrackRowMeta[ridx2].ts;
+        }
+        tr.addEventListener('click', function () {
+          if (window.focusMapAtTimestamp) window.focusMapAtTimestamp(tr.dataset.ts);
+        });
+        frag.appendChild(tr);
+      });
+      fullBody.appendChild(frag);
+    }
   }
 
   // Focus map at the given timestamp (string). Opens popup on the corresponding marker.
@@ -860,9 +927,7 @@ function drawRawDeviceTrack(points){
   window.focusFullDeviceTrackAtTimestamp = function(tsString){
     try {
       if(!tsString) return;
-      // Do NOT trigger loading of Full Device Track here — only act if already loaded
-      var tbody = document.getElementById('fullDeviceTrackTbody');
-      if(!tbody || !tbody.children || tbody.children.length === 0){
+      if(!_fullTrackCache || !_fullTrackCache.length){
         try { showRouteToast('Full Device Track (setup) не загружен', 2000); } catch(_){}
         return;
       }
@@ -870,29 +935,35 @@ function drawRawDeviceTrack(points){
       var m = String(tsString).match(/(\d{2}:\d{2}:\d{2})/);
       var timePart = m ? m[1] : null;
       if(!timePart){ try { showRouteToast('Не удалось извлечь время из метки', 1800); } catch(_){}; return; }
-      // Search table rows for the time substring
-      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-      var matches = rows.filter(function(r){ try { return r.dataset.ts === timePart; } catch(_) { return false; } });
-      if(!matches || matches.length === 0){ try { showRouteToast('Не найдено строк с временем '+timePart, 2000); } catch(_){}; return; }
-      // Clear previous highlights
-      try { var prev = document.querySelectorAll('#fullDeviceTrackTbody tr.highlighted'); Array.prototype.slice.call(prev).forEach(function(p){ p.classList.remove('highlighted'); }); } catch(_){}
-      var first = matches[0];
-      first.classList.add('highlighted');
-      // Scroll container to show the row centered
-      try {
-        var scroll = document.getElementById('fullDeviceTrackScroll');
-        if(scroll){
-          // compute top offset inside the scroll container
-          var top = first.offsetTop;
-          scroll.scrollTop = Math.max(0, top - Math.floor(scroll.clientHeight/2));
-        } else {
-          first.scrollIntoView({behavior:'smooth', block:'center'});
+
+      var indices = (window._fullTrackIndexByTs && window._fullTrackIndexByTs[timePart]) || [];
+      if(!indices.length){
+        // Fallback: scan cache once
+        for (var i = 0; i < _fullTrackCache.length; i++) {
+          var raw = _fullTrackCache[i].wdate || _fullTrackCache[i].WDATE || _fullTrackCache[i].date || '';
+          if (String(raw).indexOf(timePart) !== -1) indices.push(i);
         }
-      } catch(_){}
-      // bring the full device track area into view
+      }
+      if(!indices.length){ try { showRouteToast('Не найдено строк с временем '+timePart, 2000); } catch(_){}; return; }
+
+      _fullTrackHighlighted = {};
+      for (var hi = 0; hi < indices.length; hi++) _fullTrackHighlighted[indices[hi]] = true;
+
+      if (_fullTrackVt && _fullTrackVt.scrollToIndex) {
+        _fullTrackVt.scrollToIndex(indices[0], 'center');
+        _fullTrackVt.refresh();
+      } else {
+        var first = fullBody && fullBody.querySelector('tr[data-vt-index="' + indices[0] + '"]');
+        if (first) {
+          first.classList.add('highlighted');
+          try { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+        }
+      }
       try { var container = document.getElementById('fullDeviceTrackReportContainer') || document.getElementById('fullDeviceTrackScroll'); if(container) container.scrollIntoView({behavior:'smooth', block:'center'}); } catch(_){}
-      // temporary visual flash removal
-      setTimeout(function(){ try{ first.classList.remove('highlighted'); }catch(_){} }, 8000);
+      setTimeout(function(){
+        _fullTrackHighlighted = {};
+        try { if (_fullTrackVt) _fullTrackVt.refresh(); } catch (_) {}
+      }, 8000);
     } catch(e){ console.warn('focusFullDeviceTrackAtTimestamp failed', e); }
   };
 
@@ -916,7 +987,7 @@ function drawRawDeviceTrack(points){
       // and hide the spinner; handleDeviceOrDateChange is also configured to skip this table
       // when the Device Track request itself triggers the change check.
       try { clearFull(); if(fullBody) fullBody.innerHTML = '<tr><td colspan="100" style="text-align:center; padding:16px;"><span class="dt-spinner" style="width:18px; height:18px; display:inline-block; vertical-align:middle; margin-right:8px;"></span>Загрузка Full Device Track...</td></tr>'; var fdtc = document.getElementById('fullDeviceTrackCount'); if(fdtc) fdtc.textContent = '0 записей (загрузка...)'; } catch(_){}
-      try { _fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null; } catch(_){}
+      try { _fullTrackCache = null; window._fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null; } catch(_){}
       try { window._fullTrackIndexByTs = {}; } catch(_){}
       try { window._devLogRequestedFull = false; } catch(_){}
       try { window._awaitingFullTrackSetupSegments = null; } catch(_){}
@@ -1367,13 +1438,10 @@ function drawRawDeviceTrack(points){
     var trH=document.createElement('tr');
     headers.forEach(function(h){ var th=document.createElement('th'); th.textContent=h; trH.appendChild(th); });
     reportHead.appendChild(trH);
-  var fullTableBody = fullBody; // for highlighting rows
-  // Remove previous highlights and focus
-    if(fullTableBody){
-      Array.prototype.forEach.call(fullTableBody.querySelectorAll('tr'), function(r){
-        r.classList.remove('fdt-interval-type1','fdt-interval-type2','fdt-interval-type3','fdt-focused-row');
-      });
-    }
+  // Reset interval class meta for full track rows (virtual-table safe)
+    Object.keys(_fullTrackRowMeta).forEach(function (k) {
+      if (_fullTrackRowMeta[k]) _fullTrackRowMeta[k].classes = '';
+    });
     var frag=document.createDocumentFragment();
     intervals.forEach(function(iv,idx){
       var tr=document.createElement('tr');
@@ -1412,16 +1480,22 @@ function drawRawDeviceTrack(points){
   cols.forEach(function(c,i){ var td=document.createElement('td'); td.textContent=c; if(i===2 || i===4) td.style.whiteSpace='nowrap'; tr.appendChild(td); });
   // Apply same visual class to report row as used for full table rows
   tr.classList.add('fdt-interval-type'+iv.finalType);
-      if(fullTableBody){
-        iv.rows.forEach(function(rowIdx){
-          var rowEl = fullTableBody.children[rowIdx];
-          if(rowEl){ rowEl.classList.add('fdt-interval-type'+iv.finalType); }
+      // Store class on row meta so virtual table re-applies on scroll
+      if (iv.rows && iv.rows.length) {
+        var cls = 'fdt-interval-type' + iv.finalType;
+        iv.rows.forEach(function (rowIdx) {
+          if (!_fullTrackRowMeta[rowIdx]) _fullTrackRowMeta[rowIdx] = { ts: '', classes: '' };
+          var existing = _fullTrackRowMeta[rowIdx].classes || '';
+          if (existing.indexOf(cls) === -1) {
+            _fullTrackRowMeta[rowIdx].classes = (existing ? existing + ' ' : '') + cls;
+          }
         });
       }
       tr.addEventListener('click', function(){ focusInterval(idx); });
       frag.appendChild(tr);
     });
     reportBody.appendChild(frag);
+    try { if (_fullTrackVt) _fullTrackVt.refresh(); } catch (_) {}
   }
 
   // Generate SQL for anomaly intervals (Type4) similar to generateSql()
@@ -1463,15 +1537,34 @@ function drawRawDeviceTrack(points){
   }
   function focusInterval(idx){
     _focusedIntervalIndex = idx;
-    if(fullBody){ Array.prototype.forEach.call(fullBody.querySelectorAll('tr.fdt-focused-row'), function(r){ r.classList.remove('fdt-focused-row'); }); }
-    var iv = _fullIntervals[idx]; if(!iv || !fullBody) return;
-    var firstRow = null;
-    iv.rows.forEach(function(rowIdx){ var rowEl = fullBody.children[rowIdx]; if(rowEl){ rowEl.classList.add('fdt-focused-row'); if(!firstRow) firstRow=rowEl; } });
-    if(firstRow){ firstRow.scrollIntoView({behavior:'smooth', block:'center'}); }
+    var iv = _fullIntervals[idx];
+    if (!iv || !iv.rows || !iv.rows.length) return;
+    if (_fullTrackVt && _fullTrackVt.scrollToIndex) {
+      _fullTrackVt.scrollToIndex(iv.rows[0], 'center');
+      _fullTrackVt.refresh();
+    } else if (fullBody) {
+      Array.prototype.forEach.call(fullBody.querySelectorAll('tr.fdt-focused-row'), function (r) {
+        r.classList.remove('fdt-focused-row');
+      });
+      var firstRow = null;
+      iv.rows.forEach(function (rowIdx) {
+        var rowEl = fullBody.querySelector('tr[data-vt-index="' + rowIdx + '"]') || fullBody.children[rowIdx];
+        if (rowEl) {
+          rowEl.classList.add('fdt-focused-row');
+          if (!firstRow) firstRow = rowEl;
+        }
+      });
+      if (firstRow) firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
   function clearFocus(){
     _focusedIntervalIndex = null;
-    if(fullBody){ Array.prototype.forEach.call(fullBody.querySelectorAll('tr.fdt-focused-row'), function(r){ r.classList.remove('fdt-focused-row'); }); }
+    try { if (_fullTrackVt) _fullTrackVt.refresh(); } catch (_) {}
+    if (fullBody) {
+      Array.prototype.forEach.call(fullBody.querySelectorAll('tr.fdt-focused-row'), function (r) {
+        r.classList.remove('fdt-focused-row');
+      });
+    }
   }
   function runReport(){
     if(!_fullTrackCache || !_fullTrackCache.length){ showRouteToast('Нет данных полного трека'); return; }
