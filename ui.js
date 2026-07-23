@@ -66,6 +66,37 @@ function initDateLock(){
   if(savedState) syncDateToFromDateFrom();
 }
 
+// Авто-режим выбора ТС: если глобальный поиск в оверлее ТС даёт ровно одну
+// запись — автоматически выбрать её и запустить действие кнопки Mileage.
+var VEHICLE_AUTO_MODE_KEY = 'vehicleAutoMode';
+
+function initVehicleAutoMode(){
+  var btn = document.getElementById('vehicleAutoModeBtn');
+  if(!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+
+  function applyAutoState(enabled){
+    window.vehicleAutoMode = enabled;
+    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    // Во включённом состоянии убираем btn-secondary — кнопка становится синей (базовый .btn)
+    btn.classList.toggle('btn-secondary', !enabled);
+    btn.title = enabled
+      ? 'Авто-режим ВКЛ: единственный результат поиска будет выбран автоматически (Mileage)'
+      : 'Авто-режим: если поиск в списке ТС даёт одну запись — выбрать её и запустить Mileage';
+  }
+
+  btn.addEventListener('click', function(){
+    var enabled = btn.getAttribute('aria-pressed') !== 'true';
+    applyAutoState(enabled);
+    try{ localStorage.setItem(VEHICLE_AUTO_MODE_KEY, enabled ? '1' : '0'); }catch(e){}
+    showRouteToast(enabled ? '⚡ Авто-режим ТС включён' : 'Авто-режим ТС выключен', 1500);
+  });
+
+  var savedState = false;
+  try{ savedState = localStorage.getItem(VEHICLE_AUTO_MODE_KEY) === '1'; }catch(e){}
+  applyAutoState(savedState);
+}
+
 // Button to copy date from dateFrom to dateTo
 document.addEventListener('DOMContentLoaded', function(){
   var btn = document.getElementById('copyDateFromToBtn');
@@ -778,6 +809,7 @@ function init() {
 
   setDefaultDates();
   initDateLock();
+  initVehicleAutoMode();
   if(typeof initVehicleColorFilters==='function') initVehicleColorFilters();
   if(typeof initDeviceStatusColorFilters==='function') initDeviceStatusColorFilters();
   ensureVehicleOverlay();
@@ -1649,12 +1681,36 @@ function renderVehicleTable() {
             }
             if (window.lastDeviceIdForLogs !== undefined) window.lastDeviceIdForLogs = null;
           } catch (e) {}
+          // Авто-режим: после ручного выбора записи сразу запустить Mileage
+          try {
+            if (window.vehicleAutoMode && sendMileageReportBtn) sendMileageReportBtn.click();
+          } catch (e) {}
         }
       } catch(e) { console.warn('Row click select failed', e); }
     });
     frag.appendChild(tr);
   });
   vehicleTableBody.appendChild(frag);
+
+  // Авто-режим: если глобальный поиск дал ровно одну запись — выбрать её
+  // (стандартный клик по строке) и запустить действие кнопки Mileage.
+  try {
+    var overlayVisible = vehicleOverlay && vehicleOverlay.style.display !== 'none' && vehicleOverlay.style.display !== '';
+    var autoSearchInput = document.getElementById('vehicleSearchInput');
+    var autoTerm = autoSearchInput ? (autoSearchInput.value || '').trim() : '';
+    if (window.vehicleAutoMode && vehicleOverlayMode === 'selectMin' && overlayVisible && autoTerm && data.length === 1) {
+      var bodyRows = vehicleTableBody ? vehicleTableBody.querySelectorAll('tr') : [];
+      if (bodyRows.length === 1) {
+        var onlyRow = bodyRows[0];
+        setTimeout(function(){
+          try {
+            if (!window.vehicleAutoMode) return;
+            onlyRow.click(); // штатный выбор устройства; в авто-режиме он же запускает Mileage
+          } catch(e){ console.warn('Vehicle auto-mode select failed', e); }
+        }, 0);
+      }
+    }
+  } catch(e){ console.warn('Vehicle auto-mode check failed', e); }
 }
 
 // Initialize color filter visibility map (default: only #fff7ecff visible)

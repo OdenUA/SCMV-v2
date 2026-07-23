@@ -896,7 +896,7 @@
     var toggle = document.getElementById('analysisViewToggle');
     if (toggle) toggle.style.display = 'block';
 
-    var mode = window.analysisViewMode || 'chrono';
+    var mode = window.analysisViewMode || 'summary';
     window.analysisViewMode = mode;
     var btnChrono = document.getElementById('analysisViewChrono');
     var btnSummary = document.getElementById('analysisViewSummary');
@@ -1141,6 +1141,8 @@
       return;
     }
     window._trackData = [];
+    // При каждом запуске Analyze таблица открывается в режиме «Сводка»
+    window.analysisViewMode = 'summary';
     try { if (mileageGapLayers && mileageGapLayers.length) { mileageGapLayers.forEach(function(g) { trackLayerGroup.removeLayer(g); }); mileageGapLayers = []; } } catch (e) {}
     try { if (typeof window.trackDeviceSwitch === 'function') window.trackDeviceSwitch(deviceId); } catch (e) {}
 

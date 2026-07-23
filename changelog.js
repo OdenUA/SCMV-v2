@@ -3,6 +3,13 @@
 // To add a release, prepend a new object here. No other files need updating.
 window.CHANGELOG = [
   {
+    version: '1.0.3',
+    date: '2026-07-23',
+    items: [
+      'Рядом с кнопкой <em>«ТС»</em> добавлен переключатель <em>«Авто»</em>. Когда он включён, ввод в поле «Глобальный поиск» списка ТС, дающий ровно одну запись, автоматически выбирает её и запускает отчёт Mileage.'
+    ]
+  },
+  {
     version: '1.0.2',
     date: '2026-07-15',
     items: [
