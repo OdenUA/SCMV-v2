@@ -252,46 +252,10 @@
   };
 
   /**
-   * Smart cleanup: only when limits are exceeded
+   * Автоматическая очистка отключена: активные данные (текущий трек, таблицы)
+   * никогда не удаляются мониторингом. Устаревшие данные (предыдущего
+   * устройства) удаляются в trackDeviceSwitch() при переключении.
    */
-  window.smartMemoryCleanup = function() {
-    console.log('[Memory] Checking memory limits...');
-    
-    var needsCleanup = false;
-    var reasons = [];
-
-    // Check _trackData size
-    if (window._trackData && window._trackData.length > LIMITS.trackPoints) {
-      needsCleanup = true;
-      reasons.push('_trackData: ' + window._trackData.length + ' > ' + LIMITS.trackPoints);
-    }
-
-    // Check _fullTrackCache
-    if (window._fullTrackCache && window._fullTrackCache.length > LIMITS.fullTrackCache) {
-      needsCleanup = true;
-      reasons.push('_fullTrackCache: ' + window._fullTrackCache.length + ' > ' + LIMITS.fullTrackCache);
-    }
-
-    // Check markers
-    if (window._trackMarkersByTs) {
-      var count = Object.keys(window._trackMarkersByTs).length;
-      if (count > LIMITS.markers) {
-        needsCleanup = true;
-        reasons.push('markers: ' + count + ' > ' + LIMITS.markers);
-      }
-    }
-
-    if (needsCleanup) {
-      console.warn('[Memory] Limits exceeded:', reasons.join(', '));
-      showRouteToast('⚠️ Очистка памяти...', 2000);
-      window.deepCleanTrackData();
-      window.cleanupTableMemory();
-      return true;
-    }
-
-    console.log('[Memory] Limits not exceeded');
-    return false;
-  };
 
   /**
    * Track device switching
@@ -410,9 +374,6 @@
           stats.performance.usedJSHeapSize ? ('Heap=' + stats.performance.usedJSHeapSize) : ''
         );
       }
-
-      // Smart auto-cleanup if limits exceeded
-      window.smartMemoryCleanup();
     }, 30000); // every 30 seconds
   };
 
