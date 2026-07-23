@@ -91,6 +91,12 @@
       if (state.destroyed || !state.tbody) return;
       var rows = state.rows;
       var n = rows.length;
+      var scrollEl = state.scrollEl;
+      // Читаем scrollTop/clientHeight ДО очистки tbody: чтение scrollTop форсирует
+      // layout, и если tbody уже пуст, высота таблицы = 0 и браузер клампит scrollTop в 0
+      // (прокрутка «сбрасывается наверх» при каждом ререндере).
+      var scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+      var viewH = scrollEl ? scrollEl.clientHeight : 400;
       state.tbody.innerHTML = '';
 
       if (!n) {
@@ -105,9 +111,6 @@
         return;
       }
 
-      var scrollEl = state.scrollEl;
-      var scrollTop = scrollEl ? scrollEl.scrollTop : 0;
-      var viewH = scrollEl ? scrollEl.clientHeight : 400;
       var rh = state.rowHeight || DEFAULT_ROW_HEIGHT;
       var start = Math.floor(scrollTop / rh) - state.overscan;
       if (start < 0) start = 0;
