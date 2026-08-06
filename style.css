@@ -232,6 +232,26 @@ h2 {
     margin-top: 0;
     font-size: 1rem;
 }
+
+/* Сворачиваемые таблицы (Device Alarm / Device Log): контент скрыт, разворот по клику на заголовок */
+.table-container.collapsible > h2 {
+    cursor: pointer;
+    user-select: none;
+}
+
+.table-container.collapsible > h2::after {
+    content: ' ▾';
+    font-size: 0.85em;
+    opacity: 0.6;
+}
+
+.table-container.collapsible.collapsed > h2::after {
+    content: ' ▸';
+}
+
+.table-container.collapsible.collapsed > .table-scroll {
+    display: none;
+}
 .table-header {
     display: flex;
     justify-content: space-between;

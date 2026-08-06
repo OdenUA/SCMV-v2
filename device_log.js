@@ -534,6 +534,18 @@ window.initDeviceLog = function() {
     });
   }
 
+  // Сворачивание/разворачивание таблиц по клику на заголовок
+  try {
+    Array.prototype.slice.call(document.querySelectorAll('.table-container.collapsible > h2')).forEach(function (h) {
+      if (h.dataset.collapsibleBound) return;
+      h.dataset.collapsibleBound = '1';
+      h.addEventListener('click', function () {
+        var c = h.closest('.table-container');
+        if (c) c.classList.toggle('collapsed');
+      });
+    });
+  } catch (e) {}
+
 
   function resetLogTitles() {
     try {

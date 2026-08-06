@@ -3,6 +3,13 @@
 // To add a release, prepend a new object here. No other files need updating.
 window.CHANGELOG = [
   {
+    version: '1.0.5',
+    date: '2026-08-06',
+    items: [
+      'Таблицы Device Alarm и Device Log стали сворачиваемыми. По умолчанию они свёрнуты — виден только заголовок. Клик по заголовку разворачивает или сворачивает содержимое таблицы.'
+    ]
+  },
+  {
     version: '1.0.4',
     date: '2026-08-06',
     items: [
