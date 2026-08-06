@@ -28,25 +28,20 @@
 
   var TRACK_ISSUE_META = {
     NONE: { displayName: 'Без ошибок', color: '#4CAF50', emoji: '✅' },
-    LOW_SATELLITES: { displayName: 'Мало спутников', color: '#FFC107', emoji: '🟡' },
+    LOW_SATELLITES: { displayName: 'Мало спутников', color: '#FFD600', emoji: '🟡' },
     LOW_VOLTAGE: { displayName: 'Низкое значение batvoltage', color: '#FF9800', emoji: '🟠' },
-    MOVEMENT_WITHOUT_POWER: { displayName: 'Движение без питания', color: '#F44336', emoji: '🔴' },
-    POSITION_JUMP: { displayName: 'Скачок позиции', color: '#E91E63', emoji: '🩷' },
-    TIME_GAP: { displayName: 'Разрыв данных', color: '#9E9E9E', emoji: '⚫' },
-    SPEED_SPIKE: { displayName: 'Скачок скорости', color: '#9C27B0', emoji: '🟣' },
-    ALTITUDE_SPIKE: { displayName: 'Аномалия высоты', color: '#795548', emoji: '🟤' },
-    STATIC_MOVING: { displayName: 'Статичное движение', color: '#607D8B', emoji: '🔵' }
+    MOVEMENT_WITHOUT_POWER: { displayName: 'Движение без питания', color: '#000000', emoji: '⚫' },
+    // Разрыв данных, Скачок позиции, Скачок скорости и Статичное движение объединены в одну аномалию
+    TRACK_ANOMALY: { displayName: 'Аномалия трека', color: '#E91E63', emoji: '🩷' },
+    ALTITUDE_SPIKE: { displayName: 'Аномалия высоты', color: '#795548', emoji: '🟤' }
   };
 
   var ISSUE_PRIORITY = [
     'MOVEMENT_WITHOUT_POWER',
     'LOW_VOLTAGE',
-    'TIME_GAP',
-    'SPEED_SPIKE',
-    'POSITION_JUMP',
+    'TRACK_ANOMALY',
     'LOW_SATELLITES',
-    'ALTITUDE_SPIKE',
-    'STATIC_MOVING'
+    'ALTITUDE_SPIKE'
   ];
 
   // --- Helpers ---
@@ -139,7 +134,7 @@
       var timeDeltaMs = current.timestamp.getTime() - prev.timestamp.getTime();
       var timeDeltaMinutes = timeDeltaMs / 60000;
       if (timeDeltaMinutes > timeGapMinutes()) {
-        issues.add('TIME_GAP');
+        issues.add('TRACK_ANOMALY');
       }
       var distanceMeters = haversineDistance(prev.latitude, prev.longitude, current.latitude, current.longitude);
       var ignition = current.ignition != null ? current.ignition : true;
@@ -151,16 +146,16 @@
       if (timeDeltaHours > 0) {
         var calculatedSpeedKmh = (distanceMeters / 1000.0) / timeDeltaHours;
         if (calculatedSpeedKmh > speedSpikeThreshold()) {
-          issues.add('SPEED_SPIKE');
+          issues.add('TRACK_ANOMALY');
         }
         // Position Jump (как в Raw Track): расчётная скорость > порога и заявленная < порога
         if (calculatedSpeedKmh > jumpSpeedThreshold() && current.speed < realSpeedThreshold()) {
-          issues.add('POSITION_JUMP');
+          issues.add('TRACK_ANOMALY');
         }
       }
       // Distance-based Position Jump: расстояние > порога вне зависимости от скорости/времени
       if (distanceMeters >= positionJumpDistanceM()) {
-        issues.add('POSITION_JUMP');
+        issues.add('TRACK_ANOMALY');
       }
       if (prev.altitude != null && current.altitude != null) {
         var altDelta = Math.abs(current.altitude - prev.altitude);
@@ -169,7 +164,7 @@
         }
       }
       if (current.speed === 0.0 && distanceMeters > STATIC_MOVING_DISTANCE_THRESHOLD) {
-        issues.add('STATIC_MOVING');
+        issues.add('TRACK_ANOMALY');
       }
     }
     return issues;
@@ -307,9 +302,6 @@
     if (issue === 'LOW_VOLTAGE') {
       var voltage = segment && segment.stats && segment.stats.avgVoltage;
       return voltage != null ? 'Низкое значение batvoltage: ' + voltage.toFixed(1) : meta.displayName;
-    }
-    if (issue === 'POSITION_JUMP') {
-      return 'Прыжок позиции';
     }
     if (issue === 'LOW_SATELLITES') {
       var sats = segment && segment.stats && segment.stats.avgSatellites;
@@ -580,25 +572,27 @@
         var timeDeltaHours = timeDeltaMs / 3600000;
         var calculatedSpeedKmh = timeDeltaHours > 0 ? (distanceMeters / 1000.0) / timeDeltaHours : 0;
 
-        var anomalyType = null;
+        // Разрыв данных, Скачок скорости, Скачок позиции и Статичное движение объединены в одну аномалию;
+        // конкретные причины перечисляются в попапе
+        var reasons = [];
         if (timeDeltaMinutes > timeGapMinutes()) {
-          anomalyType = 'TIME_GAP';
-        } else if (calculatedSpeedKmh > speedSpikeThreshold()) {
-          anomalyType = 'SPEED_SPIKE';
-        } else if (distanceMeters >= positionJumpDistanceM()) {
-          anomalyType = 'POSITION_JUMP';
-        } else if (calculatedSpeedKmh > jumpSpeedThreshold() && curr.speed < realSpeedThreshold()) {
-          anomalyType = 'POSITION_JUMP';
+          reasons.push('Разрыв данных');
+        }
+        if (calculatedSpeedKmh > speedSpikeThreshold()) {
+          reasons.push('Скачок скорости');
+        }
+        if (distanceMeters >= positionJumpDistanceM() ||
+            (calculatedSpeedKmh > jumpSpeedThreshold() && curr.speed < realSpeedThreshold())) {
+          reasons.push('Скачок позиции');
+        }
+        if (curr.speed === 0.0 && distanceMeters > STATIC_MOVING_DISTANCE_THRESHOLD) {
+          reasons.push('Статичное движение');
         }
 
-        if (anomalyType) {
-          var style = { color: '#ff4136', weight: 4, opacity: 0.95 };
-          if (anomalyType === 'TIME_GAP') {
-            style.dashArray = '8,6';
-          } else if (anomalyType === 'POSITION_JUMP') {
-            style.dashArray = '10,5';
-          }
-          var popupHtml = '<b>Аномалия: ' + anomalyType + '</b><br>От: ' + (prev.wdate || '') + '<br>До: ' + (curr.wdate || '');
+        if (reasons.length > 0) {
+          var anomalyType = 'TRACK_ANOMALY';
+          var style = { color: TRACK_ISSUE_META.TRACK_ANOMALY.color, weight: 4, opacity: 0.95 };
+          var popupHtml = '<b>Аномалия трека</b><br>' + reasons.join(', ') + '<br>От: ' + (prev.wdate || '') + '<br>До: ' + (curr.wdate || '');
           popupHtml += '<br>Расстояние: ' + (distanceMeters / 1000).toFixed(2) + ' км';
           popupHtml += '<br>Скорость: ' + calculatedSpeedKmh.toFixed(2) + ' км/ч';
           var aLineW = (typeof currentLineWidth === 'function' ? currentLineWidth() : 2) * 3;

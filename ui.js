@@ -970,6 +970,70 @@ function init() {
   })();
 
   initChangelogModal();
+  initVersionLink();
+}
+
+function renderChangelogEntries(container, entries){
+  if(!container) return;
+  container.innerHTML = '';
+  entries.forEach(function(entry){
+    var wrap = document.createElement('div');
+    wrap.style.marginBottom = '16px';
+
+    var title = document.createElement('strong');
+    title.textContent = 'v' + entry.version + ' (' + entry.date + ')';
+    wrap.appendChild(title);
+
+    var ul = document.createElement('ul');
+    entry.items.forEach(function(item){
+      var li = document.createElement('li');
+      li.innerHTML = item;
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    container.appendChild(wrap);
+  });
+}
+
+function bindChangelogButtons(){
+  if(!changelogModal) return;
+  function markAsRead(){
+    try{
+      if(window.CHANGELOG && window.CHANGELOG.length){
+        localStorage.setItem(CHANGELOG_STORAGE_KEY, window.CHANGELOG[0].version);
+      }
+    }catch(e){}
+  }
+  function closeChangelog(){
+    changelogModal.style.display = 'none';
+  }
+  if(changelogOkBtn && !changelogOkBtn.dataset.bound){
+    changelogOkBtn.addEventListener('click', function(){
+      markAsRead();
+      closeChangelog();
+    });
+    changelogOkBtn.dataset.bound = '1';
+  }
+  if(changelogCloseBtn && !changelogCloseBtn.dataset.bound){
+    changelogCloseBtn.addEventListener('click', closeChangelog);
+    changelogCloseBtn.dataset.bound = '1';
+  }
+}
+
+// Ссылка «v X.Y.Z» слева от полей логина: открывает попап со всеми версиями
+function initVersionLink(){
+  try{
+    var link = document.getElementById('versionLink');
+    if(!link || !window.CHANGELOG || !window.CHANGELOG.length) return;
+    link.textContent = 'v ' + window.CHANGELOG[0].version;
+    link.addEventListener('click', function(e){
+      e.preventDefault();
+      if(changelogVersionEl) changelogVersionEl.textContent = window.CHANGELOG[0].version;
+      renderChangelogEntries(document.getElementById('changelogEntries'), window.CHANGELOG);
+      bindChangelogButtons();
+      if(changelogModal) changelogModal.style.display = 'block';
+    });
+  }catch(e){}
 }
 
 function initChangelogModal(){
@@ -977,51 +1041,14 @@ function initChangelogModal(){
     if(!changelogModal || !changelogOkBtn || !window.CHANGELOG || !window.CHANGELOG.length) return;
     var latest = window.CHANGELOG[0];
     var seenVersion = localStorage.getItem(CHANGELOG_STORAGE_KEY);
+    bindChangelogButtons();
     if(seenVersion === latest.version) return;
 
     if(changelogVersionEl) changelogVersionEl.textContent = latest.version;
 
-    var container = document.getElementById('changelogEntries');
-    if(container){
-      container.innerHTML = '';
-      window.CHANGELOG.slice(0, 2).forEach(function(entry){
-        var wrap = document.createElement('div');
-        wrap.style.marginBottom = '16px';
-
-        var title = document.createElement('strong');
-        title.textContent = 'v' + entry.version + ' (' + entry.date + ')';
-        wrap.appendChild(title);
-
-        var ul = document.createElement('ul');
-        entry.items.forEach(function(item){
-          var li = document.createElement('li');
-          li.innerHTML = item;
-          ul.appendChild(li);
-        });
-        wrap.appendChild(ul);
-        container.appendChild(wrap);
-      });
-    }
+    renderChangelogEntries(document.getElementById('changelogEntries'), window.CHANGELOG.slice(0, 2));
 
     changelogModal.style.display = 'block';
-
-    function markAsRead(){
-      try{ localStorage.setItem(CHANGELOG_STORAGE_KEY, latest.version); }catch(e){}
-    }
-    function closeChangelog(){
-      changelogModal.style.display = 'none';
-    }
-    if(!changelogOkBtn.dataset.bound){
-      changelogOkBtn.addEventListener('click', function(){
-        markAsRead();
-        closeChangelog();
-      });
-      changelogOkBtn.dataset.bound = '1';
-    }
-    if(changelogCloseBtn && !changelogCloseBtn.dataset.bound){
-      changelogCloseBtn.addEventListener('click', closeChangelog);
-      changelogCloseBtn.dataset.bound = '1';
-    }
   }catch(e){}
 }
 

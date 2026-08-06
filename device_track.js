@@ -383,6 +383,12 @@ function drawRawDeviceTrack(points) {
   }
   window._trackMarkersByTs = {};
 
+  // Сервер отдаёт точки от новых к старым — сортируем копию по времени (старта → финиш)
+  points = points.slice().sort(function (a, b) {
+    return parseTrackDate(a.wdate || a.WDATE || a.date || a.Date || a.ts || '') -
+           parseTrackDate(b.wdate || b.WDATE || b.date || b.Date || b.ts || '');
+  });
+
   var parsed = [];
   var latlngs = [];
   for (var i = 0; i < points.length; i++) {

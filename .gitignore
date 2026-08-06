@@ -10,4 +10,5 @@ Thumbs.db
 # Ignore example request/response files
 /examples/
 AGENTS.md
+.vscode/
  
