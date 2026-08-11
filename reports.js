@@ -615,13 +615,31 @@
       }
     } catch(e) { try{ console.warn('ensureVehicleData: cache fill failed', e); }catch(_){}}
 
-    // If we still do not have any source data, request Vehicle Show once
-    var hasData = false;
-    for (var k = 0; k < sources.length; k++) {
-      if (Array.isArray(sources[k]) && sources[k].length > 0) { hasData = true; break; }
+    // Для отчётов нужен ПОЛНЫЙ список устройств — Vehicle Show (как у кнопки Device List).
+    // Vehicle Select Min (кнопка ТС) содержит ограниченный набор и не подходит.
+    // Запрашиваем Vehicle Show, если его данных нет или в них отсутствуют нужные ID.
+    var needFetch = true;
+    var showList = window.vehicleShowData;
+    if (Array.isArray(showList) && showList.length > 0) {
+      needFetch = false;
+      var idFields2 = ['deviceid', 'id', 'devid', 'vehicleid', 'vihicleid', 'vid', 'ID'];
+      for (var d = 0; d < deviceIds.length; d++) {
+        var wanted = String(deviceIds[d]);
+        var found = false;
+        for (var r2 = 0; r2 < showList.length; r2++) {
+          var row2 = showList[r2];
+          if (!row2) continue;
+          for (var f2 = 0; f2 < idFields2.length; f2++) {
+            var v2 = row2[idFields2[f2]];
+            if (v2 !== undefined && v2 !== null && String(v2) === wanted) { found = true; break; }
+          }
+          if (found) break;
+        }
+        if (!found) { needFetch = true; break; }
+      }
     }
 
-    if (!hasData && typeof requestVehicleShow === 'function' && !window._vehicleShowFetchRequested) {
+    if (needFetch && typeof requestVehicleShow === 'function' && !window._vehicleShowFetchRequested) {
       window._vehicleShowFetchRequested = true;
       try { requestVehicleShow(); } catch(e) { console.warn('reports: requestVehicleShow failed', e); }
       // auto-clear the flag after a short delay to allow re-requests later if needed
