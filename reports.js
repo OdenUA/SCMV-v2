@@ -906,7 +906,7 @@
     var data = [];
     
     // Header row 1: Main headers
-    var header1 = ['№ п/п', 'номерний знак авто', 'марка авто', 'П.І.Б.'];
+    var header1 = ['№ п/п', 'номерний знак авто'];
     for (var w = 0; w < reportData.weeks.length; w++) {
       header1.push((w + 1) + ' тиждень');
       header1.push(''); // суб.
@@ -918,7 +918,7 @@
     data.push(header1);
     
     // Header row 2: Day types
-    var header2 = ['', '', '', ''];
+    var header2 = ['', ''];
     for (var w = 0; w < reportData.weeks.length; w++) {
       header2.push('будні');
       header2.push('суб.');
@@ -937,8 +937,6 @@
       var row = [];
       row.push(d + 1); // № п/п
       row.push(vehicleInfo.number); // номерний знак
-      row.push(vehicleInfo.vehicle); // марка авто
-      row.push(vehicleInfo.name); // П.І.Б.
       
       var totalWeekdays = 0;
       var totalWeekends = 0;
