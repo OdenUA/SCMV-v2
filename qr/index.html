@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сканер IMEI / ICCID</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f4f6f8;
+    color: #222;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 16px; }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button {
+    padding: 8px 14px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover { background: #f0f0f0; }
+  button.primary { background: #1976d2; border-color: #1976d2; color: #fff; }
+  button.primary:hover { background: #1565c0; }
+  button.danger { color: #b71c1c; }
+  #reader {
+    width: 100%;
+    max-width: 480px;
+    margin: 10px auto 0;
+    display: none;
+    /* Окно в 2 раза ниже обычного: видео центрируется и обрезается сверху/снизу */
+    height: 180px;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+  }
+  #reader video { flex-shrink: 0; }
+  /* Штатная рамка области сканирования скрыта: при обрезке она смещается */
+  #qr-shaded-region { display: none !important; }
+  #status {
+    margin-top: 10px;
+    font-size: 14px;
+    min-height: 20px;
+  }
+  #status.ok { color: #2e7d32; }
+  #status.err { color: #b71c1c; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  th { background: #eceff1; }
+  td.num { width: 40px; text-align: center; color: #888; }
+  td.del { width: 40px; text-align: center; }
+  td.del button { padding: 2px 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Сканер IMEI / ICCID</h1>
+
+  <div class="panel">
+    <div class="row">
+      <button id="btnStart" class="primary">Сканировать</button>
+      <button id="btnStop" disabled>Остановить</button>
+    </div>
+    <div id="reader"></div>
+    <div id="zoomCtl" class="row" style="display:none; margin-top:8px; justify-content:center;">
+      <label for="zoomRange" style="font-size:14px;">Приближение:</label>
+      <input type="range" id="zoomRange" min="1" max="5" step="0.1" value="1" style="width:220px;">
+      <span id="zoomVal" style="font-size:13px; color:#666; min-width:36px;">1.0x</span>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <button id="btnExport" class="primary">Экспорт в XLSX</button>
+      <button id="btnCopy">Копировать для Excel</button>
+      <button id="btnClear" class="danger">Очистить таблицу</button>
+      <span id="counter" style="margin-left:auto; color:#666;"></span>
+    </div>
+    <table id="tbl">
+      <thead>
+        <tr><th>#</th><th>IMEI</th><th>ICCID</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LS_KEY = 'qr_scan_rows';
+  var rows = [];
+  var scanner = null;
+  var scanning = false;
+  var lastValue = '';
+  var lastTime = 0;
+  var videoTrack = null; // трек камеры для управления зумом
+
+  var elStatus = document.getElementById('status');
+  var elReader = document.getElementById('reader');
+  var elTbody = document.querySelector('#tbl tbody');
+  var elCounter = document.getElementById('counter');
+
+  function setStatus(msg, isErr) {
+    elStatus.textContent = msg || '';
+    elStatus.className = isErr ? 'err' : 'ok';
+  }
+
+  function loadRows() {
+    try {
+      var saved = localStorage.getItem(LS_KEY);
+      if (saved) rows = JSON.parse(saved) || [];
+    } catch (e) { rows = []; }
+  }
+
+  function saveRows() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(rows)); } catch (e) {}
+  }
+
+  function render() {
+    elTbody.innerHTML = '';
+    for (var i = 0; i < rows.length; i++) {
+      (function (idx) {
+        var tr = document.createElement('tr');
+        var tdNum = document.createElement('td');
+        tdNum.className = 'num';
+        tdNum.textContent = idx + 1;
+        var tdImei = document.createElement('td');
+        tdImei.textContent = rows[idx].imei || '';
+        var tdIccid = document.createElement('td');
+        tdIccid.textContent = rows[idx].iccid || '';
+        var tdDel = document.createElement('td');
+        tdDel.className = 'del';
+        var btn = document.createElement('button');
+        btn.textContent = '✕';
+        btn.title = 'Удалить строку';
+        btn.onclick = function () {
+          rows.splice(idx, 1);
+          saveRows();
+          render();
+        };
+        tdDel.appendChild(btn);
+        tr.appendChild(tdNum);
+        tr.appendChild(tdImei);
+        tr.appendChild(tdIccid);
+        tr.appendChild(tdDel);
+        elTbody.appendChild(tr);
+      })(i);
+    }
+    elCounter.textContent = 'Строк: ' + rows.length;
+  }
+
+  // Тип кода определяется по количеству цифр: 15 — IMEI, 19-20 — ICCID
+  function detectCode(text) {
+    var digits = String(text).replace(/\D/g, '');
+    if (digits.length === 15) return { kind: 'imei', value: digits };
+    if (digits.length >= 19 && digits.length <= 20) return { kind: 'iccid', value: digits };
+    return null;
+  }
+
+  // Записать значение в таблицу: в последнюю незаполненную строку или в новую
+  function addValue(kind, value) {
+    var last = rows.length ? rows[rows.length - 1] : null;
+    if (last && last[kind] === value) {
+      setStatus('Дубликат пропущен: ' + value, true);
+      return;
+    }
+    if (last && !last[kind]) {
+      last[kind] = value;
+    } else {
+      var row = { imei: '', iccid: '' };
+      row[kind] = value;
+      rows.push(row);
+    }
+    saveRows();
+    render();
+  }
+
+  function handleScan(text) {
+    var now = Date.now();
+    if (text === lastValue && now - lastTime < 3000) return; // защита от повторов
+    lastValue = text;
+    lastTime = now;
+
+    var code = detectCode(text);
+    if (!code) {
+      var digits = String(text).replace(/\D/g, '');
+      setStatus('Неизвестный код (' + digits.length + ' цифр, нужно 15 для IMEI или 19-20 для ICCID): ' + text, true);
+      return;
+    }
+    addValue(code.kind, code.value);
+    setStatus((code.kind === 'imei' ? 'IMEI' : 'ICCID') + ' считан: ' + code.value);
+  }
+
+  // Показать слайдер зума, если камера его поддерживает
+  function setupZoom() {
+    var ctl = document.getElementById('zoomCtl');
+    var range = document.getElementById('zoomRange');
+    var video = elReader.querySelector('video');
+    videoTrack = null;
+    if (!video || !video.srcObject) { ctl.style.display = 'none'; return; }
+    var tracks = video.srcObject.getVideoTracks();
+    if (!tracks.length) { ctl.style.display = 'none'; return; }
+    videoTrack = tracks[0];
+    if (!videoTrack.getCapabilities) { ctl.style.display = 'none'; return; }
+    var caps = videoTrack.getCapabilities();
+    if (!caps.zoom) { ctl.style.display = 'none'; return; }
+    range.min = caps.zoom.min;
+    range.max = caps.zoom.max;
+    range.step = (caps.zoom.step && caps.zoom.step > 0) ? caps.zoom.step : 0.1;
+    var current = (videoTrack.getSettings && videoTrack.getSettings().zoom) || caps.zoom.min;
+    range.value = current;
+    document.getElementById('zoomVal').textContent = Number(current).toFixed(1) + 'x';
+    ctl.style.display = 'flex';
+  }
+
+  function applyZoom(value) {
+    if (!videoTrack || !videoTrack.applyConstraints) return;
+    videoTrack.applyConstraints({ advanced: [{ zoom: value }] }).catch(function () {});
+    document.getElementById('zoomVal').textContent = Number(value).toFixed(1) + 'x';
+  }
+
+  function startScanner() {
+    if (scanning) return;
+    if (typeof Html5Qrcode === 'undefined') {
+      setStatus('Не загрузилась библиотека html5-qrcode. Проверьте интернет-соединение.', true);
+      return;
+    }
+    if (!scanner) {
+      var formats = null;
+      if (typeof Html5QrcodeSupportedFormats !== 'undefined') {
+        formats = [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.DATA_MATRIX
+        ];
+      }
+      scanner = new Html5Qrcode('reader', formats ? { formatsToSupport: formats, verbose: false } : false);
+    }
+    elReader.style.display = 'flex';
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 150 } },
+      function (decodedText) { handleScan(decodedText); },
+      function () { /* ошибки распознавания кадра игнорируем */ }
+    ).then(function () {
+      scanning = true;
+      document.getElementById('btnStart').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+      setStatus('Камера запущена. Наведите на код.');
+      // Видеоэлемент создаётся асинхронно — ждём его появления
+      setTimeout(setupZoom, 500);
+    }).catch(function (err) {
+      elReader.style.display = 'none';
+      setStatus('Ошибка камеры: ' + err + ' (требуется HTTPS или localhost)', true);
+    });
+  }
+
+  function stopScanner() {
+    if (!scanner || !scanning) return;
+    scanner.stop().then(function () {
+      scanning = false;
+      videoTrack = null;
+      elReader.style.display = 'none';
+      document.getElementById('zoomCtl').style.display = 'none';
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      setStatus('Камера остановлена.');
+    }).catch(function () {});
+  }
+
+  function tableToAOA() {
+    var aoa = [['IMEI', 'ICCID']];
+    for (var i = 0; i < rows.length; i++) {
+      aoa.push([rows[i].imei || '', rows[i].iccid || '']);
+    }
+    return aoa;
+  }
+
+  document.getElementById('btnStart').onclick = startScanner;
+  document.getElementById('btnStop').onclick = stopScanner;
+  document.getElementById('zoomRange').oninput = function () { applyZoom(parseFloat(this.value)); };
+
+  document.getElementById('btnExport').onclick = function () {
+    if (!rows.length) { setStatus('Таблица пуста.', true); return; }
+    if (typeof XLSX === 'undefined') { setStatus('Не загрузилась библиотека XLSX.', true); return; }
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(tableToAOA());
+    // Явно текстовый формат, чтобы длинные числа не стали экспонентой
+    var range = XLSX.utils.decode_range(ws['!ref']);
+    for (var r = range.s.r + 1; r <= range.e.r; r++) {
+      for (var c = range.s.c; c <= range.e.c; c++) {
+        var addr = XLSX.utils.encode_cell({ r: r, c: c });
+        if (ws[addr]) { ws[addr].t = 's'; ws[addr].z = '@'; }
+      }
+    }
+    ws['!cols'] = [{ wch: 20 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'IMEI-ICCID');
+    XLSX.writeFile(wb, 'imei_iccid.xlsx');
+  };
+
+  document.getElementById('btnCopy').onclick = function () {
+    if (!rows.length) { setStatus('Таблица пуста.', true); return; }
+    var aoa = tableToAOA();
+    var tsv = aoa.map(function (r) { return r.join('\t'); }).join('\r\n');
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = tsv;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); setStatus('Скопировано. Вставьте в Excel (Ctrl+V).'); }
+      catch (e) { setStatus('Не удалось скопировать в буфер обмена.', true); }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv).then(function () {
+        setStatus('Скопировано. Вставьте в Excel (Ctrl+V).');
+      }).catch(fallback);
+    } else {
+      fallback();
+    }
+  };
+
+  document.getElementById('btnClear').onclick = function () {
+    if (!rows.length) return;
+    if (!confirm('Очистить всю таблицу?')) return;
+    rows = [];
+    saveRows();
+    render();
+    setStatus('Таблица очищена.');
+  };
+
+  loadRows();
+  render();
+})();
+</script>
+</body>
+</html>
