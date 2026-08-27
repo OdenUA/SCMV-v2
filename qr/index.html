@@ -46,6 +46,8 @@
     overflow: hidden;
     align-items: center;
     justify-content: center;
+    /* Рамка-индикатор результата сканирования (цвет задаётся из JS) */
+    border: 4px solid transparent;
   }
   #reader video { flex-shrink: 0; }
   /* Штатная рамка области сканирования скрыта: при обрезке она смещается */
@@ -182,12 +184,21 @@
     return null;
   }
 
-  // Записать значение в таблицу: в последнюю незаполненную строку или в новую
+  // Подсветка рамки окна камеры: ok — зелёная, dup — жёлтая, err — красная; сброс через 2.5 с
+  var flashTimer = null;
+  function flashReader(kind) {
+    var colors = { ok: '#2e7d32', dup: '#f9a825', err: '#b71c1c' };
+    elReader.style.borderColor = colors[kind] || 'transparent';
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { elReader.style.borderColor = 'transparent'; }, 2500);
+  }
+
+  // Записать значение в таблицу: в последнюю незаполненную строку или в новую.
+  // Возвращает 'ok' или 'dup' (дубликат не добавлен).
   function addValue(kind, value) {
     var last = rows.length ? rows[rows.length - 1] : null;
     if (last && last[kind] === value) {
-      setStatus('Дубликат пропущен: ' + value, true);
-      return;
+      return 'dup';
     }
     if (last && !last[kind]) {
       last[kind] = value;
@@ -198,6 +209,7 @@
     }
     saveRows();
     render();
+    return 'ok';
   }
 
   function handleScan(text) {
@@ -210,10 +222,17 @@
     if (!code) {
       var digits = String(text).replace(/\D/g, '');
       setStatus('Неизвестный код (' + digits.length + ' цифр, нужно 15 для IMEI или 19-20 для ICCID): ' + text, true);
+      flashReader('err');
       return;
     }
-    addValue(code.kind, code.value);
+    var result = addValue(code.kind, code.value);
+    if (result === 'dup') {
+      setStatus('Дубликат пропущен: ' + code.value, true);
+      flashReader('dup');
+      return;
+    }
     setStatus((code.kind === 'imei' ? 'IMEI' : 'ICCID') + ' считан: ' + code.value);
+    flashReader('ok');
   }
 
   // Показать слайдер зума, если камера его поддерживает
@@ -264,13 +283,19 @@
           Html5QrcodeSupportedFormats.DATA_MATRIX
         ];
       }
-      scanner = new Html5Qrcode('reader', formats ? { formatsToSupport: formats, verbose: false } : false);
+      scanner = new Html5Qrcode('reader', formats
+        ? { formatsToSupport: formats, verbose: false, useBarCodeDetectorIfSupported: true }
+        : { verbose: false, useBarCodeDetectorIfSupported: true });
     }
     elReader.style.display = 'flex';
     scanner.start(
       { facingMode: 'environment' },
       { fps: 10, qrbox: { width: 250, height: 150 } },
-      function (decodedText) { handleScan(decodedText); },
+      // Исключение в колбэке рвёт цикл сканирования html5-qrcode — перехватываем
+      function (decodedText) {
+        try { handleScan(decodedText); }
+        catch (e) { console.error('Ошибка обработки кода:', e); }
+      },
       function () { /* ошибки распознавания кадра игнорируем */ }
     ).then(function () {
       scanning = true;
