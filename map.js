@@ -139,6 +139,128 @@ function initMap(){
       }
     });
     map.addControl(new TracksParkingControl());
+
+    initMapContextMenu();
+}
+
+// --- Кастомное контекстное меню карты (правый клик) ---
+// Заменяет стандартное меню браузера: Leaflet подавляет его, когда на карте
+// есть слушатель события 'contextmenu'.
+function initMapContextMenu(){
+  if(!map) return;
+  var menu = document.getElementById('mapContextMenu');
+  if(!menu){
+    menu = document.createElement('div');
+    menu.id = 'mapContextMenu';
+    menu.className = 'map-context-menu';
+    menu.style.display = 'none';
+    document.body.appendChild(menu);
+  }
+  var clickLatLng = null;
+
+  function hideMenu(){ menu.style.display = 'none'; }
+
+  function fallbackCopy(text, onDone){
+    var ok = false;
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e){ ok = false; }
+    onDone(ok);
+  }
+  function copyText(text, onDone){
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){ onDone(true); }, function(){ fallbackCopy(text, onDone); });
+      } else {
+        fallbackCopy(text, onDone);
+      }
+    }catch(e){ fallbackCopy(text, onDone); }
+  }
+
+  function showMenu(clientX, clientY, latlng){
+    clickLatLng = latlng;
+    menu.innerHTML = '';
+    var item = document.createElement('div');
+    item.className = 'map-context-menu-item';
+    item.textContent = latlng.lat.toFixed(6) + ', ' + latlng.lng.toFixed(6);
+    L.DomEvent.on(item, 'click', function(ev){
+      L.DomEvent.stop(ev);
+      hideMenu();
+      if(!clickLatLng) return;
+      var text = clickLatLng.lat.toFixed(6) + ', ' + clickLatLng.lng.toFixed(6);
+      copyText(text, function(ok){
+        try{
+          if(typeof showRouteToast === 'function'){
+            showRouteToast(ok ? ('Скопировано: ' + text) : 'Не удалось скопировать координаты', 2000);
+          }
+        }catch(_){ }
+      });
+    });
+    menu.appendChild(item);
+
+    // Построение маршрута: дублирует существующий функционал route.js
+    var routeItem = document.createElement('div');
+    routeItem.className = 'map-context-menu-item';
+    var routeActive = !!window.routeModeActive;
+    routeItem.textContent = routeActive ? 'Маршрут: добавить точку' : 'Маршрут: начать отсюда';
+    L.DomEvent.on(routeItem, 'click', function(ev){
+      L.DomEvent.stop(ev);
+      hideMenu();
+      if(!clickLatLng) return;
+      try{
+        if(!window.routeModeActive && typeof startRouteMode === 'function') startRouteMode();
+        if(typeof onRouteMapClick === 'function') onRouteMapClick({ latlng: clickLatLng });
+      }catch(err){ console.warn('route menu item failed', err); }
+    });
+    menu.appendChild(routeItem);
+
+    // Если точек уже достаточно — пункт завершения (как повторный клик по кнопке 📍)
+    if (routeActive && (window.routeClickCount || 0) >= 2) {
+      var buildItem = document.createElement('div');
+      buildItem.className = 'map-context-menu-item';
+      buildItem.textContent = 'Маршрут: завершить и построить (' + window.routeClickCount + ' точек)';
+      L.DomEvent.on(buildItem, 'click', function(ev){
+        L.DomEvent.stop(ev);
+        hideMenu();
+        try{
+          if(typeof buildGoogleMapsRouteManual === 'function') buildGoogleMapsRouteManual();
+          if(typeof stopRouteMode === 'function') stopRouteMode();
+        }catch(err){ console.warn('build route menu item failed', err); }
+      });
+      menu.appendChild(buildItem);
+    }
+
+    menu.style.display = 'block';
+    // не выпускаем меню за край окна
+    var mw = menu.offsetWidth, mh = menu.offsetHeight;
+    var x = clientX, y = clientY;
+    if(x + mw > window.innerWidth) x = Math.max(0, window.innerWidth - mw - 4);
+    if(y + mh > window.innerHeight) y = Math.max(0, window.innerHeight - mh - 4);
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+  }
+
+  // клики по самому меню не должны доходить до карты
+  L.DomEvent.disableClickPropagation(menu);
+  L.DomEvent.on(menu, 'contextmenu', function(ev){ L.DomEvent.stop(ev); });
+
+  map.on('contextmenu', function(e){
+    if(!e || !e.latlng) return;
+    var oe = e.originalEvent || {};
+    showMenu(oe.clientX || 0, oe.clientY || 0, e.latlng);
+  });
+  map.on('click movestart zoomstart dragstart', hideMenu);
+  document.addEventListener('click', hideMenu);
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') hideMenu(); });
+  window.addEventListener('blur', hideMenu);
 }
 
 // --- Map resize handle logic (migrated from legacy script.js) ---

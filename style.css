@@ -23,6 +23,26 @@ button:hover { background-color: #0056b3; }
 
 /* Allow clicks to underlying map through manual route markers */
 .manual-route-point { pointer-events: none; }
+
+/* Кастомное контекстное меню карты (правый клик) */
+.map-context-menu {
+    position: fixed;
+    z-index: 10000;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    padding: 4px 0;
+    min-width: 200px;
+    font-size: 14px;
+    user-select: none;
+}
+.map-context-menu-item {
+    padding: 7px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.map-context-menu-item:hover { background: #f0f0f0; }
 #resizeHandle {
     position: absolute;
     bottom: -5px; /* Position it on the border */

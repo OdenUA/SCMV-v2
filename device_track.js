@@ -648,6 +648,7 @@ function drawRawDeviceTrack(points) {
   // Public clear function for external triggers (device change)
   window.clearFullDeviceTrackTable = function(){
     try { clearFull(); if(fullBody) fullBody.innerHTML = '<tr><td>Очищено из-за смены устройства</td></tr>'; updateFullCount(0); } catch(_){ }
+    try { if (typeof window.clearFullTrackFocusMarker === 'function') window.clearFullTrackFocusMarker(); } catch(_){ }
     _fullTrackCache = null; window._fullTrackCache = null; _fullIntervals = []; _focusedIntervalIndex = null;
     try { window._fullTrackIndexByTs = {}; } catch(_){ }
     try { window._devLogRequestedFull = false; } catch(_){ }
@@ -871,15 +872,7 @@ function drawRawDeviceTrack(points) {
           }
         },
         onRowClick: function (row, idx) {
-          var ts = (_fullTrackRowMeta[idx] && _fullTrackRowMeta[idx].ts) || null;
-          if (!ts) {
-            try {
-              var raw = row.wdate || row.WDATE || row.date || row.Date || row.ts || '';
-              var m = String(raw).match(/(\d{2}:\d{2}:\d{2})/);
-              ts = m ? m[1] : null;
-            } catch (_) {}
-          }
-          if (ts && window.focusMapAtTimestamp) window.focusMapAtTimestamp(ts);
+          if (window.focusMapAtFullTrackRow) window.focusMapAtFullTrackRow(row);
         }
       });
     } else {
@@ -898,7 +891,7 @@ function drawRawDeviceTrack(points) {
           tr.dataset.ts = _fullTrackRowMeta[ridx2].ts;
         }
         tr.addEventListener('click', function () {
-          if (window.focusMapAtTimestamp) window.focusMapAtTimestamp(tr.dataset.ts);
+          if (window.focusMapAtFullTrackRow) window.focusMapAtFullTrackRow(r);
         });
         frag.appendChild(tr);
       });
@@ -906,28 +899,51 @@ function drawRawDeviceTrack(points) {
     }
   }
 
-  // Focus map at the given timestamp (string). Opens popup on the corresponding marker.
-  window.focusMapAtTimestamp = function(tsString){
-      if(!tsString) return;
-  // tsString is expected to be HH:MM:SS
-  var timePart = tsString;
-  // Scroll to map
-      var mapEl = document.getElementById('map');
-      if(mapEl) mapEl.scrollIntoView({behavior:'smooth', block:'center'});
-  // Check if Track Raw is loaded
-      if(!window._trackMarkersByTs || Object.keys(window._trackMarkersByTs).length === 0){
-        try { showRouteToast('Track Raw не загружен', 2000); } catch(_){}
-        return;
+  // Клик по строке Full Device Track: скролл к карте и постановка метки по
+  // координатам прямо из строки (Track Raw не требуется). Одновременно на карте
+  // только одна такая метка: новая заменяет предыдущую. Метка снимается при
+  // смене устройства/дат (clearTrackMarkers, clearFullDeviceTrackTable) и при
+  // перерисовке трека (она лежит в trackLayerGroup).
+  window._fdtFocusMarker = null;
+  window.clearFullTrackFocusMarker = function(){
+    try {
+      if (window._fdtFocusMarker) {
+        if (typeof trackLayerGroup !== 'undefined' && trackLayerGroup) trackLayerGroup.removeLayer(window._fdtFocusMarker);
+        else if (window.map) map.removeLayer(window._fdtFocusMarker);
       }
-      // Find marker by time part
-      var m = window._trackMarkersByTs[timePart];
-      if(m){
-        m.openPopup();
-        // Center map on the marker
-        try{ if(window.map) map.setView(m.getLatLng(), window.map.getZoom()); }catch(_){}
-      } else {
-        showRouteToast('Точка на карте не найдена для времени ' + timePart, 2000);
-      }
+    } catch(_){}
+    window._fdtFocusMarker = null;
+  };
+  window.focusMapAtFullTrackRow = function(row){
+    if(!row) return;
+    var lat = Number(row.latitude != null ? row.latitude : (row.LATITUDE != null ? row.LATITUDE : (row.lat != null ? row.lat : row.Latitude)));
+    var lon = Number(row.longitude != null ? row.longitude : (row.LONGITUDE != null ? row.LONGITUDE : (row.lon != null ? row.lon : (row.Longitude != null ? row.Longitude : row.lng))));
+    if(!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180){
+      try { showRouteToast('В строке нет корректных координат', 2000); } catch(_){}
+      return;
+    }
+    // Скролл к карте
+    var mapEl = document.getElementById('map');
+    if(mapEl) mapEl.scrollIntoView({behavior:'smooth', block:'center'});
+    if(!window.map) return;
+    // Предыдущая метка исчезает
+    try { window.clearFullTrackFocusMarker(); } catch(_){}
+    var wdate = row.wdate || row.WDATE || row.date || row.Date || row.ts || '';
+    var speed = (row.speed != null ? row.speed : (row.SPEED != null ? row.SPEED : row.Speed));
+    var popupHtml = '<b>' + (wdate || 'Точка') + '</b>' +
+      (speed != null && speed !== '' ? '<br>Скорость: ' + speed + ' км/ч' : '') +
+      '<br>' + lat.toFixed(6) + ', ' + lon.toFixed(6);
+    var marker = L.circleMarker([lat, lon], {
+      radius: 8, color: '#ff2d00', weight: 2, fillColor: '#ff2d00', fillOpacity: 0.85
+    });
+    try { marker.bindPopup(popupHtml); } catch(_){}
+    try {
+      if (typeof trackLayerGroup !== 'undefined' && trackLayerGroup) marker.addTo(trackLayerGroup);
+      else marker.addTo(map);
+    } catch(_){ return; }
+    window._fdtFocusMarker = marker;
+    try { map.setView([lat, lon], Math.max(map.getZoom(), 15)); } catch(_){}
+    try { marker.openPopup(); } catch(_){}
   };
   // Focus full device track table at the given timestamp (string). Highlights matching row(s).
   window.focusFullDeviceTrackAtTimestamp = function(tsString){

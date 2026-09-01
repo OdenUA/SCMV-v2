@@ -3,6 +3,13 @@
 // To add a release, prepend a new object here. No other files need updating.
 window.CHANGELOG = [
   {
+    version: '1.0.6',
+    date: '2026-09-01',
+    items: [
+      'Правый клик по карте теперь открывает собственное контекстное меню вместо стандартного меню браузера.
+    ]
+  },
+  {
     version: '1.0.5',
     date: '2026-08-06',
     items: [

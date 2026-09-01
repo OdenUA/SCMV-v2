@@ -165,6 +165,11 @@
         } catch(e) {}
       }
 
+      // Clear Full Device Track focus marker (клик по строке таблицы)
+      try {
+        if (typeof window.clearFullTrackFocusMarker === 'function') window.clearFullTrackFocusMarker();
+      } catch(e) {}
+
       // 4. Full clear of Leaflet layer groups
       if (trackLayerGroup) {
         try {
