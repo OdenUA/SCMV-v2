@@ -20,6 +20,25 @@ function syncMobileDateFromOriginal(targetId){
 
 var DATE_LOCK_KEY = 'dateLockEnabled';
 
+// Закрытие нативного календаря (date / datetime-local) сразу после выбора даты.
+// Изменение значения из попапа календаря приходит без keydown, поэтому
+// ручной ввод с клавиатуры не приводит к закрытию.
+function bindCalendarAutoClose(input){
+  if(!input || input.dataset.calAutoCloseBound) return;
+  input.dataset.calAutoCloseBound = '1';
+  var lastKeyTime = 0;
+  input.addEventListener('keydown', function(){
+    lastKeyTime = Date.now();
+  });
+  input.addEventListener('input', function(){
+    if(Date.now() - lastKeyTime < 500) return; // ручной ввод
+    if(typeof input.hidePicker === 'function'){
+      try{ input.hidePicker(); }catch(e){}
+    }
+    try{ input.blur(); }catch(e){}
+  });
+}
+
 function initDateLock(){
   var lockBtn = document.getElementById('dateLockBtn');
   var from = document.getElementById('dateFrom');
@@ -972,6 +991,16 @@ function init() {
       }
       dateInput.addEventListener('change', syncToOriginal);
       timeInput.addEventListener('change', syncToOriginal);
+    });
+  })();
+
+  // Автозакрытие календаря после выбора даты (десктопные и мобильные поля)
+  (function initCalendarAutoClose(){
+    bindCalendarAutoClose(document.getElementById('dateFrom'));
+    bindCalendarAutoClose(document.getElementById('dateTo'));
+    var mobileDates = document.querySelectorAll('.mobile-date');
+    Array.prototype.forEach.call(mobileDates, function(inp){
+      bindCalendarAutoClose(inp);
     });
   })();
 
@@ -1960,6 +1989,11 @@ function ensureVehicleOverlay() {
     }
   if (showSearchInput) showSearchInput.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
   if (showResetBtn) showResetBtn.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
+  // Кнопка «Добавить» видна только в режиме Device List
+  try {
+    var vehicleAddBtnEl = document.getElementById('vehicleAddBtn');
+    if (vehicleAddBtnEl) vehicleAddBtnEl.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
+  } catch (e) {}
   try {
     var exportBtnShowEl = document.getElementById('exportVehicleXlsBtnShow');
     if (exportBtnShowEl) exportBtnShowEl.style.display = (vehicleOverlayMode === 'show') ? '' : 'none';
