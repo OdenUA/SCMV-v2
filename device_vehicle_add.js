@@ -216,12 +216,12 @@
 
   // ---------- Очередь сохранения ----------
 
-  function setStatus(item, text, isErr) {
+  function setStatus(item, text, mode) {
     var td = item.tr.querySelector('.dva-status');
     if (td) td.textContent = text;
     item.tr.classList.remove('dva-row-error', 'dva-row-ok');
-    if (isErr) item.tr.classList.add('dva-row-error');
-    else if (text === 'готово') item.tr.classList.add('dva-row-ok');
+    if (mode === 'err') item.tr.classList.add('dva-row-error');
+    else if (mode === 'ok') item.tr.classList.add('dva-row-ok');
   }
 
   function updateSummary() {
@@ -299,7 +299,7 @@
       if (isEmptyRow(item)) { setStatus(item, '—'); return; }
       var err = validate(item, items);
       if (err === 'выберите филиал' && item.tr.dataset.fleetError) err = 'филиал не найден';
-      if (err) setStatus(item, err, true);
+      if (err) setStatus(item, err, 'err');
       else setStatus(item, '—');
     });
   }
@@ -310,7 +310,7 @@
     queue = allItems.filter(function (item) {
       if (isEmptyRow(item)) { setStatus(item, '—'); return false; } // пустые строки молча пропускаем
       var err = validate(item, allItems);
-      if (err) { setStatus(item, err, true); return false; }
+      if (err) { setStatus(item, err, 'err'); return false; }
       return true;
     });
     if (!queue.length) { showRouteToast('Нет корректных строк для сохранения', 2500); return; }
@@ -324,7 +324,7 @@
   function nextRow() {
     if (!queue.length) { finishSave(); return; }
     var item = queue.shift();
-    current = { item: item, phase: 'devadd', devId: null, vehId: null, timer: null };
+    current = { item: item, phase: 'devadd', devId: null, vehId: null, timer: null, spins: 0 };
     setStatus(item, 'создание устройства…');
     armTimer();
     dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd' });
@@ -340,7 +340,7 @@
   function failCurrent(errText) {
     if (!current) return;
     clearTimeout(current.timer);
-    setStatus(current.item, 'ошибка: ' + errText, true);
+    setStatus(current.item, 'ошибка: ' + errText, 'err');
     stats.fail++;
     updateSummary();
     current = null;
@@ -353,50 +353,119 @@
     return null;
   }
 
+  var MAX_SPINS = 100; // предел прокрутки счётчиков id при синхронизации
+
+  function respRowId(data) {
+    var row = data.res && data.res[0] && data.res[0].f && data.res[0].f[0];
+    return row && row.id != null ? Number(row.id) : null;
+  }
+
+  function saveDevice() {
+    var item = current.item;
+    current.phase = 'devsave';
+    setStatus(item, 'запись устройства…');
+    armTimer();
+    var devCols = {
+      id: String(current.devId),
+      imei: item.imei, iccid: item.iccid, phone: item.phone,
+      workstatus: DEV_DEFAULTS.workstatus, debug: DEV_DEFAULTS.debug,
+      proto: item.proto || DEV_DEFAULTS.proto, maxinactive: DEV_DEFAULTS.maxinactive,
+      periodicaltime: DEV_DEFAULTS.periodicaltime, betweentimeout: DEV_DEFAULTS.betweentimeout
+    };
+    dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowsave', cols: devCols });
+  }
+
+  function saveVehicle() {
+    var item = current.item;
+    current.phase = 'vehsave';
+    setStatus(item, 'запись ТС…');
+    armTimer();
+    var vehCols = {
+      id: String(current.vehId),
+      number: item.number || item.imei,
+      brand: String(item.brand), model: String(item.model),
+      link: VEH_DEFAULTS.link, notes: item.notes,
+      fleet: String(item.fleet),
+      deviceid: String(current.devId) // автопривязка к устройству (id совпадают)
+    };
+    dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowsave', cols: vehCols });
+  }
+
   function stepResponse(data) {
     var item = current.item;
     var err = checkErr(data);
     if (err) { failCurrent(err); return; }
 
     if (current.phase === 'devadd') {
-      var devRow = data.res && data.res[0] && data.res[0].f && data.res[0].f[0];
-      if (!devRow || devRow.id == null) { failCurrent('сервер не вернул id устройства'); return; }
-      current.devId = devRow.id;
-      current.phase = 'devsave';
-      setStatus(item, 'запись устройства…');
-      armTimer();
-      var devCols = {
-        id: String(current.devId),
-        imei: item.imei, iccid: item.iccid, phone: item.phone,
-        workstatus: DEV_DEFAULTS.workstatus, debug: DEV_DEFAULTS.debug,
-        proto: item.proto || DEV_DEFAULTS.proto, maxinactive: DEV_DEFAULTS.maxinactive,
-        periodicaltime: DEV_DEFAULTS.periodicaltime, betweentimeout: DEV_DEFAULTS.betweentimeout
-      };
-      dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowsave', cols: devCols });
-    } else if (current.phase === 'devsave') {
+      var devId = respRowId(data);
+      if (devId == null) { failCurrent('сервер не вернул id устройства'); return; }
+      current.devId = devId;
       current.phase = 'vehadd';
       setStatus(item, 'создание ТС…');
       armTimer();
       dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowadd' });
-    } else if (current.phase === 'vehadd') {
-      var vehRow = data.res && data.res[0] && data.res[0].f && data.res[0].f[0];
-      if (!vehRow || vehRow.id == null) { failCurrent('сервер не вернул id транспорта'); return; }
-      current.vehId = vehRow.id; // обычно совпадает с devId; если нет — используем возвращённый
-      current.phase = 'vehsave';
-      setStatus(item, 'запись ТС…');
+    } else if (current.phase === 'vehadd' || current.phase === 'vehspin') {
+      var vehId = respRowId(data);
+      if (vehId == null) { failCurrent('сервер не вернул id транспорта'); return; }
+      current.vehId = vehId;
+      if (vehId === current.devId) {
+        saveDevice(); // id совпали — сохраняем устройство, затем ТС
+      } else if (vehId < current.devId) {
+        // счётчик транспорта отстал: прокручиваем rowadd (не персистится), пока не догонит
+        if (++current.spins > MAX_SPINS) { failCurrent('не удалось синхронизировать id (транспорт ' + vehId + ' < устройство ' + current.devId + ')'); return; }
+        current.phase = 'vehspin';
+        setStatus(item, 'синхронизация id… (ТС ' + vehId + ' → ' + current.devId + ')');
+        armTimer();
+        dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowadd' });
+      } else {
+        // счётчик транспорта убежал вперёд: удаляем созданное устройство
+        // и прокручиваем счётчик устройств до id транспорта.
+        // ВАЖНО: удаляем через Vehicle Edit Distribution — Device Edit/rowdel не удаляет
+        // строку из общей таблицы объектов, иначе в Vehicle Show остаются «призраки»
+        current.phase = 'devdel';
+        setStatus(item, 'синхронизация id… (устройство ' + current.devId + ' → ' + vehId + ')');
+        armTimer();
+        dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowdel', cols: { id: String(current.devId) } });
+      }
+    } else if (current.phase === 'devdel') {
+      // VED rowdel ответил — теперь удаляем детали устройства через Device Edit
+      current.phase = 'devdel2';
       armTimer();
-      var vehCols = {
-        id: String(current.vehId),
-        number: item.number || item.imei,
-        brand: String(item.brand), model: String(item.model),
-        link: VEH_DEFAULTS.link, notes: item.notes,
-        fleet: String(item.fleet),
-        deviceid: String(current.devId) // автопривязка к устройству
-      };
-      dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowsave', cols: vehCols });
+      dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowdel', cols: { id: String(current.devId) } });
+    } else if (current.phase === 'devdel2') {
+      current.phase = 'devspin';
+      armTimer();
+      dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd' });
+    } else if (current.phase === 'devspin') {
+      var spinId = respRowId(data);
+      if (spinId == null) { failCurrent('сервер не вернул id устройства'); return; }
+      if (spinId === current.vehId) {
+        current.devId = spinId;
+        saveDevice();
+      } else if (spinId < current.vehId) {
+        if (++current.spins > MAX_SPINS) { failCurrent('не удалось синхронизировать id (устройство ' + spinId + ' < транспорт ' + current.vehId + ')'); return; }
+        current.phase = 'devspindel';
+        current.spinDelId = spinId;
+        armTimer();
+        // промежуточную строку удаляем из ОБЕИХ таблиц: VED (объекты) + Device Edit (детали)
+        dvaSend({ name: 'Vehicle Edit Distribution', type: 'etbl', mid: 2, act: 'rowdel', cols: { id: String(spinId) } });
+      } else {
+        failCurrent('счётчик устройств перескочил id транспорта (' + spinId + ' > ' + current.vehId + ')');
+      }
+    } else if (current.phase === 'devspindel') {
+      // VED rowdel ответил — удаляем детали устройства через Device Edit
+      current.phase = 'devspindel2';
+      armTimer();
+      dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowdel', cols: { id: String(current.spinDelId) } });
+    } else if (current.phase === 'devspindel2') {
+      current.phase = 'devspin';
+      armTimer();
+      dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowadd' });
+    } else if (current.phase === 'devsave') {
+      saveVehicle();
     } else if (current.phase === 'vehsave') {
       clearTimeout(current.timer);
-      setStatus(item, 'готово (id ' + current.devId + ')');
+      setStatus(item, 'Сохранено в БД (id ' + current.devId + ')', 'ok');
       stats.ok++;
       // регистрируем созданное устройство в локальном кэше уникальности
       if (existingDevices) {
@@ -453,10 +522,14 @@
       }
 
       if (!saving || !current) return false;
-      if (data.name === 'Device Edit' && data.act === 'rowadd' && current.phase === 'devadd') { stepResponse(data); return true; }
-      if (data.name === 'Device Edit' && data.act === 'rowsave' && current.phase === 'devsave') { stepResponse(data); return true; }
-      if (data.name === 'Vehicle Edit Distribution' && data.act === 'rowadd' && current.phase === 'vehadd') { stepResponse(data); return true; }
-      if (data.name === 'Vehicle Edit Distribution' && data.act === 'rowsave' && current.phase === 'vehsave') { stepResponse(data); return true; }
+      var p = current.phase;
+      if (data.name === 'Device Edit' && data.act === 'rowadd' && (p === 'devadd' || p === 'devspin')) { stepResponse(data); return true; }
+      if (data.name === 'Device Edit' && data.act === 'rowsave' && p === 'devsave') { stepResponse(data); return true; }
+      if (data.name === 'Device Edit' && data.act === 'rowdel' && (p === 'devdel2' || p === 'devspindel2')) { stepResponse(data); return true; }
+      if (data.name === 'Vehicle Edit Distribution' && data.act === 'rowadd' && (p === 'vehadd' || p === 'vehspin')) { stepResponse(data); return true; }
+      if (data.name === 'Vehicle Edit Distribution' && data.act === 'rowsave' && p === 'vehsave') { stepResponse(data); return true; }
+      // промежуточные строки при синхронизации id удаляются из обеих таблиц (см. stepResponse)
+      if (data.name === 'Vehicle Edit Distribution' && data.act === 'rowdel' && (p === 'devdel' || p === 'devspindel')) { stepResponse(data); return true; }
       return false;
     } catch (e) {
       console.warn('dva handler error', e);

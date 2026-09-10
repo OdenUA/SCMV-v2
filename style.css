@@ -1171,8 +1171,13 @@ tr.vt-spacer td {
   color: #cf222e;
 }
 
+.dva-table tr.dva-row-ok {
+  background: #e6f4ea;
+}
+
 .dva-table tr.dva-row-ok .dva-status {
   color: #1a7f37;
+  font-weight: 600;
 }
 
 .dva-actions {
