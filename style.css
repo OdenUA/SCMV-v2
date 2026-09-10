@@ -1087,3 +1087,104 @@ tr.vt-spacer td {
     font-size: 11px;
   }
 }
+
+/* Device+Vehicle Add modal (device_vehicle_add.js) */
+.dva-modal { z-index: 10060; }
+
+.dva-modal-content {
+  width: 90%;
+  max-width: 1400px;
+  margin: 3% auto;
+}
+
+.dva-paste-block {
+  margin-bottom: 10px;
+}
+
+.dva-paste-block textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.dva-paste-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+}
+
+.dva-table-wrap {
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.dva-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dva-table th,
+.dva-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #e5e9ee;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dva-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  z-index: 2;
+}
+
+.dva-table input,
+.dva-table select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 5px;
+  font-size: 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+}
+
+.dva-table .dva-status {
+  color: #57606a;
+  font-size: 11px;
+  white-space: normal;
+  min-width: 110px;
+}
+
+.dva-table tr.dva-row-error {
+  background: #fff1f1;
+}
+
+.dva-table tr.dva-row-error .dva-status {
+  color: #cf222e;
+}
+
+.dva-table tr.dva-row-ok .dva-status {
+  color: #1a7f37;
+}
+
+.dva-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.dva-summary {
+  margin-right: auto;
+  font-size: 12px;
+  color: #57606a;
+}

@@ -11,4 +11,8 @@ Thumbs.db
 /examples/
 AGENTS.md
 .vscode/
+
+# Локальная CDP-инфраструктура для тестирования (cdp_shots содержит перехваченный трафик с учётными данными)
+cdp_server.js
+cdp_shots/
  

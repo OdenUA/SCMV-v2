@@ -572,6 +572,45 @@
       </div>
     </div>
 
+    <!-- Device+Vehicle Add modal -->
+    <div id="deviceVehicleAddModal" class="modal dva-modal" data-hidden>
+      <div class="modal-content dva-modal-content">
+        <span id="dvaCloseBtn" class="close-button">&times;</span>
+        <h2>Добавление устройства и ТС</h2>
+        <div class="dva-paste-block">
+          <textarea id="dvaPasteArea" rows="4" placeholder="Вставьте сюда строки из Excel: IMEI, телефон, ICCID, филиал (порядок колонок любой). Например: 354002390154670  676927901  8938003993053238735  НФСП Павлоград"></textarea>
+          <div class="dva-paste-actions">
+            <button id="dvaParseBtn" class="btn" type="button">Загрузить из текста</button>
+            <button id="dvaAddRowBtn" class="btn btn-secondary" type="button">Добавить строку</button>
+          </div>
+        </div>
+        <div class="dva-table-wrap">
+          <table id="dvaTable" class="dva-table">
+            <thead>
+              <tr>
+                <th>IMEI</th>
+                <th>ICCID</th>
+                <th>Телефон</th>
+                <th>Number</th>
+                <th>Brand</th>
+                <th>Model</th>
+                <th>Филиал</th>
+                <th>Notes</th>
+                <th>Статус</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="dvaTableBody"></tbody>
+          </table>
+        </div>
+        <div class="dva-actions">
+          <span id="dvaSummary" class="dva-summary"></span>
+          <button id="dvaSaveBtn" class="btn btn-success" type="button">Сохранить всё</button>
+          <button id="dvaCancelBtn" class="btn btn-secondary" type="button">Отмена</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modular classic scripts (order matters) -->
     <script src="globals.js"></script>
     <script src="utils.js"></script>
@@ -593,6 +632,7 @@
   <script src="audit.js"></script>
   <script src="reports.js"></script>
   <script src="anomalies_cleanup.js"></script>
+  <script src="device_vehicle_add.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         initMap();
@@ -609,7 +649,7 @@
           <button id="closeVehicleOverlayBtn" class="btn btn-danger">
             Закрыть
           </button>
-          <button id="vehicleAddBtn" class="btn btn-primary" title="Добавить устройство" style="margin-left:8px;display:none;">Add Vehicle</button>
+          <button id="vehicleAddBtn" class="btn btn-primary" title="Добавить устройство и ТС" style="margin-left:8px;">Добавить ТС</button>
           <!-- Device List global search (visible only in Device List mode) -->
           <div style="margin-left:12px; display:inline-block; vertical-align:middle;">
             <input id="vehicleShowSearchInput" type="text" placeholder="Поиск по Device List..." style="display:none; padding:4px 6px;" />

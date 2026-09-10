@@ -88,6 +88,8 @@ function connect() {
   try { if(window.__handleAuditResponse && data && (data.name === 'Audit' || data.name === 'User Admin Edit') && window.__handleAuditResponse(data)) { return; } } catch(e){ console.warn('Audit handler error', e); }
   // Report response handler (reports.js will register this)
   try { if(window.__handleReportResponse && window.__handleReportResponse(data)) { return; } } catch(e){ console.warn('Report handler error', e); }
+  // Device+Vehicle add wizard (device_vehicle_add.js)
+  try { if(window.__handleDeviceVehicleAdd && window.__handleDeviceVehicleAdd(data)) { return; } } catch(e){ console.warn('DeviceVehicleAdd handler error', e); }
     if (data.name === "login" && data.res && data.res[0]) {
       var r = data.res[0];
       if (r.uid) {
@@ -175,7 +177,9 @@ function connect() {
           }
         } catch(e) {}
       }
-      if (packet.f && Array.isArray(packet.f)) {
+      // Только setup/filter/reinit несут строки таблицы; у rowadd/rowdel в res[0].f
+      // лежит служебный ответ (новая строка / {t,v}), его нельзя применять как данные
+      if (packet.f && Array.isArray(packet.f) && (data.act === 'setup' || data.act === 'filter' || data.act === 'reinit')) {
         if (data.name === 'Vehicle Edit Distribution') {
           // Edit Distribution explicitly targets the edit view — always apply
           vehicleShowData = packet.f.slice();
