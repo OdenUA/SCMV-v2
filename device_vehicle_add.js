@@ -132,6 +132,7 @@
     tdInput(data.imei, '130px', 'dva-imei');
     tdInput(data.iccid, '170px', 'dva-iccid');
     tdInput(data.phone, '90px', 'dva-phone');
+    tdInput(data.proto != null ? data.proto : DEV_DEFAULTS.proto, '55px', 'dva-proto');
     tdInput(data.number != null ? data.number : (data.imei || ''), '130px', 'dva-number');
     tdSelect(refs.brands, data.brand != null ? data.brand : VEH_DEFAULTS.brand);
     tdSelect(refs.models, data.model != null ? data.model : VEH_DEFAULTS.model);
@@ -242,11 +243,12 @@
         imei: inputs[0].value.replace(/\s+/g, ''),
         iccid: inputs[1].value.replace(/\s+/g, ''),
         phone: inputs[2].value.replace(/\s+/g, ''),
-        number: inputs[3].value.replace(/^\s+|\s+$/g, ''),
+        proto: inputs[3].value.replace(/\s+/g, ''),
+        number: inputs[4].value.replace(/^\s+|\s+$/g, ''),
         brand: selects[0].value,
         model: selects[1].value,
         fleet: selects[2].value,
-        notes: inputs[4].value.replace(/^\s+|\s+$/g, '')
+        notes: inputs[5].value.replace(/^\s+|\s+$/g, '')
       };
       rows.push(item);
     }
@@ -367,7 +369,7 @@
         id: String(current.devId),
         imei: item.imei, iccid: item.iccid, phone: item.phone,
         workstatus: DEV_DEFAULTS.workstatus, debug: DEV_DEFAULTS.debug,
-        proto: DEV_DEFAULTS.proto, maxinactive: DEV_DEFAULTS.maxinactive,
+        proto: item.proto || DEV_DEFAULTS.proto, maxinactive: DEV_DEFAULTS.maxinactive,
         periodicaltime: DEV_DEFAULTS.periodicaltime, betweentimeout: DEV_DEFAULTS.betweentimeout
       };
       dvaSend({ name: 'Device Edit', type: 'etbl', mid: 2, act: 'rowsave', cols: devCols });
