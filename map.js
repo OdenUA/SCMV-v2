@@ -1,6 +1,18 @@
 // Map initialization & line width
 var startIcon = L.divIcon({className:'custom-div-icon', html:"<div style='background-color:#198754;' class='marker-pin'></div><span style='font-size: 24px;'>🟢</span>", iconSize:[30,42], iconAnchor:[15,42]});
 var endIcon = L.divIcon({className:'custom-div-icon', html:"<div style='background-color:#dc3545;' class='marker-pin'></div><span style='font-size: 24px;'>🏁</span>", iconSize:[30,42], iconAnchor:[15,42]});
+// Заменяет подписи на карте на украинские: вместо "name:latin name:nonlatin" ("Київ Kyiv") берётся name:uk
+function applyUkrainianLabels(glMap){
+  try{
+    var layers = glMap.getStyle().layers;
+    for (var i = 0; i < layers.length; i++){
+      var tf = layers[i].layout && layers[i].layout['text-field'];
+      if (tf !== undefined && JSON.stringify(tf).indexOf('name:latin') !== -1){
+        glMap.setLayoutProperty(layers[i].id, 'text-field', ['coalesce', ['get','name:uk'], ['get','name']]);
+      }
+    }
+  }catch(e){ console.warn('Не удалось установить украинские подписи:', e); }
+}
 function initMap(){
   if (map) return;
   map = L.map('map').setView([49.33,28.35],7);
@@ -9,6 +21,13 @@ function initMap(){
   var maplibreLayer = L.maplibreGL({
     style: 'https://tiles.openfreemap.org/styles/liberty',
     attribution: '© OpenStreetMap contributors &copy; <a href="https://openfreemap.org">OpenFreeMap</a>'
+  });
+  // При каждом добавлении слоя на карту (MapLibre создаёт/пересоздаёт GL-экземпляр) ставим украинские подписи
+  maplibreLayer.on('add', function(){
+    var glMap = maplibreLayer.getMaplibreMap();
+    if (!glMap) return;
+    if (glMap.loaded && glMap.loaded()) applyUkrainianLabels(glMap);
+    else glMap.once('load', function(){ applyUkrainianLabels(glMap); });
   });
 
   osmLayer.addTo(map); // default
