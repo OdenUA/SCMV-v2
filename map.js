@@ -6,13 +6,16 @@ function initMap(){
   map = L.map('map').setView([49.33,28.35],7);
   
   var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'});
-  var cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'});
-  
+  var maplibreLayer = L.maplibreGL({
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    attribution: '© OpenStreetMap contributors &copy; <a href="https://openfreemap.org">OpenFreeMap</a>'
+  });
+
   osmLayer.addTo(map); // default
 
   var baseMaps = {
-      "OSM (Старая)": osmLayer,
-      "CartoDB (Новая)": cartoLayer
+      "OSM (растровая)": osmLayer,
+      "MapLibre (векторная)": maplibreLayer
   };
   L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map);
 
