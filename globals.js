@@ -59,12 +59,9 @@ var deviceAlarmThead = document.getElementById('deviceAlarmThead');
 var deviceAlarmTbody = document.getElementById('deviceAlarmTbody');
 var deviceLogThead = document.getElementById('deviceLogThead');
 var deviceLogTbody = document.getElementById('deviceLogTbody');
-// Login controls
-var loginUserInput = document.getElementById('loginUser');
-var loginPasswordInput = document.getElementById('loginPassword');
-var loginBtn = document.getElementById('loginBtn');
+// Login controls (вход — на отдельной странице login.html)
+var logoutBtn = document.getElementById('logoutBtn');
 var loginInfo = document.getElementById('loginInfo');
-var rememberCheckbox = document.getElementById('rememberCredentials');
 // Auth state
 var authLoggedIn = false;
 var authUid = null;

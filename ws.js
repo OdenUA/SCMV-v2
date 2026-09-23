@@ -29,12 +29,11 @@ function connect() {
     updateStatus('Соединение установлено.', 'green', 4000);
     requestVehicleSelectMin();
     try {
-      if (!authLoggedIn && localStorage.getItem("dt_remember") === "1") {
+      // Автологин сохранёнными учётными данными (их ставит login.html при входе)
+      if (!authLoggedIn) {
         var u = localStorage.getItem("dt_user") || "";
         var p = localStorage.getItem("dt_pwd") || "";
         if (u && p) {
-          if (loginUserInput) loginUserInput.value = u;
-          if (loginPasswordInput) loginPasswordInput.value = p;
           sendLogin();
         }
       }
@@ -95,8 +94,8 @@ function connect() {
       if (r.uid) {
         setAuthInfo(
           r.uid,
-          loginUserInput ? loginUserInput.value : "",
-          loginPasswordInput ? loginPasswordInput.value : ""
+          localStorage.getItem("dt_user") || "",
+          localStorage.getItem("dt_pwd") || ""
         );
   // show Online status via status dot
   try { var dot = document.getElementById('loginStatusDot'); if(dot){ dot.classList.remove('status-offline'); dot.classList.add('status-online'); dot.title = 'Online'; } }catch(_){}
@@ -724,8 +723,8 @@ function buildLoginRequest() {
     type: "login",
     mid: 0,
     act: "setup",
-    usr: loginUserInput ? loginUserInput.value : "",
-    pwd: loginPasswordInput ? loginPasswordInput.value : "",
+    usr: authUser || localStorage.getItem("dt_user") || "",
+    pwd: authPwd || localStorage.getItem("dt_pwd") || "",
     uid: 0,
     lang: "en",
   };

@@ -204,14 +204,31 @@ function escapeHtml(s){
 }
 // UI interactions (login, vehicle overlay, tables, directions toggle)
 function init() {
-  (function preloadRemembered() {
-      if (localStorage.getItem("dt_remember") === "1") {
-        var u = localStorage.getItem("dt_user") || "";
-        var p = localStorage.getItem("dt_pwd") || "";
-        if (loginUserInput) loginUserInput.value = u;
-        if (loginPasswordInput) loginPasswordInput.value = p;
-        if (rememberCheckbox) rememberCheckbox.checked = true;
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      performLogout();
+    });
+  }
+
+  // Боковая панель: сворачивание до иконок (состояние запоминается)
+  (function initSideNav() {
+    var toggle = document.getElementById('sideNavToggle');
+    try {
+      if (localStorage.getItem('dt_side_nav_collapsed') === '1') {
+        document.body.classList.add('side-nav-collapsed');
       }
+    } catch (e) {}
+    if (toggle) {
+      toggle.addEventListener('click', function (e) {
+        e.preventDefault();
+        var collapsed = document.body.classList.toggle('side-nav-collapsed');
+        try {
+          if (collapsed) localStorage.setItem('dt_side_nav_collapsed', '1');
+          else localStorage.removeItem('dt_side_nav_collapsed');
+        } catch (e) {}
+      });
+    }
   })();
 
   if (document.getElementById('editDeviceBtn')) {
@@ -220,32 +237,6 @@ function init() {
       if (deviceEditOverlay) {
         deviceEditOverlay.style.display = 'block';
         requestDeviceEdit();
-      }
-    });
-  }
-
-  if (loginBtn) {
-    loginBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      if (!authLoggedIn) {
-        sendLogin();
-      } else {
-        // Perform logout
-        authLoggedIn = false;
-        authUid = null;
-        authUser = null;
-        authPwd = null;
-          localStorage.removeItem("dt_remember");
-          localStorage.removeItem("dt_user");
-          localStorage.removeItem("dt_pwd");
-        var dot = document.getElementById('loginStatusDot'); if(dot){ dot.classList.remove('status-online'); dot.classList.add('status-offline'); dot.title = 'Offline'; }
-        // Clear sensitive dependent UI pieces if needed
-          if (tableHead) tableHead.innerHTML = "";
-          if (tableBody) tableBody.innerHTML = "";
-        // Reset button back to login state
-        loginBtn.textContent = "Login";
-        loginBtn.classList.remove("btn-success");
-        loginBtn.classList.add("btn-danger");
       }
     });
   }
@@ -1087,6 +1078,22 @@ function initChangelogModal(){
   }catch(e){}
 }
 
+// Выход из аккаунта: сброс состояния, очистка сессии и возврат на страницу входа
+function performLogout() {
+  try {
+    if (typeof resetAuthState === 'function') resetAuthState(false);
+    localStorage.removeItem("dt_session");
+    localStorage.removeItem("dt_remember");
+    localStorage.removeItem("dt_user");
+    localStorage.removeItem("dt_pwd");
+    if (tableHead) tableHead.innerHTML = "";
+    if (tableBody) tableBody.innerHTML = "";
+  } catch (e) {
+    console.warn('Logout failed', e);
+  }
+  window.location.replace("login.html");
+}
+
 function setAuthInfo(uid, user, pwd) {
   authUid = uid;
   authUser = user;
@@ -1094,25 +1101,16 @@ function setAuthInfo(uid, user, pwd) {
   authLoggedIn = true;
   authLoginInProgress = false;
   authLastLoginFailed = false;
-  if (rememberCheckbox && rememberCheckbox.checked) {
-      localStorage.setItem("dt_remember", "1");
-      localStorage.setItem("dt_user", user || "");
-      localStorage.setItem("dt_pwd", pwd || "");
-  } else {
-      localStorage.removeItem("dt_remember");
-      localStorage.removeItem("dt_user");
-      localStorage.removeItem("dt_pwd");
-  }
+  // Учётные данные в localStorage уже сохранены на странице входа (login.html)
   if (loginInfo) {
     // Do not display numeric UID on the page; show username (if available) or keep blank
     loginInfo.textContent = user ? String(user) : '';
     loginInfo.style.color = "#198754";
   }
-  if (loginBtn) {
-    loginBtn.disabled = false;
-    loginBtn.textContent = "Logout";
-    loginBtn.classList.remove("btn-danger");
-    loginBtn.classList.add("btn-success");
+  if (logoutBtn) {
+    logoutBtn.disabled = false;
+    logoutBtn.classList.remove("btn-danger");
+    logoutBtn.classList.add("btn-success");
   }
 }
 
@@ -1131,11 +1129,10 @@ function resetAuthState(clearRemember) {
     loginInfo.textContent = '';
     loginInfo.style.color = '';
   }
-  if (loginBtn) {
-    loginBtn.disabled = false;
-    loginBtn.textContent = "Login";
-    loginBtn.classList.remove("btn-success");
-    loginBtn.classList.add("btn-danger");
+  if (logoutBtn) {
+    logoutBtn.disabled = false;
+    logoutBtn.classList.remove("btn-success");
+    logoutBtn.classList.add("btn-danger");
   }
   var dot = document.getElementById('loginStatusDot');
   if (dot) {
@@ -1387,7 +1384,6 @@ function renderVehicleTable() {
   // Device List button: open vehicle overlay and request full Vehicle Show
   var deviceListBtn = document.getElementById('deviceListBtn');
   if (deviceListBtn && !deviceListBtn.dataset.bound) {
-    deviceListBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>Device List';
     deviceListBtn.addEventListener('click', function(){
       // set overlay mode to 'show' so render uses vehicleShowData
       try{ vehicleOverlayMode = 'show'; } catch(_){}
@@ -2550,7 +2546,6 @@ function renderDeviceStatusTable(){
   // Edit Vehicle button: send Vehicle Edit Distribution setup request
   var editVehicleBtn = document.getElementById('editVehicleBtn');
   if (editVehicleBtn && !editVehicleBtn.dataset.bound) {
-    editVehicleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle; margin-right:4px;"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Edit Vehicle';
     editVehicleBtn.addEventListener('click', function(){
       if (!authLoggedIn) { showRouteToast('⚠ Сначала выполните вход'); return; }
       var req = {

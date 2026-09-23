@@ -14,7 +14,7 @@ button:hover { background-color: #0056b3; }
     position: relative; 
     height: 600px; /* Set initial height on the container */
     margin-bottom: 20px;
-    margin-left:40px;
+    margin-left:0;
     margin-right:40px;
 }
 #map { 
@@ -383,19 +383,40 @@ h2 {
 }
 
 /* --- Extracted styles from former inline attributes --- */
-.login-panel {display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap;font:14px/1.3 system-ui,sans-serif;}
+/* Left side navigation panel */
+.side-nav {position:fixed;left:0;top:0;bottom:0;width:220px;z-index:1500;display:flex;flex-direction:column;gap:6px;padding:12px 8px;background:#fff;border-right:1px solid #e3e7ee;box-shadow:2px 0 12px -6px rgba(0,0,0,.12);font:13px/1.3 system-ui,sans-serif;transition:width .25s ease;box-sizing:border-box;}
+.side-nav-header{display:flex;align-items:center;gap:8px;padding:2px 4px 10px;border-bottom:1px solid #eef1f5;margin-bottom:6px;min-height:34px;box-sizing:border-box;}
+.side-nav-header .status-dot{margin-left:0;flex:0 0 auto;}
+.side-nav-toggle{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:6px;background:transparent;color:#555;cursor:pointer;flex:0 0 auto;transition:background .15s;}
+.side-nav-toggle:hover{background:#eef2f7;color:#0d6efd;}
+.side-nav-toggle svg{transition:transform .25s ease;}
+.side-nav-user{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#198754;font-weight:600;font-size:13px;}
+.side-nav-menu{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;overflow-y:auto;overflow-x:hidden;}
+.side-nav-footer{margin-top:auto;padding-top:8px;border-top:1px solid #eef1f5;}
+.side-nav .side-nav-btn{display:flex;align-items:center;gap:10px;width:100%;background:transparent;color:#333;border:none;padding:9px 10px;border-radius:8px;text-align:left;font:600 13px/1 system-ui,sans-serif;transition:background .15s,color .15s;white-space:nowrap;}
+.side-nav .side-nav-btn:hover{background:#eef2f7;filter:none;color:#0d6efd;}
+.side-nav .side-nav-btn .btn-icon{margin-right:0;flex:0 0 auto;}
+.side-nav .side-nav-logout{color:#b02a37;}
+.side-nav .side-nav-logout:hover{background:#fdecec;color:#b02a37;}
+/* Collapsed: icons only */
+body.side-nav-collapsed .side-nav{width:56px;padding:12px 6px;}
+body.side-nav-collapsed .side-nav-header{flex-direction:column;gap:8px;padding:2px 0 10px;}
+body.side-nav-collapsed .side-nav-user{display:none;}
+body.side-nav-collapsed .side-nav-toggle svg{transform:rotate(180deg);}
+body.side-nav-collapsed .side-nav .side-nav-btn{justify-content:center;gap:0;padding:9px 0;}
+body.side-nav-collapsed .side-nav .side-nav-btn .btn-label{display:none;}
+/* Content shift to the right of the panel (minimal 8px gap) */
+body{margin-left:228px;transition:margin-left .25s ease;}
+body.side-nav-collapsed{margin-left:64px;}
 .version-link {font-size:12px;color:#6c757d;text-decoration:underline;cursor:pointer;white-space:nowrap;}
 .version-link:hover {color:#0d6efd;}
-.login-panel label {display:flex;flex-direction:column;font-size:12px;color:#555;margin:0;}
-.login-panel input[type=text],
-.login-panel input[type=password]{padding:4px 6px;border:1px solid #ced4da;border-radius:4px;min-width:160px;font:inherit;}
+/* removed: .login-panel label rule (panel moved to .side-nav) */
 
 /* Small status dot used in loginInfo */
 .status-dot{ width:12px; height:12px; vertical-align:middle; margin-left:8px; }
 .status-dot circle{ fill:#dc3545; stroke: rgba(0,0,0,0.06); stroke-width:0.5; }
 .status-online circle{ fill:#28a745; }
 .status-offline circle{ fill:#dc3545; }
-.login-panel .remember-wrap {display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-top:18px;}
 .btn {background:#0d6efd;color:#fff;border:none;padding:8px 14px;border-radius:4px;cursor:pointer;font-weight:600;font:13px/1 system-ui,sans-serif;transition:background .15s;}
 .btn:hover {filter:brightness(.94);}
 .btn.deactivated {background:#6c757d;}
@@ -814,14 +835,15 @@ tr.vt-spacer td {
     bottom: -8px;
   }
 
-  /* Login panel compact */
-  .login-panel {
-    gap: 6px;
-  }
-  .login-panel .btn {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
+
+  /* Side nav: icon rail on mobile */
+  .side-nav{width:56px;padding:12px 6px;}
+  .side-nav-header{flex-direction:column;gap:8px;padding:2px 0 10px;}
+  .side-nav-user{display:none;}
+  .side-nav-toggle{display:none;}
+  .side-nav .side-nav-btn{justify-content:center;gap:0;padding:9px 0;}
+  .side-nav .side-nav-btn .btn-label{display:none;}
+  body,body.side-nav-collapsed{margin-left:64px;}
 
   /* Mobile tabs */
   .mobile-tabs {

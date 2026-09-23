@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вход — Device Track</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f4f6f9;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      .login-card {
+        background: #fff;
+        border: 1px solid #e3e7ee;
+        border-radius: 10px;
+        padding: 28px 32px;
+        width: 320px;
+        box-sizing: border-box;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .login-card h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        text-align: center;
+      }
+      .login-card label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12px;
+        color: #555;
+      }
+      .login-card input[type="text"],
+      .login-card input[type="password"] {
+        padding: 6px 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font: inherit;
+      }
+      .login-card .remember {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+      }
+      .login-card .btn {
+        width: 100%;
+        padding: 9px;
+        font-size: 14px;
+      }
+      #loginMsg {
+        min-height: 18px;
+        font-size: 13px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <h1>Device Track</h1>
+      <label>
+        Логин
+        <input type="text" id="loginUser" value="" autocomplete="username" />
+      </label>
+      <label>
+        Пароль
+        <input type="password" id="loginPassword" value="" autocomplete="current-password" />
+      </label>
+      <label class="remember">
+        <input type="checkbox" id="rememberCredentials" />
+        Запомнить
+      </label>
+      <button id="loginBtn" class="btn">Войти</button>
+      <div id="loginMsg"></div>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        // Должен совпадать с wsUrl в globals.js
+        var wsUrl = "wss://scmv.vpngps.com:4445";
+        var socket = null;
+        var busy = false;
+        var navigating = false;
+
+        var userInput = document.getElementById("loginUser");
+        var pwdInput = document.getElementById("loginPassword");
+        var rememberCb = document.getElementById("rememberCredentials");
+        var btn = document.getElementById("loginBtn");
+        var msg = document.getElementById("loginMsg");
+
+        // Предзаполнение сохранённых учётных данных
+        try {
+          if (localStorage.getItem("dt_remember") === "1") {
+            userInput.value = localStorage.getItem("dt_user") || "";
+            pwdInput.value = localStorage.getItem("dt_pwd") || "";
+            rememberCb.checked = true;
+          }
+        } catch (e) {}
+
+        function showMsg(text, color) {
+          msg.textContent = text;
+          msg.style.color = color || "#555";
+        }
+
+        function setBusy(state) {
+          busy = state;
+          btn.disabled = state;
+          btn.textContent = state ? "Вход..." : "Войти";
+        }
+
+        function saveSession(user, pwd) {
+          try {
+            // Ключи используются index.html: dt_session — флаг активной сессии,
+            // dt_user/dt_pwd — для автоперелогина при обрыве соединения
+            localStorage.setItem("dt_session", "1");
+            localStorage.setItem("dt_user", user);
+            localStorage.setItem("dt_pwd", pwd);
+            if (rememberCb.checked) {
+              localStorage.setItem("dt_remember", "1");
+            } else {
+              localStorage.removeItem("dt_remember");
+            }
+          } catch (e) {}
+        }
+
+        function doLogin() {
+          if (busy) return;
+          var user = userInput.value.trim();
+          var pwd = pwdInput.value;
+          if (!user || !pwd) {
+            showMsg("Введите логин и пароль.", "#dc3545");
+            return;
+          }
+          setBusy(true);
+          showMsg("Подключение...", "#555");
+          try {
+            if (socket) {
+              try { socket.close(); } catch (e) {}
+            }
+          } catch (e) {}
+          socket = new WebSocket(wsUrl);
+          socket.onopen = function () {
+            showMsg("Отправка логина...", "#555");
+            socket.send(
+              JSON.stringify({
+                name: "login",
+                type: "login",
+                mid: 0,
+                act: "setup",
+                usr: user,
+                pwd: pwd,
+                uid: 0,
+                lang: "en",
+              })
+            );
+          };
+          socket.onmessage = function (event) {
+            var data;
+            try {
+              data = JSON.parse(event.data);
+            } catch (e) {
+              return;
+            }
+            if (data && data.name === "login" && data.res && data.res[0]) {
+              if (data.res[0].uid) {
+                navigating = true;
+                saveSession(user, pwd);
+                showMsg("Вход выполнен. Переход...", "#198754");
+                try {
+                  socket.close();
+                } catch (e) {}
+                window.location.replace("index.html");
+              } else {
+                setBusy(false);
+                showMsg("Ошибка входа. Проверьте логин/пароль.", "#dc3545");
+                try {
+                  socket.close();
+                } catch (e) {}
+              }
+            }
+          };
+          socket.onerror = function () {
+            setBusy(false);
+            showMsg("Нет соединения с сервером.", "#dc3545");
+          };
+          socket.onclose = function () {
+            if (busy) {
+              setBusy(false);
+              showMsg("Соединение с сервером закрыто.", "#dc3545");
+            }
+          };
+        }
+
+        btn.addEventListener("click", function (e) {
+          e.preventDefault();
+          doLogin();
+        });
+        [userInput, pwdInput].forEach(function (el) {
+          el.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              doLogin();
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
