@@ -3,6 +3,14 @@
 // To add a release, prepend a new object here. No other files need updating.
 window.CHANGELOG = [
   {
+    version: '1.0.9',
+    date: '2026-09-28',
+    items: [
+      'Таблицами с данными (Device Log и т.д.) добавлен интерактивный вертикальный разделитель. Его позиция запоминается и восстанавливается при следующем входе.',
+      'В таблице Full Device Track (setup) текст в ячейках больше не переносится на вторую строку — даты и время всегда в одну строку.',
+    ]
+  },
+  {
     version: '1.0.8',
     date: '2026-09-23',
     items: [

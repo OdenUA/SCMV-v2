@@ -127,6 +127,8 @@ th {
     position: sticky;
     top: 0;
     z-index: 1;
+    width: 1%; /* ширина колонки определяется данными (td), а не заголовком; текст заголовка переносится */
+    white-space: normal;
 }
 tr:nth-child(even) { background-color: #f9f9f9; }
 .parking-marker {
@@ -216,21 +218,51 @@ tr:nth-child(even) { background-color: #f9f9f9; }
 
 .main-content-wrapper {
     display: flex;
-    gap: 20px;
+    gap: 0; /* отступ между колонками создаёт разделитель .column-splitter */
     padding: 10px;
 }
+
+/* Запрет горизонтального переполнения страницы: при перетаскивании разделителя
+   или появлении вертикального скролла таблицы не должны выпирать за экран */
+html { scrollbar-gutter: stable; }
+body { overflow-x: hidden; overflow-x: clip; }
+
+/* Интерактивный вертикальный разделитель колонок таблиц */
+.column-splitter {
+    flex: 0 0 20px;
+    position: relative;
+    cursor: ew-resize;
+    user-select: none;
+    touch-action: none;
+}
+.column-splitter::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    background: #e2e5e9;
+    border: 1px solid #c4c9cf;
+    border-radius: 3px;
+}
+.column-splitter:hover::after { background: #b9c0c8; }
 
 .left-column {
     flex: 2; /* Занимает 2/3 ширины */
     display: flex;
     flex-direction: column;
+    min-width: 0; /* позволяет сжиматься уже содержимого (иначе появляется горизонтальный скролл страницы) */
 }
 
 .right-column {
     flex: 1; /* Занимает 1/3 ширины */
+    max-width: 520px; /* ограничение ширины — освобождённое место уходит левой колонке (Full Device Track) */
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-width: 0; /* позволяет разделителю сжимать колонку до нуля */
 }
 
 .table-container {
@@ -590,6 +622,9 @@ body.side-nav-collapsed{margin-left:64px;}
 /* Start/Stop Sum Result height limit */
 .sum-scroll{max-height:300px;overflow:auto;}
 
+/* Узкие таблицы Start/Stop — освобождённое место уходит колонке Full Device Track */
+.startstop-narrow{max-width:480px;width:100%;}
+
 /* Device Alarm highlighting classes (used by device_log.js) */
 .dalarm-danger { background: #f8d7da !important; color: #721c24 !important; }
 .dalarm-warning { background: #fff3cd !important; color: #856404 !important; }
@@ -623,6 +658,8 @@ body.side-nav-collapsed{margin-left:64px;}
 }
 
 /* Full Device Track interval highlighting */
+/* Текст в ячейках не переносится (wdate/sdate и др. остаются на одной строке) */
+#fullDeviceTrackTable td { white-space: nowrap; }
 .fdt-interval-type1 { background: #fff4d6 !important; }
 .fdt-interval-type2 { background: #e0f3ff !important; }
 
@@ -969,6 +1006,13 @@ tr.vt-spacer td {
   .right-column {
     flex: 1 1 100%;
     width: 100%;
+    max-width: none;
+  }
+  .startstop-narrow {
+    max-width: none;
+  }
+  .column-splitter {
+    display: none;
   }
 
   /* Device Alarm + Device Log stack vertically */

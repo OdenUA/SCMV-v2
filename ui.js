@@ -3171,3 +3171,71 @@ function renderDeviceEditTable() {
   });
   deviceEditTableBody.appendChild(frag);
 }
+
+// --- Интерактивный вертикальный разделитель между колонками таблиц ---
+(function attachColumnSplitter(){
+  var handle = document.getElementById('columnSplitter');
+  if(!handle) return;
+  var wrapper = handle.parentElement;
+  var left = wrapper && wrapper.querySelector('.left-column');
+  var right = wrapper && wrapper.querySelector('.right-column');
+  if(!left || !right) return;
+  var resizing = false;
+  var lastLeftW = 0;
+  var MIN_RIGHT = 240; /* минимальная ширина правой колонки */
+  function applyWidths(leftW, total){
+    if(leftW < 0) leftW = 0;
+    if(leftW > total - MIN_RIGHT) leftW = total - MIN_RIGHT;
+    if(leftW < 0) leftW = 0; /* если окно уже MIN_RIGHT — правая колонка вылезает за экран, левую просто обнуляем */
+    var rightW = total - leftW;
+    lastLeftW = leftW;
+    left.style.flex = '0 0 ' + leftW + 'px';
+    right.style.flex = '0 0 ' + rightW + 'px';
+    right.style.maxWidth = rightW + 'px'; /* переопределяет CSS max-width:520px */
+  }
+  function startResize(){
+    resizing = true;
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }
+  function doResize(x){
+    if(!resizing) return;
+    var wr = wrapper.getBoundingClientRect();
+    var splitterW = handle.offsetWidth;
+    applyWidths(x - wr.left - splitterW / 2, wr.width - splitterW);
+  }
+  function endResize(){
+    if(!resizing) return;
+    resizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    try { localStorage.setItem('dt_columns_split', String(Math.round(lastLeftW))); } catch(_){}
+  }
+  /* Восстановление сохранённой позиции разделителя (только на desktop-раскладке).
+     ВАЖНО: замер ширины выполняется после сворачивания боковой панели —
+     иначе ширина обёртки измеряется с развёрнутой панелью (margin-left 228px)
+     и правая колонка получается уже на ~164px. */
+  function restoreSaved(){
+    try {
+      var saved = parseInt(localStorage.getItem('dt_columns_split'), 10);
+      if(isNaN(saved) || saved <= 0 || window.innerWidth <= 768) return;
+      var wr0 = wrapper.getBoundingClientRect();
+      var total0 = wr0.width - handle.offsetWidth;
+      if(saved < total0) applyWidths(saved, total0);
+    } catch(_){}
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', restoreSaved);
+  } else {
+    restoreSaved();
+  }
+  /* Панель сворачивается с анимацией (.25s) после DOMContentLoaded — повторный замер после неё */
+  setTimeout(restoreSaved, 400);
+  setTimeout(restoreSaved, 800);
+  handle.addEventListener('mousedown', function(e){ e.preventDefault(); startResize(); });
+  document.addEventListener('mousemove', function(e){ doResize(e.clientX); });
+  document.addEventListener('mouseup', endResize);
+  handle.addEventListener('touchstart', function(e){ e.preventDefault(); startResize(); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ doResize(e.touches[0].clientX); }, {passive:false});
+  document.addEventListener('touchend', endResize);
+})();
