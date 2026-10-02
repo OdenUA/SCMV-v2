@@ -148,7 +148,15 @@ function processDeviceTrack(points) {
       if (isGap && anomalyType !== 'Out of Bounds') {
         var includeInTable = distanceM >= ANOMALY_TABLE_MIN_DISTANCE_M;
         if (includeInTable) {
-          var durSec = timeDiffMs / 1000;
+          // Длительность аномалии считается по соседним точкам (как в Analyze):
+          // берётся точка ДО начала аномалии (i-2) и точка ПОСЛЕ её конца (i+1).
+          // Точки внутри аномалии могут иметь одинаковое время (дубликаты)
+          // и давать длительность 0. Start/End Time остаются границами самой
+          // аномалии — они используются для SQL-удаления и привязки к слоям.
+          var beforeTs = (i - 2 >= 0) ? sortedPoints[i - 2]._ts : prevTs;
+          var afterTs = (i + 1 < sortedPoints.length) ? sortedPoints[i + 1]._ts : currTs;
+          var durMs = (isFinite(beforeTs) && isFinite(afterTs) && afterTs > beforeTs) ? (afterTs - beforeTs) : timeDiffMs;
+          var durSec = durMs / 1000;
           var durDisplay = durSec >= 3600 ? (durSec / 3600).toFixed(2) + ' h' : durSec >= 60 ? (durSec / 60).toFixed(1) + ' m' : Math.round(durSec) + ' s';
           anomalies.push({
             'Start Time': formatAnomalyTime(prevPoint.wdate),
