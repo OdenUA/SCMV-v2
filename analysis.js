@@ -205,7 +205,7 @@
   }
 
   // --- Segments ---
-  function createSegment(points, issues) {
+  function createSegment(points, issues, startIdx, endIdx) {
     var startTime = points[0].timestamp;
     var endTime = points[points.length - 1].timestamp;
     var durationMs = endTime.getTime() - startTime.getTime();
@@ -216,7 +216,9 @@
       points: points,
       duration: durationMs,
       count: points.length,
-      stats: calculateStats(points)
+      stats: calculateStats(points),
+      _startIdx: startIdx,
+      _endIdx: endIdx
     };
   }
 
@@ -225,18 +227,20 @@
     var segments = [];
     var currentPoints = [pointsWithIssues[0].point];
     var currentIssues = new Set(pointsWithIssues[0].issues);
+    var currentStartIdx = 0;
     for (var i = 1; i < pointsWithIssues.length; i++) {
       var point = pointsWithIssues[i].point;
       var issues = pointsWithIssues[i].issues;
       if (setsEqual(issues, currentIssues)) {
         currentPoints.push(point);
       } else {
-        segments.push(createSegment(currentPoints, currentIssues));
+        segments.push(createSegment(currentPoints, currentIssues, currentStartIdx, i - 1));
         currentPoints = [point];
         currentIssues = new Set(issues);
+        currentStartIdx = i;
       }
     }
-    segments.push(createSegment(currentPoints, currentIssues));
+    segments.push(createSegment(currentPoints, currentIssues, currentStartIdx, pointsWithIssues.length - 1));
     return segments;
   }
 
@@ -251,7 +255,21 @@
       var issues = detectIssuesForPoint(sorted[i], prev);
       pointsWithIssues.push({ point: sorted[i], issues: issues });
     }
-    return groupIntoSegments(pointsWithIssues);
+    var segments = groupIntoSegments(pointsWithIssues);
+    // Для «Аномалии трека» длительность считаем по соседним точкам:
+    // берём точку ДО начала аномалии и точку ПОСЛЕ её конца —
+    // внутренние точки аномального сегмента часто имеют нулевую/неверную дельту времени.
+    for (var si = 0; si < segments.length; si++) {
+      var seg = segments[si];
+      if (!seg.issues || !seg.issues.has('TRACK_ANOMALY')) continue;
+      var a = seg._startIdx;
+      var b = seg._endIdx;
+      if (typeof a !== 'number' || typeof b !== 'number') continue;
+      if (a > 0) seg.startTime = sorted[a - 1].timestamp;
+      if (b < sorted.length - 1) seg.endTime = sorted[b + 1].timestamp;
+      seg.duration = seg.endTime.getTime() - seg.startTime.getTime();
+    }
+    return segments;
   }
 
   // Compute distance from previous segment's last point to current segment's first point.
