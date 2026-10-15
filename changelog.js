@@ -3,6 +3,13 @@
 // To add a release, prepend a new object here. No other files need updating.
 window.CHANGELOG = [
   {
+    version: '1.1.0',
+    date: '2026-10-15',
+    items: [
+      'Переработаны стрелки направления на карте: нет «месива» на GPS-шуме, размер привязан к слайдеру толщины линий.'
+    ]
+  },
+  {
     version: '1.0.9',
     date: '2026-09-28',
     items: [

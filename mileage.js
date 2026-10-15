@@ -13,6 +13,8 @@ function processMileageReport(segments) {
     } catch (_) {}
   });
   mileageGapLayers = [];
+  // Снять старые стрелки отчёта (декораторы ссылаются на удаляемые линии)
+  try { if (typeof unregisterSmartArrows === 'function') { unregisterSmartArrows('mileage'); unregisterSmartArrows('mileage-gap'); } } catch (_) {}
   segments.forEach(function (segment) {
     if (segment.coordinates && segment.coordinates.length) {
       var segmentCoords = segment.coordinates;
@@ -52,20 +54,13 @@ function processMileageReport(segments) {
             .openOn(map);
         });
         segLine.addTo(trackLayerGroup);
-        if (!directionDecorator) directionDecorator = L.layerGroup();
-        var deco = L.polylineDecorator(segLine, {
-          patterns: [
-            {
-              offset: 25,
-              repeat: 50,
-              symbol: L.Symbol.arrowHead({
-                pixelSize: 6,
-                pathOptions: { fillOpacity: 1, weight: 0, color: segColor },
-              }),
-            },
-          ],
-        });
-        directionDecorator.addLayer(deco);
+        // Стрелки направления через общий "умный" движок (map.js): интервал в метрах,
+        // без стрелок на стоянках и GPS-шуме, пересчёт при зуме. Стоянки (ismoved === false)
+        // стрелками не помечаются.
+        segLine._ownDirectionArrows = true;
+        if (segment.ismoved !== false) {
+          try { registerSmartArrows('mileage', segLine, segColor); } catch (e) { console.warn('segment arrows fail', e); }
+        }
       } catch (e) {
         console.warn("segment draw fail", e);
       }
@@ -100,6 +95,7 @@ function processMileageReport(segments) {
 }
 function drawMileageGaps() {
   if (!lastMileageSegments || lastMileageSegments.length < 2) return;
+  try { if (typeof unregisterSmartArrows === 'function') unregisterSmartArrows('mileage-gap'); } catch (_) {}
   var moved = lastMileageSegments.filter(function (s) {
     return (
       Array.isArray(s.coordinates) &&
@@ -138,20 +134,8 @@ function drawMileageGaps() {
           (dist / 1000).toFixed(3) +
           " км"
       );
-    if (!directionDecorator) directionDecorator = L.layerGroup();
-    var gapDeco = L.polylineDecorator(gapLine, {
-      patterns: [
-        {
-          offset: 20,
-          repeat: 60,
-            symbol: L.Symbol.arrowHead({
-            pixelSize: 6,
-            pathOptions: { fillOpacity: 1, weight: 0, color: "#ff0000" },
-          }),
-        },
-      ],
-    });
-    directionDecorator.addLayer(gapDeco);
+    gapLine._ownDirectionArrows = true;
+    try { registerSmartArrows('mileage-gap', gapLine, '#ff0000'); } catch (e) { console.warn('gap arrows fail', e); }
     mileageGapLayers.push(gapLine);
   }
 }

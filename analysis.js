@@ -498,6 +498,9 @@
     } catch (e) {}
     window.analysisSegments = [];
     window.analysisModeActive = false;
+    // Снять стрелки анализа: декораторы держат собственную копию геометрии
+    // и не исчезают вместе с удалёнными линиями — нужен явный пересбор.
+    try { if (typeof rebuildDirections === 'function') rebuildDirections(); } catch (e) {}
     var container = document.getElementById('analysisContainer');
     if (container) container.style.display = 'none';
     var tbody = document.getElementById('analysisTbody');
@@ -524,7 +527,7 @@
       window.analysisLayerGroup = L.layerGroup();
     }
     try { trackLayerGroup.clearLayers(); } catch (e) {}
-    try { if (directionDecorator) directionDecorator.clearLayers(); } catch (e) {}
+    try { if (typeof unregisterSmartArrows === 'function') unregisterSmartArrows(); else if (directionDecorator) directionDecorator.clearLayers(); } catch (e) {}
 
     var allLatLngs = [];
     for (var i = 0; i < segments.length; i++) {
@@ -562,6 +565,8 @@
     if (allLatLngs.length > 0 && map) {
       map.fitBounds(L.latLngBounds(allLatLngs), { padding: [20, 20] });
     }
+    // Стрелки направления на линиях анализа (после fitBounds — с масштабом отчёта)
+    try { if (directionsVisible && typeof rebuildDirections === 'function') rebuildDirections(); } catch (e) { console.warn('rebuildDirections после анализа не удался', e); }
   }
 
   // --- Anomaly overlay rendering (raw points, across segment boundaries) ---

@@ -224,7 +224,7 @@
 
 ## 9. Как это было исследовано (для повторения)
 
-- Chrome с `--remote-debugging-port=9223`, профиль `E:\Dev\chrome-agent-profile`.
+- Chrome с `--remote-debugging-port=9223`, профиль `D:\Dev\chrome-agent-profile`.
 - `cdp_server.js` (порт 9224): перехват `Network.webSocketFrameSent/Received`, eval в контексте страницы.
 - Прямые запросы к серверу выполнялись через существующее WS-соединение страницы (`ipmain.wss`), т.к. второе соединение с тем же `uid` сервер разрывает (close 1006).
 - Исходники клиента v1: `https://scmv.vpngps.com/js/*.js` (`modul-etbl-src.js` — логика etbl-таблиц, `modul-src.js` — типы колонок и `send`).

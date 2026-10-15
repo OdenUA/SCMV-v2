@@ -454,6 +454,7 @@ function drawRawDeviceTrack(points) {
       }
     } catch (e) { console.warn('link anomalies after render failed', e); }
     updateStatus('Device Track: точек ' + total, 'green', 6000);
+    try { if (directionsVisible && typeof rebuildDirections === 'function') rebuildDirections(); } catch (e) { console.warn('rebuildDirections после отрисовки трека не удался', e); }
     try { if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay(); } catch (_) {}
   }
 
@@ -463,6 +464,23 @@ function drawRawDeviceTrack(points) {
     function renderPointsBatch() {
       if (token !== window._trackRenderToken) return;
       var end = Math.min(pi + batch, total);
+      // Невидимая полилиния-носитель стрелок направления: в режиме точек
+      // полилиний трека нет, и декорировать стрелками было бы нечего.
+      // Общая точка с соседними чанками — для непрерывности, как в polyline-режиме.
+      if (end - pi >= 2) {
+        var from = pi === 0 ? 0 : pi - 1;
+        var carrierPts = [];
+        for (var ci = from; ci < end; ci++) carrierPts.push([parsed[ci].lat, parsed[ci].lng]);
+        if (carrierPts.length >= 2) {
+          // _trackRawArrows: стрелки направления Track Raw — чёрные (map.js)
+          var carrier = L.polyline(carrierPts, {
+            color: '#0074D9', weight: 2, opacity: 0,
+            interactive: false, bubblingMouseEvents: false
+          });
+          carrier._trackRawArrows = true;
+          carrier.addTo(trackLayerGroup);
+        }
+      }
       for (; pi < end; pi++) {
         (function (pt, idx) {
           var m = L.circleMarker([pt.lat, pt.lng], {
