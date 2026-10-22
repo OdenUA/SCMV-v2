@@ -36,6 +36,17 @@ const listState = {
   sortDir: 1,
 };
 let listBound = false;
+let vehicleShowBound = false;
+
+// Обработчик Vehicle Show общий для разделов «Список ТС» и «Edit Vehicle»:
+// IMEI в Edit Vehicle подставляется из Vehicle Show, и запрос туда тоже уходит
+// (loadVehicleEdit → requestVehicleShow). Без зарегистрированного обработчика
+// ответ некому принять — колонка IMEI остаётся пустой.
+function bindVehicleShow() {
+  if (vehicleShowBound) return;
+  vehicleShowBound = true;
+  onPacket('Vehicle Show', handleVehicleShowPacket, { priority: 5 });
+}
 
 export function getFleetKeyMap() { return fleetKeyMap; }
 
@@ -86,7 +97,7 @@ export function initVehicleList() {
     addBtn.addEventListener('click', () => openDeviceAddModal());
   }
 
-  onPacket('Vehicle Show', handleVehicleShowPacket, { priority: 5 });
+  bindVehicleShow();
 }
 
 export function loadVehicleList() {
@@ -315,6 +326,9 @@ export function initVehicleEdit() {
   }
 
   onPacket('Vehicle Edit Distribution', handleVehicleEditPacket, { priority: 5 });
+
+  // Ответ на requestVehicleShow из loadVehicleEdit — источник IMEI для колонки
+  bindVehicleShow();
 
   // Подтверждение сохранения: ответ-эхо с cols.id
   onPacket('Vehicle Edit Distribution', (data) => {
