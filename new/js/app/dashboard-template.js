@@ -308,6 +308,23 @@ export function dashboardTemplate(opts = {}) {
       <div id="map" class="w-full flex-1 z-0 bg-darkbg-800"></div>
       <div id="manualRouteInfo" class="manual-route-info"></div>
 
+      <!-- Плавающая группа полноэкранного режима: бейдж «Общий пробег» + кнопка выхода -->
+      <div id="mapFullscreenBar" class="hidden absolute top-3 left-1/2 -translate-x-1/2 z-[1000] items-center space-x-2">
+        <div id="mapDistanceBadge" class="glass-panel px-3 py-1.5 rounded-full flex items-center space-x-2 text-xs shadow-2xl">
+          <i class="fa-solid fa-road text-blue-400"></i>
+          <span class="text-[11px] text-gray-400">Общий пробег</span>
+          <span id="mapDistanceBadgeValue" class="font-bold text-white kpi-value">—</span>
+        </div>
+        <button id="mapFullscreenExitBtn" type="button" class="btn !rounded-full !py-1.5 text-xs shadow-2xl" title="Свернуть карту (Esc)">
+          <i class="fa-solid fa-compress"></i> Свернуть
+        </button>
+      </div>
+
+      <!-- Кнопка разворачивания карты на весь экран (правый нижний угол) -->
+      <button id="mapFullscreenEnterBtn" type="button" class="map-icon-btn absolute bottom-3 right-3 z-[1000]" title="Карта на весь экран">
+        <i class="fa-solid fa-expand"></i>
+      </button>
+
       <!-- Проигрыватель -->
       ${telemetryMode !== 'off' ? `
       <div id="playbackBar"${telemetryHidden ? ' style="display:none"' : ''} class="absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000] w-[92%] max-w-2xl glass-panel p-3 rounded-xl shadow-2xl border border-gray-700/60 flex flex-col space-y-2">

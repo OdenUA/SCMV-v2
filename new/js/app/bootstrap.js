@@ -163,7 +163,9 @@ export function initDashboard(opts = {}) {
       if (el) el.textContent = v;
     };
     setText('statVehicle', state.selectedVehicle ? (state.selectedVehicle.number || `id ${state.selectedVehicle.id}`) : '—');
-    setText('statDistance', state.mileageTotalKm ? `${state.mileageTotalKm.toFixed(2)} км` : '—');
+    const distText = state.mileageTotalKm ? `${state.mileageTotalKm.toFixed(2)} км` : '—';
+    setText('statDistance', distText);
+    setText('mapDistanceBadgeValue', distText);
     setText('statTime', (state.moveDurationMs || state.stopDurationMs)
       ? `${formatDuration(state.moveDurationMs)} / ${formatDuration(state.stopDurationMs)}` : '—');
     if (state.trackPoints.length) {

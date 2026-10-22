@@ -48,6 +48,7 @@ export function initMap() {
   addVisibilityControl();
   addRouteControl();
   addDisplayPanelControl();
+  addFullscreenControl();
   initContextMenu();
 
   map.on('zoomend', debounce(rebuildDirections, 150));
@@ -392,7 +393,7 @@ function addDisplayPanelControl() {
       const wrap = L.DomUtil.create('div', 'leaflet-control-custom-group');
       displayBtn = L.DomUtil.create('button', 'map-icon-btn', wrap);
       displayBtn.innerHTML = '<i class="fa-solid fa-layer-group"></i>';
-      displayBtn.title = 'Отображение на карте (подложка, слои, толщина линий)';
+      displayBtn.title = 'Отображение на карте (подложка, толщина линий)';
       L.DomEvent.disableClickPropagation(displayBtn);
       displayBtn.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -416,20 +417,6 @@ function addDisplayPanelControl() {
         <option value="satellite">Esri World Imagery (Спутник)</option>
       </select>
     </div>
-    <div class="space-y-1.5 pt-1">
-      <label class="flex items-center space-x-2 cursor-pointer select-none">
-        <input type="checkbox" id="chkStops" checked class="rounded border-gray-700 text-brand-600 focus:ring-0 bg-darkbg-900 w-4 h-4" />
-        <span><i class="fa-solid fa-square-parking text-amber-400 mr-1.5"></i> Остановки и стоянки</span>
-      </label>
-      <label class="flex items-center space-x-2 cursor-pointer select-none">
-        <input type="checkbox" id="chkAnomalies" checked class="rounded border-gray-700 text-brand-600 focus:ring-0 bg-darkbg-900 w-4 h-4" />
-        <span><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-1.5"></i> Аномалии трека</span>
-      </label>
-      <label class="flex items-center space-x-2 cursor-pointer select-none">
-        <input type="checkbox" id="chkDirections" checked class="rounded border-gray-700 text-brand-600 focus:ring-0 bg-darkbg-900 w-4 h-4" />
-        <span><i class="fa-solid fa-location-arrow text-blue-400 mr-1.5"></i> Направления (стрелки)</span>
-      </label>
-    </div>
     <div class="flex items-center space-x-2 pt-1">
       <span class="whitespace-nowrap text-[11px]">Толщина линий</span>
       <input type="range" id="lineWidthSlider" min="1" max="10" value="2" class="flex-1 accent-brand-500" />
@@ -445,24 +432,6 @@ function addDisplayPanelControl() {
 
   // обработчики
   displayPanel.querySelector('#mapTileSelect').addEventListener('change', (e) => setTileProvider(e.target.value));
-  displayPanel.querySelector('#chkDirections').addEventListener('change', (e) => {
-    directions.visible = e.target.checked;
-    rebuildDirections();
-  });
-  displayPanel.querySelector('#chkStops').addEventListener('change', (e) => {
-    const layer = getParkingLayer();
-    const m = layer && layer._map;
-    if (!m) return;
-    if (e.target.checked) layer.addTo(m);
-    else m.removeLayer(layer);
-  });
-  displayPanel.querySelector('#chkAnomalies').addEventListener('change', (e) => {
-    const layer = getAnomalyLayer();
-    const m = layer && layer._map;
-    if (!m) return;
-    if (e.target.checked) layer.addTo(m);
-    else m.removeLayer(layer);
-  });
   const slider = displayPanel.querySelector('#lineWidthSlider');
   slider.addEventListener('input', () => {
     displayPanel.querySelector('#lineWidthValue').textContent = slider.value;
@@ -475,6 +444,53 @@ function toggleDisplayPanel(force) {
   const show = force !== undefined ? force : displayPanel.style.display !== 'block';
   displayPanel.style.display = show ? 'block' : 'none';
   if (displayBtn) displayBtn.classList.toggle('active', show);
+}
+
+// ---------- Полноэкранный режим карты ----------
+// Карта (контейнер #mapBlock) разворачивается на весь экран поверх шапки,
+// но под правой панелью (#sidebar, z-30) — панель остаётся видимой.
+// Вход — плавающая кнопка #mapFullscreenEnterBtn в правом нижнем углу карты
+// (в режиме скрыта). Выход — единственная кнопка «Свернуть» в группе
+// #mapFullscreenBar рядом с бейджем «Общий пробег» (плюс Escape).
+function addFullscreenControl() {
+  // плавающая кнопка разворачивания (рендерится в шаблоне дашборда)
+  const enterBtn = document.getElementById('mapFullscreenEnterBtn');
+  if (enterBtn) {
+    enterBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      toggleMapFullscreen(true);
+    });
+  }
+
+  // плавающая кнопка «Свернуть» в шапке полноэкранной карты
+  const exitBtn = document.getElementById('mapFullscreenExitBtn');
+  if (exitBtn) {
+    exitBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      toggleMapFullscreen(false);
+    });
+  }
+
+  // выход из режима по Escape (если не открыта модалка — она закрывается своим обработчиком)
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape' || !mapFullscreenActive()) return;
+    if (document.querySelector('.modal-overlay.open')) return;
+    toggleMapFullscreen(false);
+  });
+}
+
+export function mapFullscreenActive() {
+  const block = document.getElementById('mapBlock');
+  return !!(block && block.classList.contains('map-fullscreen'));
+}
+
+export function toggleMapFullscreen(force) {
+  const block = document.getElementById('mapBlock');
+  if (!block || !map) return;
+  const on = force !== undefined ? force : !block.classList.contains('map-fullscreen');
+  block.classList.toggle('map-fullscreen', on);
+  // Leaflet сам не отслеживает смену размеров контейнера без ресайза окна
+  setTimeout(() => { if (map) map.invalidateSize(); }, 60);
 }
 
 // ---------- Контекстное меню ----------
