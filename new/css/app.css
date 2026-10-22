@@ -1,0 +1,302 @@
+/* SCMV v2.1 — общие стили поверх Tailwind (тёмная тема по умолчанию) */
+
+html, body { height: 100%; }
+
+/* Скроллбары */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* Поля дат/месяца/времени: тёмная схема нативных контролов — иконка пикера и попап видны на тёмном фоне */
+input[type="datetime-local"], input[type="date"], input[type="month"], input[type="time"] { color-scheme: dark; }
+
+/* Glass-панели */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Leaflet: тёмные попапы */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #1f2937 !important;
+  color: #f3f4f6 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  border-radius: 0.5rem;
+}
+.leaflet-popup-content { margin: 10px 14px !important; line-height: 1.4 !important; font-size: 12px; }
+.leaflet-popup-content .popup-title { font-weight: 700; margin-bottom: 4px; }
+.leaflet-popup-content .popup-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.leaflet-container { font: inherit; background: #111827; }
+.leaflet-bar a { background: #1f2937; color: #e5e7eb; border-bottom: 1px solid #374151; }
+.leaflet-bar a:hover { background: #374151; }
+
+/* Кастомные контролы Leaflet */
+.map-icon-btn {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  background: #1f2937; border: 1px solid rgba(255,255,255,0.12); color: #e5e7eb;
+  cursor: pointer; font-size: 15px; border-radius: 4px;
+}
+.map-icon-btn:hover { background: #374151; }
+.map-icon-btn.active { background: #2563eb; color: #fff; }
+.map-icon-btn img { width: 20px; height: 20px; }
+.leaflet-control-custom-group { display: flex; flex-direction: column; gap: 4px; }
+
+/* Контекстное меню карты */
+.map-context-menu {
+  position: absolute; z-index: 2000; min-width: 220px;
+  background: #1f2937; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6); overflow: hidden; display: none;
+}
+.map-context-menu button {
+  display: block; width: 100%; text-align: left; padding: 8px 12px;
+  background: none; border: none; color: #e5e7eb; font-size: 12px; cursor: pointer;
+}
+.map-context-menu button:hover { background: #2563eb; color: #fff; }
+.map-context-menu .ctx-separator { height: 1px; background: #374151; }
+
+/* Маркеры */
+.vehicle-marker-icon { transition: transform 0.2s linear; display: flex; align-items: center; justify-content: center; }
+
+.stop-marker {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid #fff; color: #fff; font-weight: 700; font-size: 11px; border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5); font-family: inherit;
+}
+.stop-marker-short { background: #f59e0b; width: 20px; height: 20px; font-size: 10px; }
+.stop-marker-long { background: #d97706; width: 24px; height: 24px; }
+.stop-marker.pulsed { animation: stop-pulse 0.8s ease-in-out 3; }
+@keyframes stop-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+
+.start-marker, .finish-marker {
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff; border-radius: 50%; color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5); font-size: 11px;
+}
+.start-marker { background: #10b981; width: 22px; height: 22px; }
+.finish-marker { background: #e11d48; width: 22px; height: 22px; }
+
+/* Локации (справочник marker) */
+.location-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #7c3aed; border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.location-label {
+  background: rgba(17, 24, 39, 0.9) !important;
+  border: 1px solid rgba(124, 58, 237, 0.5) !important;
+  color: #e9d5ff !important;
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px !important; border-radius: 6px !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5) !important;
+}
+.location-label::before { display: none !important; }
+
+.point-focus-marker {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #ff4136; border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+.nearest-point-marker {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #ff4136; border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+
+/* Аномалии: мигание */
+.anomaly-blink { animation: anomaly-blink 0.25s ease-in-out 6 alternate; }
+@keyframes anomaly-blink { from { opacity: 1; } to { opacity: 0.25; } }
+
+/* Таблицы */
+.data-table { width: 100%; text-align: left; font-size: 12px; color: #d1d5db; border-collapse: collapse; }
+.data-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: rgba(11, 15, 23, 0.95); color: #9ca3af; text-transform: uppercase; font-size: 11px;
+  padding: 8px 10px; border-bottom: 1px solid #1f2937; white-space: nowrap; user-select: none;
+}
+.data-table tbody td { padding: 6px 10px; border-bottom: 1px solid rgba(31, 41, 55, 0.6); white-space: nowrap; }
+.data-table tbody tr { cursor: pointer; transition: background 0.15s; }
+.data-table tbody tr:hover { background: rgba(31, 41, 55, 0.5); }
+.data-table tr.row-selected, .data-table tr.highlighted { background: rgba(37, 99, 235, 0.25) !important; }
+.table-scroll { overflow: auto; max-height: 320px; }
+.vt-spacer td { border: none !important; }
+
+/* Кнопки (дополнение к Tailwind) */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 500;
+  background: #2563eb; color: #fff; border: 1px solid transparent; cursor: pointer;
+  transition: background 0.15s, opacity 0.15s; white-space: nowrap; }
+.btn:hover { background: #3b82f6; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: #1f2937; color: #d1d5db; border-color: #374151; }
+.btn-secondary:hover { background: #374151; }
+.btn-danger { background: #dc2626; }
+.btn-danger:hover { background: #ef4444; }
+.btn-success { background: #059669; }
+.btn-success:hover { background: #10b981; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 6px; }
+
+/* Модалки */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: none;
+  align-items: center; justify-content: center; padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #111827; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+  box-shadow: 0 25px 60px -10px rgba(0,0,0,0.7);
+  max-width: 90vw; max-height: 88vh; display: flex; flex-direction: column;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid #1f2937;
+}
+.modal-header h2 { font-size: 14px; font-weight: 700; color: #fff; margin: 0; }
+.modal-close { background: none; border: none; color: #9ca3af; font-size: 20px; cursor: pointer; line-height: 1; }
+.modal-close:hover { color: #fff; }
+.modal-body { padding: 14px 16px; overflow: auto; }
+.modal-footer { padding: 12px 16px; border-top: 1px solid #1f2937; display: flex; gap: 8px; justify-content: flex-end; }
+
+pre.sql-output {
+  background: #0b0f17; border: 1px solid #1f2937; border-radius: 8px;
+  padding: 12px; font-size: 11px; line-height: 1.5; color: #a5f3fc;
+  overflow: auto; max-height: 50vh; white-space: pre-wrap; word-break: break-all;
+}
+
+/* Toast */
+.toast-notification {
+  position: fixed; bottom: 20px; right: 20px; z-index: 3000;
+  display: flex; align-items: center; gap: 10px;
+  background: #111827; border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #fff; padding: 12px 16px; border-radius: 12px;
+  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.7);
+  opacity: 0; transform: translateY(20px); pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s; max-width: 380px;
+}
+.toast-notification.visible { opacity: 1; transform: translateY(0); }
+.toast-icon { color: #3b82f6; font-size: 16px; }
+.toast-text { font-size: 12px; }
+
+/* Глобальный оверлей загрузки */
+#globalLoadingOverlay {
+  position: fixed; inset: 0; z-index: 5000; display: none;
+  align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+  background: rgba(11, 15, 23, 0.75);
+}
+#globalLoadingOverlay.visible { display: flex; }
+.global-loading-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid #1f2937; border-top-color: #3b82f6;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.global-loading-text { color: #9ca3af; font-size: 13px; }
+
+/* Статус-плашка (в шапке/панели) */
+.status-text { font-size: 11px; color: #9ca3af; transition: color 0.3s; }
+
+/* Курсор режима маршрута */
+.route-mode-active .leaflet-container { cursor: crosshair !important; }
+
+/* Карточки ТС */
+.vehicle-card { transition: border-color 0.15s, background 0.15s; }
+.vehicle-card.selected { border-color: rgba(59, 130, 246, 0.8) !important; background: rgba(37, 99, 235, 0.15) !important; }
+
+/* Скелетон загрузки таблиц */
+.table-skeleton td { color: #374151; }
+
+/* KPI */
+.kpi-value { font-variant-numeric: tabular-nums; }
+
+/* Информация о ручном маршруте */
+.manual-route-info {
+  position: absolute; top: 10px; left: 50px; z-index: 800;
+  background: rgba(17, 24, 39, 0.9); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 8px 10px; font-size: 11px; color: #d1d5db;
+  max-width: 320px; display: none;
+}
+.manual-route-info.open { display: block; }
+.manual-route-info a { color: #60a5fa; }
+
+/* Аудит-отчёт (новая вкладка) */
+.audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.audit-table th, .audit-table td { border: 1px solid #374151; padding: 5px 8px; text-align: left; }
+.audit-table th { background: #1f2937; cursor: pointer; user-select: none; }
+.audit-diff-old { color: #fca5a5; }
+.audit-diff-new { color: #86efac; }
+
+/* Кнопка-тогл «Топливо» */
+#btnFuelToggle.on {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+/* События топлива на карте */
+.fuel-event-marker {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid #fff; color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+.fuel-event-marker.fuel-refuel { background: #059669; }
+.fuel-event-marker.fuel-drain { background: #dc2626; }
+/* Событие «через разрыв»: часть объёма восстановлена по точкам с двух сторон разрыва записи */
+.fuel-event-marker.fuel-gap { border-style: dashed; border-color: #fbbf24; }
+
+/* Поля редактирования в таблицах (Edit Vehicle / Edit Device / добавление строк) */
+.data-table input[type="text"], .data-table select {
+  width: 100%;
+  background: #0b0f17;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  color: #e5e7eb;
+  font-size: 11px;
+  padding: 2px 5px;
+}
+.data-table input[type="text"]:focus, .data-table select:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+/* Индикатор загрузки данных в шапке (незавершённые WS-запросы) */
+.load-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.25);
+  border-top-color: #3b82f6;
+  animation: load-spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes load-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Мастер добавления устройства+ТС */
+.dva-row-error td { background: rgba(220, 38, 38, 0.15) !important; }
+.dva-row-ok td { background: rgba(5, 150, 105, 0.12) !important; }
+.dva-table input, .dva-table select {
+  width: 100%; background: #0b0f17; border: 1px solid #374151; border-radius: 6px;
+  color: #e5e7eb; font-size: 11px; padding: 3px 6px;
+}
+
+/* Edit Vehicle: ограничение ширины колонки Notes (длинный текст — многоточие) */
+#vehicleEditTableBody td[data-col="notes"] {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Подсветка строк Full Device Track по типу интервала (аналог v2, тёмная тема) */
+.fdt-interval-type1 { background: rgba(245, 158, 11, 0.14) !important; } /* движение без питания */
+.fdt-interval-type2 { background: rgba(59, 130, 246, 0.14) !important; } /* мало спутников */
+.fdt-interval-type3 { background: rgba(217, 70, 160, 0.16) !important; } /* оба */
+.fdt-interval-type4 { background: rgba(244, 63, 94, 0.18) !important; } /* GPS-аномалия */
+
+/* Кнопки буфера обмена: компактные отступы — ряд из 5 кнопок не переносится
+   даже в узком сайдбаре (w-80) и при появлении скроллбара нижней панели. */
+.panel-clipboard-icon { padding-left: 0.4rem; padding-right: 0.4rem; }

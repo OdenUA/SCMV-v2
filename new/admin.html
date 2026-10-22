@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SCMV v2 — Админ-панель</title>
+  <script>
+    // Защита: без активной сессии — на страницу входа
+    try {
+      if (localStorage.getItem('dt_session') !== '1') location.replace('login.html');
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="vendor/tailwind/app.css" />
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/leaflet-polylinedecorator/leaflet.polylineDecorator.js"></script>
+  <script src="vendor/chart.js/chart.umd.min.js"></script>
+  <script src="vendor/xlsx/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="bg-darkbg-900 text-gray-200 font-sans h-screen flex flex-col overflow-hidden">
+
+  <!-- Шапка -->
+  <header class="h-14 bg-darkbg-800 border-b border-gray-800 px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center space-x-3 min-w-0">
+      <div class="bg-brand-600 text-white p-2 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/20 shrink-0">
+        <i class="fa-solid fa-route text-lg"></i>
+      </div>
+      <div class="min-w-0">
+        <h1 class="font-bold text-base tracking-wide text-white leading-tight">SCMV v2</h1>
+        <p class="text-xs text-gray-400 truncate">Админ-панель — управление автопарком</p>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-4 text-xs">
+      <div class="hidden md:flex items-center space-x-2" title="Статус соединения">
+        <span id="loadIndicator" class="hidden items-center space-x-1.5 text-brand-400 font-medium" title="Идёт загрузка данных с сервера">
+          <span class="load-spinner"></span>
+          <span id="loadIndicatorText">Загрузка данных…</span>
+        </span>
+        <span id="wsStatusDot" class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+        <span id="statusText" class="status-text">Не подключено</span>
+        <span id="lastResponse" class="text-gray-500"></span>
+      </div>
+      <a href="index.html" title="Дашборд"
+        class="px-3 py-2 text-gray-400 hover:text-white bg-darkbg-700 hover:bg-gray-700 rounded-lg transition flex items-center space-x-2">
+        <i class="fa-solid fa-gauge-high"></i><span class="hidden sm:inline">Дашборд</span>
+      </a>
+      <div class="flex items-center space-x-2 border-l border-gray-700 pl-3">
+        <div class="w-8 h-8 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm" id="userAvatar">?</div>
+        <div class="hidden sm:block text-left">
+          <div class="text-xs font-semibold text-gray-200" id="userName">—</div>
+          <div class="text-[10px] text-gray-400">SCMV</div>
+        </div>
+      </div>
+      <button id="logoutBtn" title="Выйти" class="p-2 text-gray-400 hover:text-rose-400 bg-darkbg-700 hover:bg-gray-700 rounded-lg transition">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Рабочая область -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- Левая навигация -->
+    <aside id="adminSideNav" class="w-60 bg-darkbg-800 border-r border-gray-800 flex flex-col shrink-0 z-10 transition-all duration-300">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-gray-800/60">
+        <span class="nav-label text-[10px] uppercase tracking-wider text-gray-500">Разделы</span>
+        <button id="adminNavToggle" class="p-1.5 text-gray-400 hover:text-white bg-darkbg-700 hover:bg-gray-700 rounded-lg transition" title="Свернуть меню до иконок">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+      </div>
+      <nav class="p-3 space-y-1 text-xs">
+        <button data-section="monitoring" title="Мониторинг" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-map-location-dot w-4 shrink-0"></i><span class="nav-label">Мониторинг</span>
+        </button>
+        <button data-section="vehicle-list" title="Список ТС" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-truck w-4 shrink-0"></i><span class="nav-label">Список ТС</span>
+        </button>
+        <button data-section="vehicle-edit" title="Edit Vehicle" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-pen-to-square w-4 shrink-0"></i><span class="nav-label">Edit Vehicle</span>
+        </button>
+        <button data-section="device-edit" title="Edit Device" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-mobile-screen w-4 shrink-0"></i><span class="nav-label">Edit Device</span>
+        </button>
+        <button data-section="device-status" title="Device Status" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-signal w-4 shrink-0"></i><span class="nav-label">Device Status</span>
+        </button>
+        <button data-section="audit" title="Аудит" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-clipboard-check w-4 shrink-0"></i><span class="nav-label">Аудит</span>
+        </button>
+        <button data-section="reports" title="Отчёты" class="admin-nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+          <i class="fa-solid fa-chart-column w-4 shrink-0"></i><span class="nav-label">Отчёты</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Контент -->
+    <main id="adminMain" class="flex-1 overflow-y-auto p-4 min-w-0">
+
+      <!-- Мониторинг (полный функционал дашборда) -->
+      <section id="section-monitoring" class="admin-section hidden" style="height:calc(100vh - 120px)">
+        <div id="dashboardMount" class="flex overflow-hidden relative rounded-xl border border-gray-800" style="height:100%"></div>
+      </section>
+
+      <!-- Список ТС (Device List / Vehicle Show) -->
+      <section id="section-vehicle-list" class="admin-section">
+        <div class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-800 bg-darkbg-800/50">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mr-2">
+              <i class="fa-solid fa-truck text-brand-500 mr-1"></i> Список ТС
+            </h2>
+            <div class="relative">
+              <i class="fa-solid fa-search absolute left-2.5 top-2 text-gray-500 text-[11px]"></i>
+              <input type="text" id="vehicleListSearchInput" placeholder="Поиск..."
+                class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-7 pr-2 py-1.5 w-52 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </div>
+            <button id="vehicleListResetBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+            <button id="vehicleListExportBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-file-excel text-emerald-400"></i> Export xls</button>
+            <button id="vehicleAddBtn" class="btn btn-xs"><i class="fa-solid fa-plus"></i> Добавить</button>
+            <span id="vehicleListCount" class="ml-auto text-[11px] text-gray-500"></span>
+          </div>
+          <div class="table-scroll" style="max-height: calc(100vh - 190px)">
+            <table class="data-table">
+              <thead id="vehicleListTableHead"></thead>
+              <tbody id="vehicleListTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Edit Vehicle (Vehicle Edit Distribution) -->
+      <section id="section-vehicle-edit" class="admin-section hidden">
+        <div class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-800 bg-darkbg-800/50">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mr-2">
+              <i class="fa-solid fa-pen-to-square text-brand-500 mr-1"></i> Edit Vehicle
+            </h2>
+            <div class="relative">
+              <i class="fa-solid fa-search absolute left-2.5 top-2 text-gray-500 text-[11px]"></i>
+              <input type="text" id="vehicleEditSearchInput" placeholder="Поиск..."
+                class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-7 pr-2 py-1.5 w-52 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </div>
+            <div class="relative">
+              <i class="fa-solid fa-clipboard absolute left-2.5 top-2 text-gray-500 text-[11px]"></i>
+              <input type="text" id="vehicleEditClipboardInput" placeholder="Буфер обмена"
+                title="Содержимое сохраняется в localStorage; при редактировании Notes кнопка «Вставить» подставит его вместо текста"
+                class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-7 pr-2 py-1.5 w-52 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </div>
+            <button id="vehicleEditResetBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+            <button id="vehicleEditExportBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-file-excel text-emerald-400"></i> Export xls</button>
+            <span id="vehicleEditCount" class="ml-auto text-[11px] text-gray-500"></span>
+          </div>
+          <div class="table-scroll" style="max-height: calc(100vh - 190px)">
+            <table class="data-table">
+              <thead id="vehicleEditTableHead"></thead>
+              <tbody id="vehicleEditTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Edit Device -->
+      <section id="section-device-edit" class="admin-section hidden">
+        <div class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-800 bg-darkbg-800/50">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mr-2">
+              <i class="fa-solid fa-mobile-screen text-brand-500 mr-1"></i> Edit Device
+            </h2>
+            <div class="relative">
+              <i class="fa-solid fa-search absolute left-2.5 top-2 text-gray-500 text-[11px]"></i>
+              <input type="text" id="deviceEditSearchInput" placeholder="Поиск..."
+                class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-7 pr-2 py-1.5 w-52 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </div>
+            <button id="deviceEditResetBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+            <button id="deviceEditExportBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-file-excel text-emerald-400"></i> Export xls</button>
+            <span id="deviceEditCount" class="ml-auto text-[11px] text-gray-500"></span>
+          </div>
+          <div class="table-scroll" style="max-height: calc(100vh - 190px)">
+            <table class="data-table">
+              <thead id="deviceEditTableHead"></thead>
+              <tbody id="deviceEditTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Device Status -->
+      <section id="section-device-status" class="admin-section hidden">
+        <div class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-800 bg-darkbg-800/50">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mr-2">
+              <i class="fa-solid fa-signal text-brand-500 mr-1"></i> Device Status
+            </h2>
+            <div class="relative">
+              <i class="fa-solid fa-search absolute left-2.5 top-2 text-gray-500 text-[11px]"></i>
+              <input type="text" id="deviceStatusSearchInput" placeholder="Поиск..."
+                class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-7 pr-2 py-1.5 w-52 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </div>
+            <button id="deviceStatusResetBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+            <button id="deviceStatusExportBtn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-file-excel text-emerald-400"></i> Export xls</button>
+            <span id="deviceStatusCount" class="ml-auto text-[11px] text-gray-500"></span>
+          </div>
+          <div class="table-scroll" style="max-height: calc(100vh - 190px)">
+            <table class="data-table">
+              <thead id="deviceStatusTableHead"></thead>
+              <tbody id="deviceStatusTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Аудит -->
+      <section id="section-audit" class="admin-section hidden">
+        <div class="glass-panel rounded-xl border border-gray-800 p-4 max-w-xl">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">
+            <i class="fa-solid fa-clipboard-check text-brand-500 mr-1"></i> Аудит изменений
+          </h2>
+          <p class="text-[11px] text-gray-500 mb-3">Запрашивает журналы изменений таблиц <b>vehicle</b> и <b>deviceconf</b> за период. Результат открывается в новой вкладке. Внимание: сервер отдаёт не более ~1000 записей на запрос — при большом периоде сужайте диапазон.</p>
+          <div class="flex items-center gap-2">
+            <input type="date" id="auditDateFrom"
+              class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-brand-500" />
+            <span class="text-gray-500">—</span>
+            <input type="date" id="auditDateTo"
+              class="bg-darkbg-900 text-xs border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-brand-500" />
+            <button id="auditRunBtn" class="btn"><i class="fa-solid fa-play"></i> Запустить</button>
+            <span id="auditStatus" class="text-[11px] text-gray-500"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Отчёты -->
+      <section id="section-reports" class="admin-section hidden">
+        <div class="glass-panel rounded-xl border border-gray-800 p-4 max-w-2xl">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">
+            <i class="fa-solid fa-chart-column text-brand-500 mr-1"></i> Пакетные отчёты
+          </h2>
+          <div class="space-y-3 text-xs">
+            <label class="block">
+              <span class="text-gray-400 block mb-1">Тип отчёта</span>
+              <select id="reportTypeSelect"
+                class="w-full bg-darkbg-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-brand-500">
+                <option value="monthly-mileage">Пробег за месяц (матрица день × ТС)</option>
+                <option value="weekly-breakdown">Недельный разбор (будни/выходные)</option>
+                <option value="anomalies-cleanup">Поиск аномалий &gt; 3000 км + SQL</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-gray-400 block mb-1">ID устройств (через запятую, пробел или с новой строки)</span>
+              <textarea id="reportDeviceIds" rows="4"
+                class="w-full bg-darkbg-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-brand-500 font-mono"></textarea>
+            </label>
+            <label class="block max-w-[200px]">
+              <span class="text-gray-400 block mb-1">Месяц</span>
+              <input type="month" id="reportMonth"
+                class="w-full bg-darkbg-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-brand-500" />
+            </label>
+            <div>
+              <button id="generateReportBtn" class="btn"><i class="fa-solid fa-play"></i> Сформировать</button>
+            </div>
+            <div id="reportStatus" class="hidden flex items-center space-x-3 pt-1">
+              <span id="reportProgress" class="text-[11px] text-gray-400 whitespace-nowrap"></span>
+              <div id="reportProgressBar" class="flex-1 h-1.5 bg-darkbg-700 rounded-full overflow-hidden">
+                <div id="reportProgressFill" class="h-full bg-brand-500 rounded-full transition-all duration-300" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Модалка SQL -->
+  <div id="sqlModal" class="modal-overlay">
+    <div class="modal-box" style="width:720px">
+      <div class="modal-header">
+        <h2>SQL для удаления аномалий</h2>
+        <button class="modal-close" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="copySqlBtn" class="btn btn-xs" type="button"><i class="fa-solid fa-copy"></i> Копировать</button>
+          <span class="text-[11px] text-gray-500">SQL выполняется вручную на сервере БД</span>
+        </div>
+        <pre id="sqlOutput" class="sql-output"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка мастера «устройство + ТС» -->
+  <div id="deviceAddModal" class="modal-overlay">
+    <div class="modal-box" style="width:1100px">
+      <div class="modal-header">
+        <h2>Добавление устройства + ТС</h2>
+        <button class="modal-close" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="space-y-2 mb-3">
+          <textarea id="dvaPasteArea" rows="4" placeholder="Вставьте строки из Excel: IMEI (15 цифр) ICCID (19–20 цифр) телефон (6–12 цифр) название филиала"
+            class="w-full bg-darkbg-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-200 focus:outline-none focus:border-brand-500 font-mono"></textarea>
+          <div class="flex items-center gap-2">
+            <button id="dvaParseBtn" class="btn btn-secondary btn-xs" type="button"><i class="fa-solid fa-table"></i> Загрузить из текста</button>
+            <button id="dvaAddRowBtn" class="btn btn-secondary btn-xs" type="button"><i class="fa-solid fa-plus"></i> Добавить строку</button>
+            <span class="text-[11px] text-gray-500">IMEI 15 цифр, ICCID 19–20 цифр, телефон 6–12 цифр, остальное — филиал</span>
+          </div>
+        </div>
+        <div class="table-scroll" style="max-height:46vh">
+          <table class="data-table dva-table">
+            <thead>
+              <tr>
+                <th>IMEI</th><th>ICCID</th><th>Телефон</th><th>Proto</th><th>Number</th>
+                <th>Brand</th><th>Model</th><th>Филиал</th><th>Notes</th><th>Статус</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="dvaTableBody"></tbody>
+          </table>
+        </div>
+        <div id="dvaSummary" class="text-[11px] text-gray-500 mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="dvaCancelBtn" class="btn btn-secondary modal-close-btn" type="button">Отмена</button>
+        <button id="dvaSaveBtn" class="btn" type="button"><i class="fa-solid fa-floppy-disk"></i> Сохранить всё</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/admin/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "scmv-v2.1",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SCMV v2.1 — GPS telematics analytics dashboard (новый интерфейс поверх протокола SCMV v2)",
+  "scripts": {
+    "check": "node tools/check-syntax.js",
+    "mock-server": "node tools/mock-server.js",
+    "smoke": "node tools/smoke-cdp.js"
+  }
+}
