@@ -1,4 +1,5 @@
-// Список ТС (Vehicle Select Min + merge Vehicle Show): карточки, поиск, фильтры, выбор.
+// Список ТС: Vehicle Select Min (+merge Vehicle Show) либо Vehicle Show (все устройства,
+// админ-панель через setVehiclesSource('show')). Карточки, поиск, фильтры, выбор.
 
 import { onPacket, sendRequest } from '../core/ws.js';
 import { auth } from '../core/auth.js';
@@ -9,9 +10,17 @@ let fleetKeyMap = null;
 let filterQuery = '';
 let filterStatus = 'all';
 let filterFleet = 'all';
+// Источник списка ТС: 'select-min' — ТС пользователя (Vehicle Select Min),
+// 'show' — все устройства (Vehicle Show, админ-панель).
+let vehiclesSource = 'select-min';
 export let autoMode = false;
 
 export function getFleetKeyMap() { return fleetKeyMap; }
+
+/** Выбор источника списка ТС: 'select-min' (по uid) или 'show' (все устройства). */
+export function setVehiclesSource(src) {
+  vehiclesSource = src === 'show' ? 'show' : 'select-min';
+}
 
 /** Название филиала по числовому ключу (fleetKeyMap из cols ответа сервера). */
 export function fleetNameOf(v) {
@@ -63,6 +72,11 @@ export function initVehicles() {
   onPacket('Vehicle Select Min', handleVehiclePacket, { priority: 5 });
   onPacket('Vehicle Show', handleVehiclePacket, { priority: 5 });
 
+  // У Vehicle Show нет sdate/контроля — статус неизвестен, фильтр Онлайн/Офлайн бессмыслен
+  if (vehiclesSource === 'show') {
+    document.querySelectorAll('.filter-status-btn').forEach((b) => { b.style.display = 'none'; });
+  }
+
   populateFleetFilter();
   renderVehicleList();
 }
@@ -90,6 +104,7 @@ function handleVehiclePacket(data) {
       (data.act === 'setup' || data.act === 'filter' || data.act === 'reinit')) {
     if (data.name === 'Vehicle Show') {
       state.vehicleDetails = packet.f.slice();
+      if (vehiclesSource === 'show') state.vehicles = packet.f.slice(); // админка: все устройства
       mergeDetails();
     } else {
       state.vehicles = packet.f.slice();
@@ -175,6 +190,8 @@ export function requestVehicleShow() {
 // '00:02:27' / '9 mons 11 days 22:43:13'). Поле 'контроль' связанностью не является
 // (у простаивающих трекеров оно ON) — используем только как fallback.
 // Статусы: online — активность ≤30 мин; week — ≤7 дней (жёлтый); иначе offline.
+// Статусы: online — активность ≤30 мин; week — ≤7 дней (жёлтый); offline — дольше;
+// unknown — нет ни sdate, ни 'контроль' (у Vehicle Show этих полей нет).
 const ONLINE_THRESHOLD_MS = 30 * 60 * 1000;
 const WEEK_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -185,7 +202,10 @@ function deviceStatus(v) {
     if (ms <= WEEK_THRESHOLD_MS) return 'week';
     return 'offline';
   }
-  return String(v['контроль'] || v.kontrol || '').toUpperCase() === 'ON' ? 'online' : 'offline';
+  if (v['контроль'] != null || v.kontrol != null) {
+    return String(v['контроль'] || v.kontrol || '').toUpperCase() === 'ON' ? 'online' : 'offline';
+  }
+  return 'unknown';
 }
 
 function isOnline(v) {
@@ -196,6 +216,7 @@ const STATUS_DOT = {
   online: { cls: 'bg-emerald-500', title: 'На связи (≤30 мин)' },
   week: { cls: 'bg-amber-400', title: 'Активность в пределах недели' },
   offline: { cls: 'bg-rose-500', title: 'Не на связи (больше недели)' },
+  unknown: { cls: 'bg-gray-500', title: 'Нет данных о статусе' },
 };
 
 function filteredVehicles() {
@@ -206,7 +227,7 @@ function filteredVehicles() {
       String(v.model || '').toLowerCase().includes(q) ||
       String(v.id || '').includes(q);
     const matchesStatus = filterStatus === 'all' ||
-      (filterStatus === 'online' ? isOnline(v) : !isOnline(v));
+      (filterStatus === 'online' ? isOnline(v) : !isOnline(v) && deviceStatus(v) !== 'unknown');
     const matchesFleet = filterFleet === 'all' || String(v.fleet) === filterFleet;
     return matchesQuery && matchesStatus && matchesFleet;
   });
@@ -255,7 +276,7 @@ export function renderVehicleList() {
 
   list.forEach((v) => {
     const selected = state.selectedVehicle && String(state.selectedVehicle.id) === String(v.id);
-    const status = STATUS_DOT[deviceStatus(v)] || STATUS_DOT.offline;
+    const status = STATUS_DOT[deviceStatus(v)] || STATUS_DOT.unknown;
     const fleetName = fleetNameOf(v);
     const card = document.createElement('div');
     card.className = `vehicle-card p-2.5 rounded-lg cursor-pointer border flex items-center justify-between bg-darkbg-900/80 ${

@@ -36,6 +36,7 @@ let booted = false;
  *  wireHeader?: boolean обновлять статус WS/пользователя в шапке страницы (default true)
  *  connect?: boolean    открывать WS-соединение (default true)
  *  mount?: string       селектор точки монтирования (default '#dashboardMount')
+ *  vehicleSource?: 'select-min'|'show' список ТС: ТС пользователя (default) или все устройства (Vehicle Show, админ-панель)
  */
 export function initDashboard(opts = {}) {
   if (booted) return;
@@ -65,17 +66,25 @@ export function initDashboard(opts = {}) {
   // ---------- WS ----------
   if (opts.connect !== false) connect({ autoLogin: true });
 
-  // Загрузка списка ТС: при уже активной сессии и при событиях логина/реконнекта
-  if (auth.loggedIn) {
-    vehicles.requestVehicleSelectMin();
-    vehicles.requestVehicleShow();
-  }
+  // Загрузка списка ТС: при уже активной сессии и при событиях логина/реконнекта.
+  // 'select-min' — ТС пользователя + Vehicle Show (детали/fleet-карта);
+  // 'show' (админ-панель) — только Vehicle Show, в списке все устройства.
+  const useShowSource = opts.vehicleSource === 'show';
+  vehicles.setVehiclesSource(useShowSource ? 'show' : 'select-min');
+  const requestVehicleList = (withDetails) => {
+    if (useShowSource) {
+      vehicles.requestVehicleShow();
+    } else {
+      vehicles.requestVehicleSelectMin();
+      if (withDetails) vehicles.requestVehicleShow();
+    }
+  };
+  if (auth.loggedIn) requestVehicleList(true);
   onWsEvent((event) => {
     if (event === 'login-ok') {
-      vehicles.requestVehicleSelectMin();
-      vehicles.requestVehicleShow();
+      requestVehicleList(true);
     } else if (event === 'open' && auth.loggedIn) {
-      vehicles.requestVehicleSelectMin();
+      requestVehicleList(false);
     }
   });
 

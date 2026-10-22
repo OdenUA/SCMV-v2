@@ -2,7 +2,7 @@
 
 export const state = {
   // ТС
-  vehicles: [],            // Vehicle Select Min (строки сервера)
+  vehicles: [],            // список ТС: Vehicle Select Min (дашборд) или Vehicle Show — все устройства (админка)
   vehicleDetails: [],      // Vehicle Show (для мержа model/imei)
   selectedVehicle: null,   // {id, number, fleet, model, ...}
   deviceId: '',
