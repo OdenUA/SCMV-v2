@@ -60,6 +60,7 @@ export function initDashboard(opts = {}) {
   if (!requireSession()) throw new Error('No session');
   initAuth();
   initModals();
+  attachSidebarWheelScroll();
 
   // ---------- Карта ----------
   initMap();
@@ -463,6 +464,38 @@ function wireHeader() {
       performLogout();
     });
   }
+}
+
+// ---------- Прокрутка центра колесом над панелями и фоном окна ----------
+function attachSidebarWheelScroll() {
+  const canScroll = (el, delta) => {
+    if (!el || el.scrollHeight <= el.clientHeight) return false;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    return delta < 0 ? el.scrollTop > 0 : el.scrollTop < maxScroll - 1;
+  };
+
+  document.addEventListener('wheel', (event) => {
+    if (!event.deltaY || event.ctrlKey || event.defaultPrevented) return;
+    if (event.target instanceof Element && event.target.closest('.modal-overlay.open')) return;
+
+    for (const el of event.composedPath()) {
+      if (!(el instanceof Element)) continue;
+      const overflowY = getComputedStyle(el).overflowY;
+      if ((overflowY === 'auto' || overflowY === 'scroll') && canScroll(el, event.deltaY)) return;
+    }
+
+    const mainArea = document.getElementById('mainArea');
+    const monitoring = document.getElementById('section-monitoring');
+    const main = mainArea && (!monitoring || !monitoring.classList.contains('hidden'))
+      ? mainArea
+      : (document.getElementById('adminMain') || mainArea);
+    const unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 && main ? main.clientHeight : 1);
+    const delta = event.deltaY * unit;
+    if (!canScroll(main, delta)) return;
+
+    event.preventDefault();
+    main.scrollTop += delta;
+  }, { passive: false });
 }
 
 // ---------- Ресайз карты ----------
