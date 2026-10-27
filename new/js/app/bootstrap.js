@@ -99,6 +99,7 @@ export function initDashboard(opts = {}) {
     mileage.resetMileageState();
     stops.resetStopsState();
     fuel.onDatesChanged();
+    emit('cleared');
     import('./analysis.js').then((m) => m.clearAnalysis()).catch(() => {});
   });
 
@@ -165,7 +166,7 @@ export function initDashboard(opts = {}) {
       if (el) el.textContent = v;
     };
     setText('statVehicle', state.selectedVehicle ? (state.selectedVehicle.number || `id ${state.selectedVehicle.id}`) : '—');
-    const distText = state.mileageTotalKm ? `${state.mileageTotalKm.toFixed(2)} км` : '—';
+    const distText = state.startstopTotalKm ? `${state.startstopTotalKm.toFixed(2)} км` : '—';
     setText('statDistance', distText);
     setText('mapDistanceBadgeValue', distText);
     setText('statTime', (state.moveDurationMs || state.stopDurationMs)
@@ -271,7 +272,16 @@ export function initDashboard(opts = {}) {
     const m = getMap();
     if (m) setTimeout(() => m.invalidateSize(), 60);
   }
+  function hideTelemetryUI() {
+    if (opts.telemetry !== 'ondemand') return;
+    telemetryShown = false;
+    const wrap = document.getElementById('telemetryWrap');
+    const bar = document.getElementById('playbackBar');
+    if (wrap) wrap.style.display = 'none';
+    if (bar) bar.style.display = 'none';
+  }
   on('telemetry', showTelemetryUI);
+  on('cleared', hideTelemetryUI);
   let telemetryCollapsed = false;
   try { telemetryCollapsed = localStorage.getItem(TELEMETRY_COLLAPSED_KEY) === '1'; } catch (e) { /* ignore */ }
   applyTelemetryCollapsed(telemetryCollapsed);

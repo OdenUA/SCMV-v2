@@ -62,6 +62,7 @@ export function resetMileageState() {
   clearMileage();
   state.mileageSegments = [];
   state.mileageTotalKm = 0;
+  state.startstopTotalKm = 0;
   state.moveDurationMs = 0;
   state.stopDurationMs = 0;
   emit('mileage');

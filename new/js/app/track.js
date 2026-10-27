@@ -2,6 +2,7 @@
 // отрисовка (полилиния или точки), таблица аномалий + SQL, массовое удаление.
 
 import { onPacket, sendRequest } from '../core/ws.js';
+import { auth } from '../core/auth.js';
 import {
   getTrackLayer, getAnomalyLayer, getMap, makeStartIcon, makeFinishIcon,
   registerSmartArrows, rebuildDirections,
@@ -45,12 +46,16 @@ export function initTrack() {
     return true;
   });
 
-  // Startstop Sum Result → dest для шаблона «ok»
+  // Startstop Sum Result → итоговый пробег для бейджа и шаблона «ok»
   onPacket('Startstop Sum Result', (data) => {
     const rows = data.res && data.res[0] && data.res[0].f;
-    if (!Array.isArray(rows) || !rows.length) return false;
-    const last = rows[rows.length - 1];
-    if (last && last.dest != null) state.lastOkDest = last.dest;
+    if (!Array.isArray(rows)) return false;
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const rawDest = last && last.dest != null ? String(last.dest) : '';
+    const dest = parseFloat(rawDest.replace(',', '.'));
+    state.lastOkDest = rawDest || '0';
+    state.startstopTotalKm = isFinite(dest) ? dest : 0;
+    emit('mileage');
     return false;
   }, { priority: 1 });
 
@@ -164,9 +169,15 @@ function requestTrack() {
 }
 
 function requestStartstopSums() {
+  const { dateFrom, dateTo } = getDates();
   sendRequest({
     name: 'Startstop Sum Result', type: 'etbl', mid: 7, act: 'filter',
-    filter: [{ selectedvihicleid: [state.deviceId] }],
+    filter: [
+      { selecteduid: [auth.uid] },
+      { selectedvihicleid: [state.deviceId] },
+      { selectedpgdatefrom: [dateFrom] },
+      { selectedpgdateto: [dateTo] },
+    ],
     lang: 'en',
   });
 }
@@ -240,13 +251,11 @@ function handleTrackResponse(rows) {
   state.anomalies = result.anomalies;
   emit('track');
 
+  playback.setPoints(parsed);
+  speedChart.setTrack(parsed);
+  emit('telemetry');
   // Телеметрия (дашборд): данные только в плеер/график, на карту не рисуем
-  if (rawHiddenMode) {
-    playback.setPoints(parsed);
-    speedChart.setTrack(parsed);
-    emit('telemetry');
-    return;
-  }
+  if (rawHiddenMode) return;
 
   drawTrack(parsed, () => {
     drawAnomalyLayers(result.layerSpecs);

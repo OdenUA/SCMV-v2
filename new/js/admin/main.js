@@ -11,7 +11,9 @@ import { initAudit } from './audit.js';
 import { initReports } from './reports.js';
 import { initDeviceAdd } from './device-add.js';
 import { initDashboard } from '../app/bootstrap.js';
+import { initTheme } from '../core/theme.js';
 
+initTheme();
 if (!requireSession()) {
   // requireSession уже перенаправил на login.html
   throw new Error('Нет активной сессии');
@@ -178,6 +180,7 @@ function activateSection(name) {
         clipboard: true,
         adminTools: true,
         mapDistanceOnly: true,
+        telemetry: 'ondemand',
         vehicleSource: 'show', // все устройства (Vehicle Show), а не ТС пользователя (Vehicle Select Min)
         wireHeader: false, // шапку и соединение ведёт админка
         connect: false,

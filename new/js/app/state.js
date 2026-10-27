@@ -20,6 +20,7 @@ export const state = {
   fuelDaily: [],           // суточная таблица
   fuelSummary: null,       // сводка по бакам
   mileageTotalKm: 0,
+  startstopTotalKm: 0,     // итоговый dest последней строки Startstop Sum Result
   stopDurationMs: 0,
   moveDurationMs: 0,
   // Готовность модулей

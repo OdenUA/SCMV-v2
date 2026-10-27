@@ -328,3 +328,132 @@ pre.sql-output {
 /* Кнопки буфера обмена: компактные отступы — ряд из 5 кнопок не переносится
    даже в узком сайдбаре (w-80) и при появлении скроллбара нижней панели. */
 .panel-clipboard-icon { padding-left: 0.4rem; padding-right: 0.4rem; }
+
+/* Темы интерфейса */
+:root {
+  --theme-bg: #0b0f17;
+  --theme-surface: #111827;
+  --theme-surface-2: #1f2937;
+  --theme-text: #1f2937;
+  --theme-muted: #9ca3af;
+  --theme-border: #374151;
+  --theme-hover: #374151;
+}
+html[data-theme="light"] {
+  --theme-bg: #f3f6fa;
+  --theme-surface: #ffffff;
+  --theme-surface-2: #e8edf4;
+  --theme-text: #1e293b;
+  --theme-muted: #64748b;
+  --theme-border: #cbd5e1;
+  --theme-hover: #dbe4ee;
+}
+html[data-theme="light"] body.bg-darkbg-900 { background: var(--theme-bg); color: var(--theme-text); }
+html[data-theme="light"] .bg-darkbg-800 { background-color: var(--theme-surface); }
+html[data-theme="light"] .bg-darkbg-800\/50 { background-color: rgba(255,255,255,.75); }
+html[data-theme="light"] .bg-darkbg-900 { background-color: var(--theme-surface); }
+html[data-theme="light"] .bg-darkbg-900\/80 { background-color: rgba(255,255,255,.88); }
+html[data-theme="light"] .bg-darkbg-700 { background-color: var(--theme-surface-2); }
+html[data-theme="light"] .bg-gray-700 { background-color: var(--theme-border); }
+html[data-theme="light"] .hover\:bg-gray-700:hover { background-color: var(--theme-hover); }
+html[data-theme="light"] .text-gray-100,
+html[data-theme="light"] .text-gray-200,
+html[data-theme="light"] .text-gray-300 { color: var(--theme-text); }
+html[data-theme="light"] .text-gray-400,
+html[data-theme="light"] .text-gray-500,
+html[data-theme="light"] .text-gray-600 { color: var(--theme-muted); }
+html[data-theme="light"] h1.text-white,
+html[data-theme="light"] h2.text-white,
+html[data-theme="light"] h3.text-white,
+html[data-theme="light"] #playerCurrentTime,
+html[data-theme="light"] #mapDistanceBadgeValue,
+html[data-theme="light"] #changelogEntries .text-white { color: #0f172a; }
+html[data-theme="light"] .hover\:text-white:hover,
+html[data-theme="light"] .hover\:text-gray-200:hover,
+html[data-theme="light"] .hover\:text-gray-300:hover { color: #0f172a; }
+html[data-theme="light"] .border-gray-800,
+html[data-theme="light"] .border-gray-800\/60,
+html[data-theme="light"] .border-gray-700,
+html[data-theme="light"] .border-gray-700\/60 { border-color: var(--theme-border); }
+html[data-theme="light"] .glass-panel {
+  background: rgba(255,255,255,.88);
+  border-color: rgba(148,163,184,.38);
+}
+html[data-theme="light"] input[type="datetime-local"],
+html[data-theme="light"] input[type="date"],
+html[data-theme="light"] input[type="month"],
+html[data-theme="light"] input[type="time"] { color-scheme: light; }
+html[data-theme="light"] ::-webkit-scrollbar-track { background: #e8edf4; }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #b6c2d1; }
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Светлая тема таблиц и полей */
+html[data-theme="light"] .data-table { color: #334155; }
+html[data-theme="light"] .data-table thead th {
+  background: rgba(241,245,249,.97); color: #64748b; border-bottom-color: #cbd5e1;
+}
+html[data-theme="light"] .data-table tbody td { border-bottom-color: rgba(203,213,225,.65); }
+html[data-theme="light"] .data-table tbody tr:hover { background: rgba(226,232,240,.55); }
+html[data-theme="light"] .data-table tr.row-selected,
+html[data-theme="light"] .data-table tr.highlighted { background: rgba(59,130,246,.16) !important; }
+html[data-theme="light"] .data-table input[type="text"],
+html[data-theme="light"] .data-table select,
+html[data-theme="light"] .dva-table input,
+html[data-theme="light"] .dva-table select {
+  background: #fff; border-color: #cbd5e1; color: #1e293b;
+}
+html[data-theme="light"] .table-skeleton td { color: #cbd5e1; }
+
+/* Светлая тема кнопок, модалок и уведомлений */
+html[data-theme="light"] .btn-secondary {
+  background: #e8edf4; color: #334155; border-color: #cbd5e1;
+}
+html[data-theme="light"] .btn-secondary:hover { background: #dbe4ee; }
+html[data-theme="light"] .modal-box { background: #fff; border-color: #dbe3ec; }
+html[data-theme="light"] .modal-header,
+html[data-theme="light"] .modal-footer { border-color: #dbe3ec; }
+html[data-theme="light"] .modal-header h2 { color: #0f172a; }
+html[data-theme="light"] .modal-close { color: #64748b; }
+html[data-theme="light"] .modal-close:hover { color: #0f172a; }
+html[data-theme="light"] pre.sql-output { background: #f1f5f9; border-color: #cbd5e1; color: #0e7490; }
+html[data-theme="light"] .toast-notification {
+  background: #fff; border-color: rgba(59,130,246,.45); color: #1e293b;
+  box-shadow: 0 20px 40px -12px rgba(15,23,42,.22);
+}
+html[data-theme="light"] #globalLoadingOverlay { background: rgba(243,246,250,.82); }
+html[data-theme="light"] .global-loading-spinner { border-color: #dbe4ee; border-top-color: #3b82f6; }
+html[data-theme="light"] .global-loading-text,
+html[data-theme="light"] .status-text { color: #64748b; }
+
+/* Светлая тема элементов карты */
+html[data-theme="light"] .leaflet-container { background: #e2e8f0; }
+html[data-theme="light"] .leaflet-popup-content-wrapper,
+html[data-theme="light"] .leaflet-popup-tip {
+  background: #fff !important; color: #1e293b !important; border-color: #dbe3ec;
+  box-shadow: 0 10px 25px -8px rgba(15,23,42,.25);
+}
+html[data-theme="light"] .leaflet-bar a,
+html[data-theme="light"] .map-icon-btn {
+  background: #fff !important; color: #334155; border-color: #cbd5e1;
+}
+html[data-theme="light"] .leaflet-bar a:hover,
+html[data-theme="light"] .map-icon-btn:hover { background: #e8edf4 !important; }
+html[data-theme="light"] .map-icon-btn.active { background: #2563eb !important; color: #fff; }
+html[data-theme="light"] .map-context-menu {
+  background: #fff; border-color: #cbd5e1; box-shadow: 0 10px 25px -8px rgba(15,23,42,.25);
+}
+html[data-theme="light"] .map-context-menu button { color: #334155; }
+html[data-theme="light"] .map-context-menu button:hover { background: #2563eb; color: #fff; }
+html[data-theme="light"] .map-context-menu .ctx-separator { background: #dbe3ec; }
+html[data-theme="light"] .location-label {
+  background: rgba(255,255,255,.94) !important; color: #6d28d9 !important; border-color: rgba(124,58,237,.4) !important;
+}
+html[data-theme="light"] .manual-route-info {
+  background: rgba(255,255,255,.94); border-color: #cbd5e1; color: #334155;
+}
+html[data-theme="light"] .leaflet-tooltip.ruler-total-tooltip {
+  background: rgba(255,255,255,.96); color: #78350f; border-color: #d97706;
+}
+html[data-theme="light"] .audit-table th,
+html[data-theme="light"] .audit-table td { border-color: #cbd5e1; }
+html[data-theme="light"] .audit-table th { background: #e8edf4; }

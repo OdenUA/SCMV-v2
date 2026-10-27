@@ -2,6 +2,13 @@
 
 export const CHANGELOG = [
   {
+    version: '2.0.4',
+    date: '2026-10-27',
+    items: [
+      'Добавлена светлая тема',
+    ],
+  },
+  {
     version: '2.0.3',
     date: '2026-10-27',
     items: [
@@ -60,7 +67,7 @@ export function initChangelog() {
     link.textContent = 'v ' + current.version;
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      versionEl.textContent = '';
+      versionEl.textContent = `v ${current.version}`;
       renderEntries(entries, CHANGELOG);
       modal.classList.add('open');
     });

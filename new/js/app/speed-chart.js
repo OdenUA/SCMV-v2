@@ -67,6 +67,30 @@ export function getPlaybackIndex() {
   return chart ? chart.$playbackIndex : null;
 }
 
+function applyChartTheme() {
+  if (typeof Chart === 'undefined') return;
+  const light = document.documentElement.dataset.theme === 'light';
+  const text = light ? '#64748b' : '#9ca3af';
+  const grid = light ? 'rgba(100,116,139,0.16)' : 'rgba(255,255,255,0.05)';
+  Chart.defaults.color = text;
+  Chart.defaults.borderColor = grid;
+  if (!chart) return;
+  ['x', 'y', 'y1'].forEach((key) => {
+    const scale = chart.options.scales[key];
+    if (scale && scale.ticks) scale.ticks.color = text;
+  });
+  chart.options.scales.x.grid.color = grid;
+  chart.options.scales.y.grid.color = grid;
+  Object.assign(chart.options.plugins.tooltip, {
+    backgroundColor: light ? '#ffffff' : '#1f2937',
+    titleColor: light ? '#1e293b' : '#f3f4f6',
+    bodyColor: light ? '#334155' : '#e5e7eb',
+    borderColor: light ? '#cbd5e1' : '#374151',
+    borderWidth: 1,
+  });
+  chart.update('none');
+}
+
 export function initChart() {
   const canvas = document.getElementById('speedChart');
   if (!canvas || typeof Chart === 'undefined') return;
@@ -142,6 +166,8 @@ export function initChart() {
     },
   });
 
+  applyChartTheme();
+  document.addEventListener('scmv:themechange', applyChartTheme);
   onState('cleared', () => setTrack([]));
 }
 

@@ -2,7 +2,9 @@
 // Базовый мониторинг: пробег + стоянки (Vehicle Track нет, без проигрывателя и графика).
 
 import { initDashboard } from './bootstrap.js';
+import { initTheme } from '../core/theme.js';
 
+initTheme();
 initDashboard({
   tabs: ['stops', 'analysis', 'fuel-events', 'fuel-summary', 'fuel-daily'],
   actions: ['track', 'telemetry', 'analyze'],

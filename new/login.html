@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SCMV v2 — Вход</title>
+  <script>
+    try {
+      const theme = localStorage.getItem('scmv_theme') === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      document.documentElement.style.colorScheme = theme;
+    } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
   <link rel="stylesheet" href="vendor/tailwind/app.css" />
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
   <link rel="stylesheet" href="css/app.css" />
@@ -15,6 +23,9 @@
   </script>
 </head>
 <body class="bg-darkbg-900 text-gray-200 font-sans min-h-screen flex items-center justify-center p-4">
+  <button type="button" data-theme-toggle class="fixed top-4 right-4 z-10 p-2 text-gray-400 hover:text-white bg-darkbg-700 hover:bg-gray-700 rounded-lg transition" title="Светлая тема" aria-label="Светлая тема" aria-pressed="false">
+    <i class="fa-solid fa-circle-half-stroke"></i>
+  </button>
   <div class="w-full max-w-md">
     <div class="text-center mb-6">
       <div class="inline-flex bg-brand-600 text-white p-3 rounded-2xl shadow-lg shadow-brand-500/20 mb-3">
@@ -58,7 +69,9 @@
     import { connect, close, sendRaw, buildLoginRequest, onWsEvent } from './js/core/ws.js';
     import { auth, initAuth, persistCredentials } from './js/core/auth.js';
     import { getWsUrl } from './js/core/config.js';
+    import { initTheme } from './js/core/theme.js';
 
+    initTheme();
     initAuth();
 
     const form = document.getElementById('loginForm');

@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SCMV v2 — Админ-панель</title>
   <script>
+    try {
+      const theme = localStorage.getItem('scmv_theme') === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      document.documentElement.style.colorScheme = theme;
+    } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
+  <script>
     // Защита: без активной сессии — на страницу входа
     try {
       if (localStorage.getItem('dt_session') !== '1') location.replace('login.html');
@@ -43,6 +51,9 @@
         <span id="statusText" class="status-text">Не подключено</span>
         <span id="lastResponse" class="text-gray-500"></span>
       </div>
+      <button type="button" data-theme-toggle class="p-2 text-gray-400 hover:text-white bg-darkbg-700 hover:bg-gray-700 rounded-lg transition" title="Светлая тема" aria-label="Светлая тема" aria-pressed="false">
+        <i class="fa-solid fa-circle-half-stroke"></i>
+      </button>
       <a href="index.html" title="Дашборд"
         class="px-3 py-2 text-gray-400 hover:text-white bg-darkbg-700 hover:bg-gray-700 rounded-lg transition flex items-center space-x-2">
         <i class="fa-solid fa-gauge-high"></i><span class="hidden sm:inline">Дашборд</span>

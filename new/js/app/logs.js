@@ -7,7 +7,7 @@ import {
   mountTableBody, parseTrackDate, timeKeyOf, getField, haversineM,
   generateSqlFromIntervals, openSqlModal, showToast, escapeHtml, debounce,
 } from '../core/utils.js';
-import { state, emit } from './state.js';
+import { state, emit, on } from './state.js';
 import { registerTab } from './tabs.js';
 
 let fullState = null;
@@ -29,6 +29,7 @@ const DEVICE_LOG_COLS = ['id', 'deviceid', 'wdate', 'sdate', 'latitude', 'longit
 // ---------- Публичный API ----------
 export function initLogs() {
   onPacket('Device Track', handleChunkedFull, { predicate: () => !!(fullState && fullState.active), priority: 5 });
+  on('cleared', clearFocus);
 
   registerTab({ id: 'devlog', title: 'Device Log', getRows: () => fullTrackCache.slice(), render: renderLogTable, onShow: renderLogTable });
 
@@ -275,6 +276,10 @@ export function focusFullTrackAtTimestamp(wdate) {
 
 function clearFocus() {
   highlighted = new Set();
+  if (focusMarker) {
+    try { getMap().removeLayer(focusMarker); } catch (e) {}
+    focusMarker = null;
+  }
   renderLogTable();
 }
 
