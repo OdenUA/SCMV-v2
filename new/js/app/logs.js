@@ -232,6 +232,8 @@ function renderLogTable() {
 
 // ---------- Фокус на карте ----------
 function focusMapAtRow(row) {
+  const mapBlock = document.getElementById('mapBlock');
+  if (mapBlock) mapBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const lat = parseFloat(getField(row, ['latitude', 'lat']));
   const lng = parseFloat(getField(row, ['longitude', 'lon', 'lng']));
   if (!isFinite(lat) || !isFinite(lng)) { showToast('В строке нет координат'); return; }
@@ -379,20 +381,12 @@ function buildIntervals(rows) {
     const type2 = p.sat != null && p.sat < satThreshold; // 0 спутников тоже учитывается (как в v2)
     const type4 = p.badCoords;
 
-    if (type4) {
-      // GPS-аномалия — отдельный интервал (не сливается)
-      flush();
-      if (cur === null) {
-        cur = { type: 4, start: p, last: p, rows: [p.i], isAnomaly: true };
-      }
-      continue;
-    }
-    const type = (type1 && type2) ? 3 : type1 ? 1 : type2 ? 2 : 0;
+    const type = type4 ? 4 : (type1 && type2) ? 3 : type1 ? 1 : type2 ? 2 : 0;
     if (type === 0) { flush(); continue; }
 
-    if (!cur || cur.isAnomaly) {
-      if (cur) { list.push(cur); cur = null; }
-      cur = { type, start: p, last: p, rows: [p.i], isAnomaly: false, flags: type };
+    if (!cur || cur.isAnomaly !== type4) {
+      flush();
+      cur = { type, start: p, last: p, rows: [p.i], isAnomaly: type4, flags: type };
       continue;
     }
     const gapSec = (p.ts - cur.last.ts) / 1000;
@@ -402,7 +396,7 @@ function buildIntervals(rows) {
       cur.flags |= type;
     } else {
       flush();
-      cur = { type, start: p, last: p, rows: [p.i], isAnomaly: false, flags: type };
+      cur = { type, start: p, last: p, rows: [p.i], isAnomaly: type4, flags: type };
     }
   }
   flush();

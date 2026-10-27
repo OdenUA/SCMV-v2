@@ -197,8 +197,22 @@ pre.sql-output {
 /* Статус-плашка (в шапке/панели) */
 .status-text { font-size: 11px; color: #9ca3af; transition: color 0.3s; }
 
-/* Курсор режима маршрута */
-.route-mode-active .leaflet-container { cursor: crosshair !important; }
+/* Курсор кликовых инструментов карты */
+.route-mode-active .leaflet-container,
+.ruler-mode-active .leaflet-container { cursor: crosshair !important; }
+
+/* Линейка */
+.ruler-point-marker {
+  width: 20px; height: 20px; border-radius: 50%; background: #d97706;
+  border: 2px solid #fff; color: #fff; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+}
+.leaflet-tooltip.ruler-total-tooltip {
+  background: rgba(17,24,39,.94); border: 1px solid #d97706; color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.45); font-size: 11px; padding: 4px 7px;
+}
+.leaflet-tooltip-top.ruler-total-tooltip::before { border-top-color: #d97706; }
 
 /* Карточки ТС */
 .vehicle-card { transition: border-color 0.15s, background 0.15s; }
@@ -230,6 +244,7 @@ pre.sql-output {
   border-radius: 0;
 }
 #mapBlock.map-fullscreen #mapFullscreenBar { display: flex; }
+#mapBlock.map-distance-only:not(.map-fullscreen) #mapFullscreenExitBtn { display: none; }
 /* в полноэкранном режиме кнопка разворачивания не нужна — выход сверху у бейджа */
 #mapBlock.map-fullscreen #mapFullscreenEnterBtn { display: none; }
 

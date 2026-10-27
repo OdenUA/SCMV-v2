@@ -177,6 +177,7 @@ function activateSection(name) {
         actions: ['track', 'raw', 'analyze', 'devlog'],
         clipboard: true,
         adminTools: true,
+        mapDistanceOnly: true,
         vehicleSource: 'show', // все устройства (Vehicle Show), а не ТС пользователя (Vehicle Select Min)
         wireHeader: false, // шапку и соединение ведёт админка
         connect: false,

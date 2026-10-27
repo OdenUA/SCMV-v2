@@ -47,6 +47,7 @@ export function initMap() {
 
   addVisibilityControl();
   addRouteControl();
+  addRulerControl();
   addDisplayPanelControl();
   addFullscreenControl();
   initContextMenu();
@@ -375,6 +376,36 @@ function addRouteControl() {
       routeResetBtn.addEventListener('click', (ev) => {
         ev.preventDefault();
         if (routeHandlers.onReset) routeHandlers.onReset();
+      });
+      return container;
+    },
+  });
+  map.addControl(new Control());
+}
+
+// Контрол линейки
+let rulerHandlers = { onToggle: null };
+let rulerToggleBtn = null;
+
+export function setRulerHandlers(handlers) {
+  rulerHandlers = handlers || {};
+}
+export function updateRulerButton(active) {
+  if (rulerToggleBtn) rulerToggleBtn.classList.toggle('active', !!active);
+}
+
+function addRulerControl() {
+  const Control = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const container = L.DomUtil.create('div', 'leaflet-control-custom-group');
+      rulerToggleBtn = L.DomUtil.create('button', 'map-icon-btn', container);
+      rulerToggleBtn.innerHTML = '<i class="fa-solid fa-ruler-horizontal"></i>';
+      rulerToggleBtn.title = 'Линейка: измерить расстояние';
+      L.DomEvent.disableClickPropagation(rulerToggleBtn);
+      rulerToggleBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        if (rulerHandlers.onToggle) rulerHandlers.onToggle();
       });
       return container;
     },

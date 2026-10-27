@@ -237,6 +237,7 @@ function modalsHtml() {
  *  telemetry: boolean | 'ondemand' — проигрыватель и график скорости.
  *             'ondemand' рендерит их скрытыми (показывает bootstrap по событию 'telemetry')
  *  adminTools: boolean — настройки аномалий и «Очистить память» (default false)
+ *  mapDistanceOnly: boolean — без KPI-панели, только плавающий пробег над картой (default false)
  */
 export function dashboardTemplate(opts = {}) {
   const tabs = opts.tabs || ['stops', 'anomalies'];
@@ -245,11 +246,13 @@ export function dashboardTemplate(opts = {}) {
   const telemetryMode = opts.telemetry === 'ondemand' ? 'ondemand' : (opts.telemetry !== false ? 'on' : 'off');
   const telemetryHidden = telemetryMode === 'ondemand';
   const adminTools = !!opts.adminTools;
+  const mapDistanceOnly = !!opts.mapDistanceOnly;
 
   return `
   <!-- Центральная область -->
   <main id="mainArea" class="flex-1 flex flex-col h-full overflow-y-auto relative min-w-0">
 
+    ${mapDistanceOnly ? '' : `
     <!-- KPI -->
     <div class="grid grid-cols-2 lg:grid-cols-7 gap-3 p-4 shrink-0">
       <div class="glass-panel p-3 rounded-xl flex items-center space-x-3">
@@ -301,15 +304,15 @@ export function dashboardTemplate(opts = {}) {
           <h3 id="statDistance" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
-    </div>
+    </div>`}
 
     <!-- Карта + проигрыватель -->
-    <div id="mapBlock" class="relative mx-4 rounded-xl overflow-hidden border border-gray-800 shadow-2xl flex flex-col shrink-0" style="height:480px">
+    <div id="mapBlock" class="${mapDistanceOnly ? 'map-distance-only' : ''} relative mx-4 rounded-xl overflow-hidden border border-gray-800 shadow-2xl flex flex-col shrink-0" style="height:480px">
       <div id="map" class="w-full flex-1 z-0 bg-darkbg-800"></div>
       <div id="manualRouteInfo" class="manual-route-info"></div>
 
       <!-- Плавающая группа полноэкранного режима: бейдж «Общий пробег» + кнопка выхода -->
-      <div id="mapFullscreenBar" class="hidden absolute top-3 left-1/2 -translate-x-1/2 z-[1000] items-center space-x-2">
+      <div id="mapFullscreenBar" class="${mapDistanceOnly ? 'flex' : 'hidden'} absolute top-3 left-1/2 -translate-x-1/2 z-[1000] items-center space-x-2">
         <div id="mapDistanceBadge" class="glass-panel px-3 py-1.5 rounded-full flex items-center space-x-2 text-xs shadow-2xl">
           <i class="fa-solid fa-road text-blue-400"></i>
           <span class="text-[11px] text-gray-400">Общий пробег</span>

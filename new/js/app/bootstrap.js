@@ -37,6 +37,7 @@ let booted = false;
  *  connect?: boolean    открывать WS-соединение (default true)
  *  mount?: string       селектор точки монтирования (default '#dashboardMount')
  *  vehicleSource?: 'select-min'|'show' список ТС: ТС пользователя (default) или все устройства (Vehicle Show, админ-панель)
+ *  mapDistanceOnly?: boolean без верхней KPI-панели, только плавающий бейдж пробега над картой
  */
 export function initDashboard(opts = {}) {
   if (booted) return;
@@ -53,6 +54,7 @@ export function initDashboard(opts = {}) {
     clipboard: !!opts.clipboard,
     telemetry: opts.telemetry,
     adminTools: !!opts.adminTools,
+    mapDistanceOnly: !!opts.mapDistanceOnly,
   });
 
   if (!requireSession()) throw new Error('No session');

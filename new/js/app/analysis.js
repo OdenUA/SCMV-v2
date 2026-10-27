@@ -296,7 +296,7 @@ function renderMapSegments() {
     }).addTo(layer);
     line._isAnalysisPolyline = true;
     line.on('click', (e) => {
-      if (window.__routeModeActive) return;
+      if (window.__routeModeActive || window.__rulerModeActive) return;
       showSegmentDetails(seg);
     });
     seg.layer = line;
@@ -366,6 +366,8 @@ function showSegmentDetails(seg) {
 
 // Переход на карту: вписать все точки записей и мигнуть их слоями
 function fitEntriesOnMap(entries) {
+  const mapBlock = document.getElementById('mapBlock');
+  if (mapBlock) mapBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const latlngs = [];
   const layers = [];
   entries.forEach((seg) => {

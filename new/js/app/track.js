@@ -477,7 +477,7 @@ function buildPointPopup(p) {
 
 function bindTrackClick(seg, parsed) {
   seg.on('click', (e) => {
-    if (window.__routeModeActive) return; // режим маршрута обрабатывает клик сам
+    if (window.__routeModeActive || window.__rulerModeActive) return; // клик обрабатывает активный инструмент карты
     const nearest = findNearest(parsed, e.latlng);
     if (!nearest) return;
     showFocusMarker(nearest);
