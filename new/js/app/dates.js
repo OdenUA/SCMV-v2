@@ -128,5 +128,45 @@ export function initDates(onChange) {
     });
   });
 
+  const shiftDate = (el, days) => {
+    if (!el || !el.value) return;
+    const date = new Date(el.value);
+    if (Number.isNaN(date.getTime())) return;
+    date.setDate(date.getDate() + days);
+    el.value = toLocalInput(date);
+  };
+
+  document.addEventListener('keydown', (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (document.querySelector('.modal-overlay.open')) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const dateInput = target && target.closest('#startDate, #endDate');
+    const interactive = target && target.closest('input, textarea, select, button, a, [contenteditable="true"]');
+
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      if (interactive && !dateInput) return;
+      const fromEl = document.getElementById('startDate');
+      const toEl = document.getElementById('endDate');
+      const days = event.key === 'ArrowUp' ? 1 : -1;
+      event.preventDefault();
+      if (dateInput) {
+        shiftDate(dateInput, days);
+        if (dateInput.id === 'startDate') syncLock();
+      } else {
+        shiftDate(fromEl, days);
+        if (dateLockEnabled) syncLock();
+        else shiftDate(toEl, days);
+      }
+      onChange && onChange();
+      return;
+    }
+
+    if (event.key !== 'Enter' || event.repeat || (interactive && !dateInput)) return;
+    event.preventDefault();
+    if (dateInput) dateInput.blur();
+    const loadBtn = document.getElementById('btnLoadTrack');
+    if (loadBtn) loadBtn.click();
+  });
+
   if (!document.getElementById('startDate').value) setDefaultDates();
 }

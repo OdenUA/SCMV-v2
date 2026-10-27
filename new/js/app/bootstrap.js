@@ -113,18 +113,6 @@ export function initDashboard(opts = {}) {
     if (!state.deviceId) { showToast('⚠ Сначала выберите ТС'); return; }
     track.loadTrack();
   });
-  // Enter в полях периода — загрузка трека (аналог клика по «Загрузить трек»)
-  ['startDate', 'endDate'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      el.blur(); // закрыть календарь, если открыт
-      const btn = document.getElementById('btnLoadTrack');
-      if (btn) btn.click();
-    });
-  });
   onClick('btnLoadRawTrack', () => {
     if (!state.deviceId) { showToast('⚠ Сначала выберите ТС'); return; }
     track.loadRawTrack();
