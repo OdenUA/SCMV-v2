@@ -40,6 +40,16 @@
         <p class="text-xs text-gray-400 truncate">Система мониторинга корпоративного автопарка</p>
       </div>
       <div id="headerVehicle" class="hidden lg:block text-xs text-gray-400 truncate ml-4 max-w-[280px]"></div>
+
+      <!-- Переключатель режимов: Анализ истории / Online Мониторинг -->
+      <div id="appModeSwitch" class="hidden md:flex items-center bg-darkbg-900 p-1 rounded-xl border border-gray-700/60 ml-4 shrink-0">
+        <button id="modeHistoryBtn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 bg-brand-600 text-white">
+          <i class="fa-solid fa-clock-rotate-left"></i><span>Анализ истории</span>
+        </button>
+        <button id="modeOnlineBtn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 text-gray-400 hover:text-white">
+          <span class="live-dot"></span><span>Online Мониторинг</span>
+        </button>
+      </div>
     </div>
 
     <div class="flex items-center space-x-4 text-xs">

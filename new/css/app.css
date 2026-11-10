@@ -95,6 +95,58 @@ input[type="datetime-local"], input[type="date"], input[type="month"], input[typ
 }
 .location-label::before { display: none !important; }
 
+/* Online (Surv): маркеры ТС со стрелкой курса */
+.online-marker {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid #fff; color: #fff; font-size: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.online-marker-moving { background: #10b981; }
+.online-marker-stopped { background: #0ea5e9; }
+.online-marker-offline { background: #64748b; }
+.online-marker-nodata { background: #9ca3af; }
+.online-marker.pulsed { animation: stop-pulse 0.8s ease-in-out 3; }
+.online-label {
+  background: rgba(17, 24, 39, 0.9) !important;
+  border: 1px solid rgba(16, 185, 129, 0.5) !important;
+  color: #d1fae5 !important;
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px !important; border-radius: 6px !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5) !important;
+}
+.online-label::before { display: none !important; }
+
+/* Online: состояние внешнего питания (Power Status, колонка «Контроль») */
+.online-power-off { color: #fb7185; font-weight: 600; }
+.online-power-on { color: #34d399; }
+
+/* Online: пульсирующая live-точка (шапка, бейдж на карте) */
+.live-dot {
+  position: relative; width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981; display: inline-block; flex-shrink: 0;
+}
+.live-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: #34d399; animation: live-dot-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes live-dot-ping {
+  0% { transform: scale(1); opacity: .8; }
+  80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Режимы дашборда: «Анализ истории» / «Online Мониторинг» (переключатель в шапке) */
+body.app-mode-online .history-only { display: none !important; }
+body:not(.app-mode-online) .online-only { display: none !important; }
+body.app-mode-online #modeOnlineBtn { background: #059669; color: #fff; }
+.online-live-badge { left: 56px; border: 1px solid rgba(16, 185, 129, .4) !important; }
+
+/* Online: карта занимает всё место, освобождённое таблицами (нижняя таблица убрана) */
+body.app-mode-online #mapBlock { flex: 1 1 auto; height: auto !important; min-height: 480px; }
+
+/* Online: активная кнопка «Авто-слежение» в попапе маркера */
+.btn-online-active { background: #059669 !important; color: #fff !important; }
+
 .point-focus-marker {
   width: 14px; height: 14px; border-radius: 50%;
   background: #ff4136; border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,0.6);
@@ -120,7 +172,42 @@ input[type="datetime-local"], input[type="date"], input[type="month"], input[typ
 .data-table tbody tr:hover { background: rgba(31, 41, 55, 0.5); }
 .data-table tr.row-selected, .data-table tr.highlighted { background: rgba(37, 99, 235, 0.25) !important; }
 .table-scroll { overflow: auto; max-height: 320px; }
+.device-log-scroll-wrap { position: relative; }
+.device-log-scroll { margin-right: 12px; scrollbar-width: auto; }
+.device-log-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.device-log-scroll::-webkit-scrollbar:vertical { width: 0; }
+.device-log-scroll::-webkit-scrollbar-thumb { border-radius: 6px; }
+.device-log-scroll::-webkit-scrollbar-thumb:vertical { background: transparent; }
+.device-log-scrollbar {
+  position: absolute; top: 0; right: 0; width: 12px; z-index: 4;
+  background: rgba(15, 23, 42, 0.6); user-select: none;
+}
+.device-log-scrollbar-thumb {
+  position: absolute; top: 0; left: 0; right: 0; border-radius: 6px;
+  background: #4b5563; cursor: grab; touch-action: none;
+}
+.device-log-scrollbar-thumb:active { cursor: grabbing; background: #6b7280; }
 .vt-spacer td { border: none !important; }
+
+/* Переключатель служебных филиалов в админском мониторинге */
+.toggle-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.toggle-track {
+  position: relative; display: inline-block; width: 32px; height: 18px; flex: 0 0 auto;
+  background: #374151; border: 1px solid #6b7280; border-radius: 9999px;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+  background: #f9fafb; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.35);
+  transition: transform .15s;
+}
+.toggle-label { line-height: 1.25; transition: color .15s; }
+.toggle-input:checked + .toggle-track {
+  background: #2563eb; border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59,130,246,.35);
+}
+.toggle-input:checked + .toggle-track .toggle-thumb { transform: translateX(14px); }
+.toggle-input:checked ~ .toggle-label { color: #93c5fd; font-weight: 600; }
+.toggle-input:focus-visible + .toggle-track { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
 /* Кнопки (дополнение к Tailwind) */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -386,6 +473,17 @@ html[data-theme="light"] input[type="time"] { color-scheme: light; }
 html[data-theme="light"] ::-webkit-scrollbar-track { background: #e8edf4; }
 html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #b6c2d1; }
 html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+html[data-theme="light"] .device-log-scrollbar { background: #e8edf4; }
+html[data-theme="light"] .device-log-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .device-log-scrollbar-thumb:active { background: #64748b; }
+html[data-theme="light"] .online-live-badge { color: #0f172a; }
+html[data-theme="light"] .online-live-badge #onlineLiveBadgeTime { color: #475569; }
+html[data-theme="light"] .toggle-track { background: #cbd5e1; border-color: #94a3b8; }
+html[data-theme="light"] .toggle-thumb { background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.3); }
+html[data-theme="light"] .toggle-input:checked + .toggle-track {
+  background: #2563eb; border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(37,99,235,.25);
+}
+html[data-theme="light"] .toggle-input:checked ~ .toggle-label { color: #1d4ed8; }
 
 /* Светлая тема таблиц и полей */
 html[data-theme="light"] .data-table { color: #334155; }

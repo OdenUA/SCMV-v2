@@ -1,21 +1,36 @@
 // Список ТС: Vehicle Select Min (+merge Vehicle Show) либо Vehicle Show (все устройства,
 // админ-панель через setVehiclesSource('show')). Карточки, поиск, фильтры, выбор.
+// В online-режиме список рендерит online.js (setOnlineListRenderer) по записям Surv,
+// а кнопки статусов переключаются на статусы online (Все/В движении/Стоянка/Нет связи).
 
 import { onPacket, sendRequest } from '../core/ws.js';
 import { auth } from '../core/auth.js';
 import { escapeHtml, showToast, parseRelativeDurationToMs } from '../core/utils.js';
-import { state, emit } from './state.js';
+import { state, emit, on } from './state.js';
 
 let fleetKeyMap = null;
 let filterQuery = '';
 let filterStatus = 'all';
 let filterFleet = 'all';
+let showHiddenFleets = false;
+// Рендер списка в online-режиме (регистрируется online.js, чтобы избежать циклического импорта).
+let onlineListRenderer = null;
 // Источник списка ТС: 'select-min' — ТС пользователя (Vehicle Select Min),
 // 'show' — все устройства (Vehicle Show, админ-панель).
 let vehiclesSource = 'select-min';
 export let autoMode = false;
 
 export function getFleetKeyMap() { return fleetKeyMap; }
+
+/** Текущие фильтры списка ТС (использует online-рендер списка в online-режиме). */
+export function getVehicleFilters() {
+  return { query: filterQuery, fleet: filterFleet, status: filterStatus };
+}
+
+/** Регистрация рендера списка для online-режима (вызывается из online.js). */
+export function setOnlineListRenderer(fn) {
+  onlineListRenderer = fn;
+}
 
 /** Выбор источника списка ТС: 'select-min' (по uid) или 'show' (все устройства). */
 export function setVehiclesSource(src) {
@@ -35,8 +50,8 @@ export function initVehicles() {
   } catch (e) { /* ignore */ }
   updateAutoBtn();
 
-  document.getElementById('vehicleAutoModeBtn').addEventListener('click', () => {
-    autoMode = !autoMode;
+  document.getElementById('vehicleAutoModeBtn').addEventListener('change', (e) => {
+    autoMode = e.target.checked;
     try {
       localStorage.setItem('vehicleAutoMode', autoMode ? '1' : '0');
     } catch (e) { /* ignore */ }
@@ -49,42 +64,82 @@ export function initVehicles() {
     renderVehicleList();
   });
 
+  const hiddenFleetsToggle = document.getElementById('monitoringShowHiddenFleets');
+  if (hiddenFleetsToggle) {
+    hiddenFleetsToggle.addEventListener('change', () => {
+      showHiddenFleets = hiddenFleetsToggle.checked;
+      renderVehicleList();
+    });
+  }
+
   document.getElementById('fleetFilter').addEventListener('change', (e) => {
     filterFleet = e.target.value;
     renderVehicleList();
   });
 
-  document.querySelectorAll('.filter-status-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-status-btn').forEach((b) => {
-        b.classList.toggle('active', b === btn);
-        b.classList.toggle('bg-brand-600', b === btn);
-        b.classList.toggle('text-white', b === btn);
-        b.classList.toggle('bg-darkbg-700', b !== btn);
-        b.classList.toggle('text-gray-400', b !== btn);
-      });
-      filterStatus = btn.dataset.status;
-      renderVehicleList();
-    });
+  // Смена режима дашборда: фильтры статусов и список переключаются на режим
+  on('app-mode', () => {
+    filterStatus = 'all';
+    renderStatusButtons();
+    renderVehicleList();
   });
 
   // Пакеты списков ТС
   onPacket('Vehicle Select Min', handleVehiclePacket, { priority: 5 });
   onPacket('Vehicle Show', handleVehiclePacket, { priority: 5 });
 
-  // У Vehicle Show нет sdate/контроля — статус неизвестен, фильтр Онлайн/Офлайн бессмыслен
+  // У Vehicle Show нет sdate/контроля — статус неизвестен, фильтр статусов бессмыслен
   if (vehiclesSource === 'show') {
-    document.querySelectorAll('.filter-status-btn').forEach((b) => { b.style.display = 'none'; });
+    const box = document.getElementById('vehicleStatusFilters');
+    if (box) box.style.display = 'none';
   }
 
+  renderStatusButtons();
   populateFleetFilter();
   renderVehicleList();
 }
 
+// Кнопки фильтра статуса: набор зависит от режима (история — Онлайн/Офлайн,
+// online — статусы Surv); «Автовыбор» в online-режиме скрыт.
+const STATUS_BUTTONS = {
+  history: [
+    { status: 'all', title: 'Все' },
+    { status: 'online', title: 'Онлайн' },
+    { status: 'offline', title: 'Офлайн' },
+  ],
+  online: [
+    { status: 'all', title: 'Все' },
+    { status: 'moving', title: 'В движении' },
+    { status: 'stopped', title: 'Стоянка' },
+    { status: 'offline', title: 'Нет связи' },
+  ],
+};
+
+function renderStatusButtons() {
+  const container = document.getElementById('vehicleStatusFilters');
+  if (!container) return;
+  const mode = state.appMode === 'online' ? 'online' : 'history';
+  container.innerHTML = STATUS_BUTTONS[mode].map((b) => {
+    const active = filterStatus === b.status;
+    return `<button type="button" class="filter-status-btn ${active
+      ? 'active px-2.5 py-1 rounded-md bg-brand-600 text-white'
+      : 'px-2.5 py-1 rounded-md bg-darkbg-700 text-gray-400 hover:text-gray-200'}" data-status="${b.status}">${b.title}</button>`;
+  }).join('');
+  container.querySelectorAll('.filter-status-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filterStatus = btn.dataset.status;
+      renderStatusButtons();
+      renderVehicleList();
+      emit('vehicles-filter-changed');
+    });
+  });
+  const autoWrap = document.getElementById('vehicleAutoModeWrap');
+  if (autoWrap) autoWrap.classList.toggle('hidden', mode === 'online');
+}
+
 function updateAutoBtn() {
   const btn = document.getElementById('vehicleAutoModeBtn');
-  btn.classList.toggle('bg-brand-600', autoMode);
-  btn.classList.toggle('text-white', autoMode);
+  btn.checked = autoMode;
   btn.setAttribute('aria-pressed', String(autoMode));
 }
 
@@ -219,6 +274,13 @@ const STATUS_DOT = {
   unknown: { cls: 'bg-gray-500', title: 'Нет данных о статусе' },
 };
 
+const HIDDEN_FLEET_PREFIXES = ['del', 'undefined', 'склад'];
+
+function isHiddenFleet(v) {
+  const fleet = fleetNameOf(v).trim().toLowerCase();
+  return HIDDEN_FLEET_PREFIXES.some((prefix) => fleet.startsWith(prefix));
+}
+
 function filteredVehicles() {
   const q = filterQuery.toLowerCase();
   return state.vehicles.filter((v) => {
@@ -229,7 +291,8 @@ function filteredVehicles() {
     const matchesStatus = filterStatus === 'all' ||
       (filterStatus === 'online' ? isOnline(v) : !isOnline(v) && deviceStatus(v) !== 'unknown');
     const matchesFleet = filterFleet === 'all' || String(v.fleet) === filterFleet;
-    return matchesQuery && matchesStatus && matchesFleet;
+    const matchesHiddenFleet = vehiclesSource !== 'show' || showHiddenFleets || !isHiddenFleet(v);
+    return matchesQuery && matchesStatus && matchesFleet && matchesHiddenFleet;
   });
 }
 
@@ -262,6 +325,11 @@ function sortVehicles(list) {
 export function renderVehicleList() {
   const container = document.getElementById('vehicleList');
   if (!container) return;
+  // В online-режиме список рендерит online.js (записи Surv в карточках)
+  if (state.appMode === 'online') {
+    if (onlineListRenderer) onlineListRenderer();
+    return;
+  }
   container.innerHTML = '';
   const list = sortVehicles(filteredVehicles());
 
@@ -309,6 +377,14 @@ export function renderVehicleList() {
 export function selectVehicle(v, opts = {}) {
   state.selectedVehicle = v;
   state.deviceId = String(v.id);
+  if (state.appMode === 'online') {
+    // В online-режиме клик по ТС только центрирует карту и открывает попап
+    // (online.js слушает 'online-focus-request'); сброс/загрузка истории не нужны.
+    renderVehicleList();
+    updateHeaderVehicle();
+    emit('online-focus-request', v);
+    return;
+  }
   emit('vehicle-selected', { vehicle: v, auto: !!opts.auto });
   renderVehicleList();
   updateHeaderVehicle();

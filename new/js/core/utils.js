@@ -321,7 +321,12 @@ export function createVirtualTable(opts) {
   let headers = opts.headers || (rows[0] ? Object.keys(rows[0]).filter((k) => !k.startsWith('__') && k !== 'layer') : []);
   let measuredHeight = rowHeight;
   let raf = null;
+  let measureTimer = null;
   let destroyed = false;
+  let needsRefresh = true;
+  let renderedStart = -1;
+  let renderedEnd = -1;
+  const rowElements = new Map();
 
   function renderHead() {
     const thead = opts.thead || (tbody.parentElement ? tbody.parentElement.querySelector('thead') : null);
@@ -349,22 +354,81 @@ export function createVirtualTable(opts) {
     }
   }
 
+  function createSpacer() {
+    const tr = document.createElement('tr');
+    tr.className = 'vt-spacer';
+    const td = document.createElement('td');
+    td.colSpan = 100;
+    td.style.padding = '0';
+    tr.appendChild(td);
+    return tr;
+  }
+
+  const topSpacer = createSpacer();
+  const bottomSpacer = createSpacer();
+
+  function setSpacerHeight(spacer, height) {
+    spacer.style.display = height > 0 ? '' : 'none';
+    spacer.firstChild.style.height = height + 'px';
+  }
+
+  function resetBody() {
+    rowElements.clear();
+    tbody.innerHTML = '';
+    tbody.appendChild(topSpacer);
+    tbody.appendChild(bottomSpacer);
+    renderedStart = -1;
+    renderedEnd = -1;
+    needsRefresh = true;
+  }
+
+  function updateRow(tr, row, i) {
+    const cls = opts.getRowClass ? opts.getRowClass(row, i) : null;
+    tr.className = cls || '';
+    tr.innerHTML = '';
+    headers.forEach((h) => {
+      const td = document.createElement('td');
+      renderCellInto(td, row, h, i);
+      tr.appendChild(td);
+    });
+    if (opts.decorateRow) opts.decorateRow(row, i, tr);
+  }
+
+  function createRow(i) {
+    const row = rows[i];
+    const tr = document.createElement('tr');
+    tr.dataset.vtRow = String(i);
+    if (opts.onRowClick) tr.addEventListener('click', (ev) => opts.onRowClick(rows[i], i, tr, ev));
+    updateRow(tr, row, i);
+    return tr;
+  }
+
   function measureRowHeight() {
-    if (!rows.length) return;
+    if (destroyed || !rows.length) return;
     const tr = tbody.querySelector('tr[data-vt-row]');
     if (tr) {
       const h = tr.getBoundingClientRect().height;
       if (h > 4 && Math.abs(h - measuredHeight) > 1) {
         measuredHeight = h;
+        needsRefresh = true;
         scheduleRender();
       }
     }
+  }
+
+  function scheduleMeasure() {
+    if (destroyed || measureTimer) return;
+    measureTimer = setTimeout(() => {
+      measureTimer = null;
+      measureRowHeight();
+    }, 0);
   }
 
   function renderVisible() {
     if (destroyed) return;
     raf = null;
     if (!rows.length) {
+      rowElements.clear();
       tbody.innerHTML = '';
       const tr = document.createElement('tr');
       const td = document.createElement('td');
@@ -372,54 +436,47 @@ export function createVirtualTable(opts) {
       td.textContent = opts.emptyMessage || 'Нет данных.';
       tr.appendChild(td);
       tbody.appendChild(tr);
+      renderedStart = 0;
+      renderedEnd = 0;
+      needsRefresh = false;
       return;
     }
+    if (topSpacer.parentNode !== tbody || bottomSpacer.parentNode !== tbody) resetBody();
+
     const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
     const clientH = scrollEl ? scrollEl.clientHeight : 600;
     const total = rows.length;
     let start = Math.max(0, Math.floor(scrollTop / measuredHeight) - overscan);
     let end = Math.min(total, Math.ceil((scrollTop + clientH) / measuredHeight) + overscan);
     if (end - start < 10 && total > 10) end = Math.min(total, start + 30);
+    if (!needsRefresh && start === renderedStart && end === renderedEnd) return;
 
-    tbody.innerHTML = '';
-    const topH = start * measuredHeight;
-    const bottomH = (total - end) * measuredHeight;
-    if (topH > 0) {
-      const sp = document.createElement('tr');
-      sp.className = 'vt-spacer';
-      const td = document.createElement('td');
-      td.colSpan = 100;
-      td.style.height = topH + 'px';
-      td.style.padding = '0';
-      sp.appendChild(td);
-      tbody.appendChild(sp);
-    }
+    rowElements.forEach((tr, i) => {
+      if (i >= start && i < end) return;
+      tr.remove();
+      rowElements.delete(i);
+    });
+
+    setSpacerHeight(topSpacer, start * measuredHeight);
+    setSpacerHeight(bottomSpacer, (total - end) * measuredHeight);
+    let cursor = topSpacer.nextSibling;
+    let created = false;
     for (let i = start; i < end; i++) {
-      const row = rows[i];
-      const tr = document.createElement('tr');
-      tr.dataset.vtRow = String(i);
-      const cls = opts.getRowClass ? opts.getRowClass(row, i) : null;
-      if (cls) tr.className = cls;
-      headers.forEach((h) => {
-        const td = document.createElement('td');
-        renderCellInto(td, row, h, i);
-        tr.appendChild(td);
-      });
-      if (opts.onRowClick) tr.addEventListener('click', (ev) => opts.onRowClick(row, i, tr, ev));
-      if (opts.decorateRow) opts.decorateRow(row, i, tr);
-      tbody.appendChild(tr);
+      let tr = rowElements.get(i);
+      if (!tr) {
+        tr = createRow(i);
+        rowElements.set(i, tr);
+        created = true;
+      } else if (needsRefresh) {
+        updateRow(tr, rows[i], i);
+      }
+      if (cursor !== tr) tbody.insertBefore(tr, cursor || bottomSpacer);
+      cursor = tr.nextSibling;
     }
-    if (bottomH > 0) {
-      const sp = document.createElement('tr');
-      sp.className = 'vt-spacer';
-      const td = document.createElement('td');
-      td.colSpan = 100;
-      td.style.height = bottomH + 'px';
-      td.style.padding = '0';
-      sp.appendChild(td);
-      tbody.appendChild(sp);
-    }
-    setTimeout(measureRowHeight, 0);
+    renderedStart = start;
+    renderedEnd = end;
+    needsRefresh = false;
+    if (created) scheduleMeasure();
   }
 
   function scheduleRender() {
@@ -428,6 +485,7 @@ export function createVirtualTable(opts) {
     raf = requestAnimationFrame(renderVisible);
   }
 
+  resetBody();
   if (scrollEl) scrollEl.addEventListener('scroll', scheduleRender, { passive: true });
   renderHead();
   scheduleRender();
@@ -437,12 +495,21 @@ export function createVirtualTable(opts) {
       rows = newRows || [];
       if (newHeaders) headers = newHeaders;
       else if (rows[0]) headers = Object.keys(rows[0]).filter((k) => !k.startsWith('__') && k !== 'layer');
+      resetBody();
       renderHead();
       if (scrollEl) scrollEl.scrollTop = 0;
       scheduleRender();
     },
-    setHeaders(h) { headers = h; renderHead(); scheduleRender(); },
-    refresh: scheduleRender,
+    setHeaders(h) {
+      headers = h;
+      needsRefresh = true;
+      renderHead();
+      scheduleRender();
+    },
+    refresh() {
+      needsRefresh = true;
+      scheduleRender();
+    },
     scrollToIndex(index) {
       if (!scrollEl || !rows.length) return;
       const idx = Math.max(0, Math.min(rows.length - 1, index | 0));
@@ -482,7 +549,9 @@ export function createVirtualTable(opts) {
     destroy() {
       destroyed = true;
       if (raf) cancelAnimationFrame(raf);
+      if (measureTimer) clearTimeout(measureTimer);
       if (scrollEl) scrollEl.removeEventListener('scroll', scheduleRender);
+      rowElements.clear();
       if (tbody.__virtualTable === api) delete tbody.__virtualTable;
     },
   };

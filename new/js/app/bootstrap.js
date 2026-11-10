@@ -5,12 +5,12 @@ import { requireSession, initAuth, auth, performLogout } from '../core/auth.js';
 import { connect, close, onWsEvent } from '../core/ws.js';
 import { showToast, copyToClipboard, formatDuration } from '../core/utils.js';
 import { initModals, openModal } from '../core/components.js';
-import { initMap, getMap, getTrackLayer, getParkingLayer, getAnomalyLayer, getMarkerLayer, getFuelLayer } from '../core/map-core.js';
+import { initMap, getMap, getTrackLayer, getParkingLayer, getAnomalyLayer, getMarkerLayer, getFuelLayer, getOnlineLayer } from '../core/map-core.js';
 import {
   getAnomalySettings, saveAnomalySettings, resetAnomalySettings,
 } from '../core/config.js';
 
-import { state, on, emit } from './state.js';
+import { state, on, emit, setAppMode } from './state.js';
 import * as vehicles from './vehicles.js';
 import { initDates, setDefaultDates } from './dates.js';
 import { initChangelog } from './changelog.js';
@@ -25,6 +25,7 @@ import * as playback from './playback.js';
 import * as route from './route.js';
 import * as memory from './memory.js';
 import * as fuel from './fuel.js';
+import * as online from './online.js';
 
 let booted = false;
 
@@ -33,6 +34,8 @@ let booted = false;
  *  tabs?: string[]      вкладки таблиц (по умолчанию ['stops','anomalies'])
  *  actions?: string[]   кнопки действий (по умолчанию ['track'])
  *  clipboard?: boolean  кнопки копирования текста
+ *  modes?: boolean      переключатель режимов «Анализ истории / Online Мониторинг» в шапке
+ *                      (default false; кнопки живут в index.html, без них режимы не подключаются)
  *  wireHeader?: boolean обновлять статус WS/пользователя в шапке страницы (default true)
  *  connect?: boolean    открывать WS-соединение (default true)
  *  mount?: string       селектор точки монтирования (default '#dashboardMount')
@@ -150,10 +153,38 @@ export function initDashboard(opts = {}) {
 
   // ---------- KPI ----------
   function updateKpis() {
+    if (state.appMode === 'online') { online.fillOnlineKpis(); return; }
     const setText = (id, v) => {
       const el = document.getElementById(id);
       if (el) el.textContent = v;
     };
+    const setIcon = (id, name) => {
+      const label = document.getElementById(id);
+      const icon = label ? label.closest('.glass-panel').querySelector('i') : null;
+      if (icon) icon.className = `fa-solid ${name} text-lg`;
+    };
+    // Метки, иконки и подсказки могли быть перезаписаны online-режимом — возвращаем исторические.
+    const tooltips = [
+      'Длительность движения и простоя за выбранный период',
+      'Средняя и максимальная скорость по точкам трека',
+      'Количество стоянок и аномалий на треке',
+      'Расход топлива за период (по данным отчёта топлива)',
+      'Моточасы за период (по данным отчёта топлива)',
+      'Выбранное транспортное средство',
+      'Общий пробег за выбранный период по данным Startstop',
+    ];
+    tooltips.forEach((title, i) => {
+      const label = document.getElementById(`kpiL${i + 1}`);
+      const card = label ? label.closest('.glass-panel') : null;
+      if (card) card.title = title;
+    });
+    setText('kpiL1', 'В пути / Простой');     setIcon('kpiL1', 'fa-clock');
+    setText('kpiL2', 'Ср. / Макс. скорость'); setIcon('kpiL2', 'fa-gauge-simple-high');
+    setText('kpiL3', 'События на треке');     setIcon('kpiL3', 'fa-triangle-exclamation');
+    setText('kpiL4', 'Расход топлива');       setIcon('kpiL4', 'fa-gas-pump');
+    setText('kpiL5', 'Моточасы');             setIcon('kpiL5', 'fa-clock');
+    setText('kpiL6', 'Транспортное средство'); setIcon('kpiL6', 'fa-truck-front');
+    setText('kpiL7', 'Общий пробег');         setIcon('kpiL7', 'fa-road');
     setText('statVehicle', state.selectedVehicle ? (state.selectedVehicle.number || `id ${state.selectedVehicle.id}`) : '—');
     const distText = state.startstopTotalKm ? `${state.startstopTotalKm.toFixed(2)} км` : '—';
     setText('statDistance', distText);
@@ -182,6 +213,39 @@ export function initDashboard(opts = {}) {
     }
   }
   ['track', 'mileage', 'stops', 'vehicle-selected', 'cleared'].forEach((ev) => on(ev, updateKpis));
+
+  // ---------- Режимы: Анализ истории / Online Мониторинг (только дашборд, opts.modes) ----------
+  if (opts.modes) {
+    const historyBtn = document.getElementById('modeHistoryBtn');
+    const onlineBtn = document.getElementById('modeOnlineBtn');
+    const applyModeBtnStyles = () => {
+      const onlineMode = state.appMode === 'online';
+      if (historyBtn) {
+        historyBtn.className = onlineMode
+          ? 'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 text-gray-400 hover:text-white'
+          : 'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 bg-brand-600 text-white';
+      }
+      if (onlineBtn) {
+        onlineBtn.className = onlineMode
+          ? 'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 bg-emerald-600 text-white'
+          : 'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 text-gray-400 hover:text-white';
+      }
+    };
+    const applyAppMode = (mode) => {
+      if (state.appMode === mode) return;
+      setAppMode(mode);
+      document.body.classList.toggle('app-mode-online', mode === 'online');
+      applyModeBtnStyles();
+      if (mode === 'online') online.activateOnline();
+      else online.deactivateOnline();
+      updateKpis();
+      const m = getMap();
+      if (m) setTimeout(() => m.invalidateSize(), 60);
+    };
+    if (historyBtn) historyBtn.addEventListener('click', () => applyAppMode('history'));
+    if (onlineBtn) onlineBtn.addEventListener('click', () => applyAppMode('online'));
+    applyModeBtnStyles();
+  }
 
   // ---------- Вкладки таблиц ----------
   const renderedTabs = new Set();
@@ -373,6 +437,7 @@ export function initDashboard(opts = {}) {
   route.initRoute();
   memory.initMemory();
   fuel.initFuel();
+  if (opts.modes) online.initOnline();
 
   if (tabs.some((t) => t === 'devlog' || t === 'alarm' || t === 'fulltrack') || tabs.includes('analysis')) {
     import('./logs.js').then((m) => m.initLogs()).catch((e) => console.warn('logs init failed', e));
@@ -397,7 +462,9 @@ export function initDashboard(opts = {}) {
       anomaly: getAnomalyLayer() ? getAnomalyLayer().getLayers().length : 0,
       locations: getMarkerLayer() ? getMarkerLayer().getLayers().length : 0,
       fuel: getFuelLayer() ? getFuelLayer().getLayers().length : 0,
+      online: getOnlineLayer() ? getOnlineLayer().getLayers().length : 0,
     }),
+    onlineCount: () => online.getOnlineCount(),
     chartIndex: () => speedChart.getPlaybackIndex(),
     chartFuel: () => speedChart.getFuelState(),
     chartEvent: () => speedChart.getEventIndex(),

@@ -26,6 +26,100 @@ const SETTINGS_KEY = 'fullTrackReportSettings21';
 // Вкладка Device Log отображает Full Device Track; состав и порядок колонок зафиксированы
 const DEVICE_LOG_COLS = ['id', 'deviceid', 'wdate', 'sdate', 'latitude', 'longitude', 'speed', 'status', 'altitude', 'bearing', 'satelites', 'vehicle', 'marker', 'batvoltage', 'ignition', 'ismoves'];
 
+let deviceLogScrollbarInitialized = false;
+let deviceLogScrollbarRaf = null;
+let deviceLogScrollbarDrag = null;
+let deviceLogScrollbarObserver = null;
+
+function updateDeviceLogScrollbar() {
+  const scrollEl = document.querySelector('.device-log-scroll');
+  const track = document.getElementById('deviceLogScrollbar');
+  const thumb = document.getElementById('deviceLogScrollbarThumb');
+  if (!scrollEl || !track || !thumb) return;
+  const trackHeight = scrollEl.clientHeight;
+  const maxScroll = Math.max(0, scrollEl.scrollHeight - trackHeight);
+  const visible = trackHeight > 0 && maxScroll > 1 && scrollEl.getClientRects().length > 0;
+  track.style.display = visible ? 'block' : 'none';
+  if (!visible) return;
+  track.style.height = trackHeight + 'px';
+  const proportionalHeight = Math.round(trackHeight * trackHeight / scrollEl.scrollHeight);
+  const thumbHeight = Math.min(trackHeight, Math.max(60, proportionalHeight));
+  const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+  const thumbTop = maxScroll > 0 ? (scrollEl.scrollTop / maxScroll) * maxThumbTop : 0;
+  thumb.style.height = thumbHeight + 'px';
+  thumb.style.transform = `translateY(${thumbTop}px)`;
+}
+
+function scheduleDeviceLogScrollbarUpdate() {
+  if (deviceLogScrollbarRaf) return;
+  deviceLogScrollbarRaf = requestAnimationFrame(() => {
+    deviceLogScrollbarRaf = null;
+    updateDeviceLogScrollbar();
+  });
+}
+
+function initDeviceLogScrollbar() {
+  if (deviceLogScrollbarInitialized) return;
+  const scrollEl = document.querySelector('.device-log-scroll');
+  const track = document.getElementById('deviceLogScrollbar');
+  const thumb = document.getElementById('deviceLogScrollbarThumb');
+  if (!scrollEl || !track || !thumb) return;
+  deviceLogScrollbarInitialized = true;
+  scrollEl.addEventListener('scroll', scheduleDeviceLogScrollbarUpdate, { passive: true });
+
+  thumb.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    deviceLogScrollbarDrag = {
+      pointerId: ev.pointerId,
+      startY: ev.clientY,
+      startScrollTop: scrollEl.scrollTop,
+    };
+    thumb.setPointerCapture(ev.pointerId);
+  });
+  thumb.addEventListener('pointermove', (ev) => {
+    const drag = deviceLogScrollbarDrag;
+    if (!drag || drag.pointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    const trackHeight = scrollEl.clientHeight;
+    const maxThumbTop = trackHeight - thumb.getBoundingClientRect().height;
+    const maxScroll = scrollEl.scrollHeight - trackHeight;
+    if (maxThumbTop <= 0 || maxScroll <= 0) return;
+    scrollEl.scrollTop = drag.startScrollTop + (ev.clientY - drag.startY) * (maxScroll / maxThumbTop);
+  });
+  const finishDrag = (ev) => {
+    if (!deviceLogScrollbarDrag || deviceLogScrollbarDrag.pointerId !== ev.pointerId) return;
+    deviceLogScrollbarDrag = null;
+    try {
+      if (thumb.hasPointerCapture(ev.pointerId)) thumb.releasePointerCapture(ev.pointerId);
+    } catch (e) { /* ignore */ }
+  };
+  thumb.addEventListener('pointerup', finishDrag);
+  thumb.addEventListener('pointercancel', finishDrag);
+  thumb.addEventListener('lostpointercapture', finishDrag);
+
+  track.addEventListener('pointerdown', (ev) => {
+    if (ev.target !== track || ev.button !== 0) return;
+    ev.preventDefault();
+    const trackHeight = scrollEl.clientHeight;
+    const thumbHeight = thumb.getBoundingClientRect().height;
+    const maxThumbTop = trackHeight - thumbHeight;
+    const maxScroll = scrollEl.scrollHeight - trackHeight;
+    if (maxThumbTop <= 0 || maxScroll <= 0) return;
+    const trackRect = track.getBoundingClientRect();
+    const thumbTop = Math.max(0, Math.min(maxThumbTop, ev.clientY - trackRect.top - thumbHeight / 2));
+    scrollEl.scrollTop = (thumbTop / maxThumbTop) * maxScroll;
+  });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    deviceLogScrollbarObserver = new ResizeObserver(scheduleDeviceLogScrollbarUpdate);
+    deviceLogScrollbarObserver.observe(scrollEl);
+    deviceLogScrollbarObserver.observe(document.getElementById('deviceLogTbody'));
+  }
+  scheduleDeviceLogScrollbarUpdate();
+}
+
 // ---------- Публичный API ----------
 export function initLogs() {
   onPacket('Device Track', handleChunkedFull, { predicate: () => !!(fullState && fullState.active), priority: 5 });
@@ -50,6 +144,7 @@ export function initLogs() {
   if (devlogSqlBtn) devlogSqlBtn.addEventListener('click', openAnomalySql);
 
   restoreReportSettings();
+  initDeviceLogScrollbar();
 }
 
 export function loadDeviceData(opts = {}) {
@@ -217,6 +312,17 @@ function renderLogTable() {
   if (!tbody) return;
   const keys = fullTrackCache.length ? Object.keys(fullTrackCache[0]) : [];
   const headers = DEVICE_LOG_COLS.filter((c) => keys.indexOf(c) !== -1);
+  if (logMount && tbody.__virtualTable === logMount) {
+    if (logMount.getRows() !== fullTrackCache) {
+      logMount.setRows(fullTrackCache, headers);
+    } else {
+      logMount.setHeaders(headers);
+      logMount.refresh();
+    }
+    logMount = tbody.__virtualTable || logMount;
+    scheduleDeviceLogScrollbarUpdate();
+    return;
+  }
   const opts = {
     tbody,
     thead: document.getElementById('deviceLogThead'),
@@ -229,6 +335,7 @@ function renderLogTable() {
     emptyMessage: 'Нет данных. Нажмите «Dev Log».',
   };
   logMount = mountTableBody(opts);
+  scheduleDeviceLogScrollbarUpdate();
 }
 
 // ---------- Фокус на карте ----------

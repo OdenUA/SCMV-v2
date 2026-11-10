@@ -60,8 +60,13 @@ function tabPanelsHtml(tabs) {
           <div class="table-scroll border-b border-gray-800/60" style="max-height:150px">
             <table class="data-table"><thead id="devlogReportThead"></thead><tbody id="devlogReportTbody"></tbody></table>
           </div>
-          <div class="table-scroll" style="max-height:600px">
-            <table class="data-table"><thead id="deviceLogThead"></thead><tbody id="deviceLogTbody"></tbody></table>
+          <div class="device-log-scroll-wrap">
+            <div class="table-scroll device-log-scroll" style="max-height:600px">
+              <table class="data-table"><thead id="deviceLogThead"></thead><tbody id="deviceLogTbody"></tbody></table>
+            </div>
+            <div id="deviceLogScrollbar" class="device-log-scrollbar" style="display:none" aria-hidden="true">
+              <div id="deviceLogScrollbarThumb" class="device-log-scrollbar-thumb"></div>
+            </div>
           </div>
         </div>`;
       case 'analysis':
@@ -258,49 +263,49 @@ export function dashboardTemplate(opts = {}) {
       <div class="glass-panel p-3 rounded-xl flex items-center space-x-3">
         <div class="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg"><i class="fa-solid fa-clock text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">В пути / Простой</p>
+          <p id="kpiL1" class="text-[11px] text-gray-400">В пути / Простой</p>
           <h3 id="statTime" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
       <div class="glass-panel p-3 rounded-xl flex items-center space-x-3">
         <div class="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg"><i class="fa-solid fa-gauge-simple-high text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">Ср. / Макс. скорость</p>
+          <p id="kpiL2" class="text-[11px] text-gray-400">Ср. / Макс. скорость</p>
           <h3 id="statSpeed" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
       <div class="glass-panel p-3 rounded-xl flex items-center space-x-3">
         <div class="p-2.5 bg-purple-500/10 text-purple-400 rounded-lg"><i class="fa-solid fa-triangle-exclamation text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">События на треке</p>
+          <p id="kpiL3" class="text-[11px] text-gray-400">События на треке</p>
           <h3 id="statEvents" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
       <div id="kpiFuelCons" class="glass-panel p-3 rounded-xl flex items-center space-x-3" title="Расход топлива за период (по данным отчёта топлива)">
         <div class="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg"><i class="fa-solid fa-gas-pump text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">Расход топлива</p>
+          <p id="kpiL4" class="text-[11px] text-gray-400">Расход топлива</p>
           <h3 id="statFuelConsumption" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
       <div id="kpiFuelMoto" class="glass-panel p-3 rounded-xl flex items-center space-x-3" title="Моточасы за период (по данным отчёта топлива)">
         <div class="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-lg"><i class="fa-solid fa-clock text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">Моточасы</p>
+          <p id="kpiL5" class="text-[11px] text-gray-400">Моточасы</p>
           <h3 id="statFuelMotoHours" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
       <div class="glass-panel p-3 rounded-xl col-span-2 lg:col-span-1 flex items-center space-x-3">
         <div class="p-2.5 bg-brand-500/10 text-brand-400 rounded-lg"><i class="fa-solid fa-truck-front text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">Транспортное средство</p>
+          <p id="kpiL6" class="text-[11px] text-gray-400">Транспортное средство</p>
           <h3 id="statVehicle" class="text-base font-bold text-white truncate">—</h3>
         </div>
       </div>
       <div class="glass-panel p-3 rounded-xl flex items-center space-x-3">
         <div class="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg"><i class="fa-solid fa-road text-lg"></i></div>
         <div class="min-w-0">
-          <p class="text-[11px] text-gray-400">Общий пробег</p>
+          <p id="kpiL7" class="text-[11px] text-gray-400">Общий пробег</p>
           <h3 id="statDistance" class="text-base font-bold text-white kpi-value truncate">—</h3>
         </div>
       </div>
@@ -310,6 +315,13 @@ export function dashboardTemplate(opts = {}) {
     <div id="mapBlock" class="${mapDistanceOnly ? 'map-distance-only' : ''} relative mx-4 rounded-xl overflow-hidden border border-gray-800 shadow-2xl flex flex-col shrink-0" style="height:480px">
       <div id="map" class="w-full flex-1 z-0 bg-darkbg-800"></div>
       <div id="manualRouteInfo" class="manual-route-info"></div>
+
+      <!-- Live-бейдж режима Online Мониторинг -->
+      <div id="onlineLiveBadge" class="online-only absolute top-3 z-[1000] glass-panel px-3 py-1.5 rounded-lg text-xs font-semibold text-white flex items-center space-x-2 online-live-badge">
+        <span class="live-dot"></span>
+        <span>Online</span>
+        <span id="onlineLiveBadgeTime" class="text-gray-400 font-normal"></span>
+      </div>
 
       <!-- Плавающая группа полноэкранного режима: бейдж «Общий пробег» + кнопка выхода -->
       <div id="mapFullscreenBar" class="${mapDistanceOnly ? 'flex' : 'hidden'} absolute top-3 left-1/2 -translate-x-1/2 z-[1000] items-center space-x-2">
@@ -330,7 +342,7 @@ export function dashboardTemplate(opts = {}) {
 
       <!-- Проигрыватель -->
       ${telemetryMode !== 'off' ? `
-      <div id="playbackBar"${telemetryHidden ? ' style="display:none"' : ''} class="absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000] w-[92%] max-w-2xl glass-panel p-3 rounded-xl shadow-2xl border border-gray-700/60 flex flex-col space-y-2">
+      <div id="playbackBar"${telemetryHidden ? ' style="display:none"' : ''} class="history-only absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000] w-[92%] max-w-2xl glass-panel p-3 rounded-xl shadow-2xl border border-gray-700/60 flex flex-col space-y-2">
         <div class="flex items-center justify-between text-xs text-gray-300">
           <div class="flex items-center space-x-2 min-w-0">
             <span id="playerDot" class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
@@ -362,15 +374,15 @@ export function dashboardTemplate(opts = {}) {
       </div>` : ''}
     </div>
 
-    <!-- Ручка ресайза карты -->
+    <!-- Ручка ресайза карты (в online-режиме карта занимает всё свободное место — ресайз скрыт) -->
     <div id="mapResizeHandle" title="Потяните, чтобы изменить высоту карты"
-      class="mx-4 my-1 h-3 shrink-0 flex items-center justify-center cursor-row-resize group">
+      class="history-only mx-4 my-1 h-3 shrink-0 flex items-center justify-center cursor-row-resize group">
       <div class="w-16 h-1 rounded-full bg-gray-700 group-hover:bg-brand-500 transition"></div>
     </div>
 
     <!-- График скорости -->
     ${telemetryMode !== 'off' ? `
-    <div id="telemetryWrap"${telemetryHidden ? ' style="display:none"' : ''} class="p-4 pt-1 shrink-0">
+    <div id="telemetryWrap"${telemetryHidden ? ' style="display:none"' : ''} class="history-only p-4 pt-1 shrink-0">
       <div class="glass-panel p-4 rounded-xl border border-gray-800">
         <div class="flex items-center justify-between mb-2">
           <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-300 flex items-center">
@@ -390,14 +402,14 @@ export function dashboardTemplate(opts = {}) {
       </div>
     </div>` : ''}
 
-    <!-- Таблицы событий -->
-    <div class="p-4 pt-0 shrink-0">
-      <div class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
+    <!-- Таблицы событий (только исторический режим) -->
+    <div class="p-4 pt-0 shrink-0 history-only">
+      <div id="eventsCard" class="glass-panel rounded-xl border border-gray-800 overflow-hidden">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-gray-800 bg-darkbg-800/50 px-4 py-2.5 gap-2">
-          <div id="tabButtons" class="flex flex-wrap space-x-2 text-xs">
+          <div id="tabButtons" class="history-only flex flex-wrap space-x-2 text-xs">
             ${tabButtonsHtml(tabs)}
           </div>
-          <div class="flex items-center space-x-1 text-xs shrink-0">
+          <div class="history-only flex items-center space-x-1 text-xs shrink-0">
             <span class="text-gray-400 mr-1 text-[11px]">Экспорт:</span>
             <button id="exportExcelBtn" class="px-2.5 py-1 bg-darkbg-700 hover:bg-gray-700 text-emerald-400 rounded transition flex items-center space-x-1">
               <i class="fa-solid fa-file-excel"></i> <span>Excel</span>
@@ -423,11 +435,18 @@ export function dashboardTemplate(opts = {}) {
         <input type="text" id="vehicleSearch" placeholder="Поиск по номеру, имени..."
           class="w-full bg-darkbg-900 text-xs border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-gray-200 focus:outline-none focus:border-brand-500 transition" />
       </div>
-      <div class="flex space-x-1 text-[11px]">
-        <button class="filter-status-btn active px-2.5 py-1 rounded-md bg-brand-600 text-white" data-status="all">Все</button>
-        <button class="filter-status-btn px-2.5 py-1 rounded-md bg-darkbg-700 text-gray-400 hover:text-gray-200" data-status="online">Онлайн</button>
-        <button class="filter-status-btn px-2.5 py-1 rounded-md bg-darkbg-700 text-gray-400 hover:text-gray-200" data-status="offline">Офлайн</button>
-        <button id="vehicleAutoModeBtn" class="ml-auto px-2.5 py-1 rounded-md bg-darkbg-700 text-gray-400 hover:text-gray-200" title="Авто-режим: единственное совпадение в поиске сразу выбирает ТС и строит трек">Авто</button>
+      <div class="flex items-center gap-2 text-[11px]">
+        <div id="vehicleStatusFilters" class="flex space-x-1"></div>
+        ${adminTools ? `<label class="monitoring-hidden-fleets-toggle flex items-center gap-1.5 min-w-0 text-gray-400 cursor-pointer select-none">
+          <input type="checkbox" id="monitoringShowHiddenFleets" class="toggle-input" />
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label">Показывать Del*, Undefined*, Склад*</span>
+        </label>` : ''}
+        <label id="vehicleAutoModeWrap" class="ml-auto shrink-0 flex items-center gap-1.5 text-gray-400 cursor-pointer select-none" title="Автовыбор: единственное совпадение в поиске сразу выбирает ТС и строит трек">
+          <input type="checkbox" id="vehicleAutoModeBtn" class="toggle-input" />
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+          <span class="toggle-label">Автовыбор</span>
+        </label>
       </div>
       <select id="fleetFilter" class="w-full bg-darkbg-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-brand-500">
         <option value="all">Все филиалы</option>
@@ -441,7 +460,7 @@ export function dashboardTemplate(opts = {}) {
     <div class="shrink-0 border-t border-gray-800 p-4 pt-3 space-y-4 overflow-y-auto" style="max-height:52%">
 
       <!-- Период -->
-      <div>
+      <div class="history-only">
         <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
           <i class="fa-solid fa-calendar-days mr-1 text-brand-500"></i> Период анализа
         </label>
@@ -469,8 +488,18 @@ export function dashboardTemplate(opts = {}) {
       </div>
 
       <!-- Действия -->
-      <div class="space-y-2">
+      <div class="space-y-2 history-only">
         ${actionsHtml(actions)}
+      </div>
+
+      <!-- Online: авто-слежение, счётчики и статус потока (режим «Online Мониторинг») -->
+      <div id="onlineSidePanel" class="online-only space-y-2">
+        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
+          <input type="checkbox" id="onlineFollowChk" class="rounded border-gray-700 text-brand-600 bg-darkbg-900 w-4 h-4" />
+          <span><i class="fa-solid fa-crosshairs mr-1 text-emerald-400"></i> Авто-слежение за выбранным ТС</span>
+        </label>
+        <div id="onlineStats" class="text-[11px] text-gray-400"></div>
+        <p class="text-[10px] text-gray-500">В режиме Online карта следует за целевым ТС. Данные обновляются каждые 5 секунд.</p>
       </div>
 
       <!-- Буферы (+ настройки аномалий в админке) -->

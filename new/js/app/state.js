@@ -1,6 +1,8 @@
 // Центральное состояние дашборда + pub/sub. Импортируется всеми модулями app/*.
 
 export const state = {
+  // Режим дашборда: 'history' (анализ истории) | 'online' (online-мониторинг)
+  appMode: 'history',
   // ТС
   vehicles: [],            // список ТС: Vehicle Select Min (дашборд) или Vehicle Show — все устройства (админка)
   vehicleDetails: [],      // Vehicle Show (для мержа model/imei)
@@ -44,5 +46,12 @@ export function emit(event, payload) {
   });
 }
 
+/** Переключение режима дашборда: 'history' | 'online'. Событие 'app-mode'. */
+export function setAppMode(mode) {
+  state.appMode = mode === 'online' ? 'online' : 'history';
+  emit('app-mode', state.appMode);
+}
+
 // События: 'vehicles' (загружен список), 'vehicle-selected', 'track' (загружен трек),
-// 'mileage', 'stops', 'cleared' (смена ТС/дат), 'settings' (настройки аномалий)
+// 'mileage', 'stops', 'cleared' (смена ТС/дат), 'settings' (настройки аномалий),
+// 'app-mode' ('history'|'online' — переключатель режимов дашборда)

@@ -13,6 +13,7 @@ export const routeLayerGroup = { ref: null };
 export const anomalyLayerGroup = { ref: null };
 export const markerLayerGroup = { ref: null }; // справочник локаций (POI)
 export const fuelLayerGroup = { ref: null };   // события топлива (заправки/сливы)
+export const onlineLayerGroup = { ref: null }; // online ТС (Surv)
 let directionGroup = null;
 
 const MAP_TILES = {
@@ -29,6 +30,7 @@ export function getRouteLayer() { return routeLayerGroup.ref; }
 export function getAnomalyLayer() { return anomalyLayerGroup.ref; }
 export function getMarkerLayer() { return markerLayerGroup.ref; }
 export function getFuelLayer() { return fuelLayerGroup.ref; }
+export function getOnlineLayer() { return onlineLayerGroup.ref; }
 
 export function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false }).setView([49.33, 28.35], 7);
@@ -43,6 +45,7 @@ export function initMap() {
   anomalyLayerGroup.ref = L.layerGroup().addTo(map);
   markerLayerGroup.ref = L.layerGroup().addTo(map);
   fuelLayerGroup.ref = L.layerGroup().addTo(map);
+  onlineLayerGroup.ref = L.layerGroup().addTo(map);
   directionGroup = L.layerGroup().addTo(map);
 
   addVisibilityControl();

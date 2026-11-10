@@ -9,7 +9,7 @@
 
 | Файл | Назначение |
 |------|------------|
-| `index.html` | Дашборд пользователя: выбор ТС, период, пробег, стоянки, фильтр по филиалам, ресайз карты |
+| `index.html` | Дашборд пользователя: режимы «Анализ истории» / «Online Мониторинг» (переключатель в шапке), выбор ТС, период, пробег, стоянки, online ТС на карте, фильтр по филиалам, ресайз карты |
 | `admin.html` | Админ-панель: **Мониторинг** (полный функционал дашборда, включая Device Log/Alarm, Полный трек, Анализ и буферы копирования), справочники ТС/устройств, редактирование, Device Status, аудит, отчёты, cleanup аномалий, мастер добавления пары «устройство + ТС» |
 | `login.html` | Вход (те же ключи localStorage, что и в v2: `dt_user`, `dt_pwd`, `dt_session`, `dt_remember`) |
 | `js/core/` | Общие модули: config, auth, ws (диспетчер пакетов), utils, map-core, components |
@@ -32,7 +32,9 @@ WS-сервер по умолчанию `wss://scmv.vpngps.com:4445` (перео
 ```bash
 node tools/mock-server.js          # mock WS на :44451 (отдаёт capture из ../examples)
 node tools/smoke-cdp.js            # static :8123 + mock :44451 + headless Chrome (CDP): сценарий дашборда, скриншоты в tools/shots/
+node tools/smoke-admin.js          # сценарий админ-панели
 node tools/check-syntax.js         # node --check по всем js/
+node tools/check-online-parse.js   # парсер Online (js/app/online.js) на боевом capture ws.txt; SKIP без файла
 ```
 
 ## Стек
